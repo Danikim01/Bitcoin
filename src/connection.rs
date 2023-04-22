@@ -9,10 +9,7 @@ fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // 18444 in the regtest (local)
     let port = "18333";
     let node_discovery_hostname = "seed.testnet.bitcoin.sprovoost.nl".to_owned() + ":" + port;
-    match node_discovery_hostname.to_socket_addrs() {
-        Ok(ip_addresses) => Ok(ip_addresses),
-        Err(e) => Err(e.to_string())
-    }
+    node_discovery_hostname.to_socket_addrs().map_err(|error| {error.to_string()})
 }
 
 fn handshake_node(ip_addr: SocketAddr) -> Result<TcpStream, String> {
