@@ -1,5 +1,7 @@
+use crate::messages::Message;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use crate::messageVersion::Version;
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -14,17 +16,22 @@ fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
         .map_err(|error| error.to_string())
 }
 
+
 fn handshake_node(ip_addr: SocketAddr) -> Result<TcpStream, String> {
     // in progress, should replace all unwraps by return Err()
     // this should be implemented following https://developer.bitcoin.org/devguide/p2p_network.html#connecting-to-peers
 
-    let mut stream = TcpStream::connect(ip_addr).map_err(|error| {error.to_string()})?;
-    let msg = b"this should be a version package containing version number and more";
-    stream.write(msg).map_err(|error| {error.to_string()})?;
-    let mut data = [0 as u8; 82]; // using 82 byte buffer
-    stream.read_exact(&mut data).map_err(|error| {error.to_string()})?;
+    let mut stream = TcpStream::connect(ip_addr).map_err(|error| error.to_string())?;
+    let msg_version = Version::default();
+    // update ip addr and port of Version struct
+    msg_version.send_to(&mut stream).map_err(|error| error.to_string())?;
+    let mut data = [0 as u8];
+    stream
+        .read_exact(&mut data)
+        .map_err(|error| error.to_string())?;
 
-    // check if read data contains supported version, and has expected format
+    let rcv_version = Version::default().from_bytes(&data)?;
+
     // send and recieve VERACK
     Ok(stream)
 }
@@ -33,7 +40,7 @@ pub fn connect_to_network() -> Result<(), String> {
     // for now, establishing connection to only 1 node
     let ip_addr = match find_nodes()?.next() {
         Some(addr) => addr,
-        _ => {return Err("Node discovery failed, no A/AAAA records found for DNS query".into())}
+        _ => return Err("Node discovery failed, no A/AAAA records found for DNS query".into()),
     };
     handshake_node(ip_addr)?;
     Ok(())
