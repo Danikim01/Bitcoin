@@ -1,7 +1,7 @@
+use crate::message_version::Version;
 use crate::messages::Message;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
-use crate::messageVersion::Version;
+use std::io::{Read};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs, Ipv6Addr, TcpListener};
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -17,32 +17,70 @@ fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
 }
 
 
-fn handshake_node(ip_addr: SocketAddr) -> Result<TcpStream, String> {
+fn test_handshake() -> Result<TcpStream, String> {
+    // create listener
+    let listener = TcpListener::bind("127.0.0.1:18333").unwrap();
+    println!("Server listening on port 18333");
+    
+    // connect to server
+    let my_addr = "127.0.0.1:18333".to_socket_addrs().map_err(|error| error.to_string())?.next().unwrap();
+    let mut stream = TcpStream::connect(my_addr).map_err(|error| error.to_string())?;
+
+    // send message
+    let msg_version = Version::default();
+    msg_version.send_to(&mut stream).map_err(|error| error.to_string())?;
+    
+    // receive connection
+    let mut data = [0_u8; 90];
+    let mut temp_stream;
+    let temp_addr;
+    (temp_stream, temp_addr) = listener.accept().unwrap();
+    println!("New connection: {:?}", temp_addr);
+    
+    // receive message
+    temp_stream
+    .read(&mut data)
+    .map_err(|error| error.to_string())?;
+
+    println!("Sent message:");
+    println!("{:?}", msg_version);
+    let _rcv_version = Version::from_bytes(&data)?;
+    println!("Got message:");
+    println!("{:?}", _rcv_version);
+    println!("Done testing");
+    Ok(stream)
+}
+
+fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     // in progress, should replace all unwraps by return Err()
     // this should be implemented following https://developer.bitcoin.org/devguide/p2p_network.html#connecting-to-peers
+    
+    // connect to server
+    let mut stream = TcpStream::connect(node_addr).map_err(|error| error.to_string())?;
 
-    let mut stream = TcpStream::connect(ip_addr).map_err(|error| error.to_string())?;
+    // send message
     let msg_version = Version::default();
-    // update ip addr and port of Version struct
     msg_version.send_to(&mut stream).map_err(|error| error.to_string())?;
-    let mut data = [0 as u8];
+
+    // receive message
+    let mut data = [0_u8; 90];
     stream
-        .read_exact(&mut data)
-        .map_err(|error| error.to_string())?;
+    .read(&mut data)
+    .map_err(|error| error.to_string())?;
 
-    let rcv_version = Version::default().from_bytes(&data)?;
-
+    let _rcv_version = Version::from_bytes(&data)?;
+    println!("{:?}", _rcv_version);
     // send and recieve VERACK
     Ok(stream)
 }
 
 pub fn connect_to_network() -> Result<(), String> {
-    // for now, establishing connection to only 1 node
-    let ip_addr = match find_nodes()?.next() {
-        Some(addr) => addr,
-        _ => return Err("Node discovery failed, no A/AAAA records found for DNS query".into()),
+    // testing
+    test_handshake()?;
+
+    for ip_addr in find_nodes()? {
+        handshake_node(ip_addr)?;
     };
-    handshake_node(ip_addr)?;
     Ok(())
 }
 

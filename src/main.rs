@@ -1,5 +1,5 @@
 mod connection;
-mod messageVersion;
+mod message_version;
 mod messages;
 
 fn main() -> Result<(), String> {
