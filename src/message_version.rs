@@ -83,7 +83,7 @@ impl Version {
         // since this is a method, change it to modify self instead of returning a new Message
         let mut cursor = Cursor::new(bytes);
         let mut version = [0_u8; 4];
-        let mut services = [0_u8];
+        let mut services = [0_u8; 8];
         let mut timestamp = [0_u8; 8];
         let mut addr_recv_services = [0_u8; 8];
         let mut addr_recv_ip = [0_u8; 16];
@@ -171,7 +171,7 @@ impl Message for Version {
         let mut output = Vec::new();
 
         output.extend(&self.version.to_be_bytes());
-        output.extend(&[self.service as u8]);
+        output.extend(&[self.service as u8; 8]);
         output.extend(&self.timestamp.to_be_bytes());
         output.extend(&self.addr_recv_services.to_be_bytes());
         output.extend(&self.addr_recv_ip.octets());

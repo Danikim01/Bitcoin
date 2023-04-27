@@ -11,8 +11,8 @@ pub enum Service {
     NodeNetworkLimited,
 }
 
-impl From<[u8; 1]> for Service {
-    fn from(_bytes: [u8; 1]) -> Service {
+impl From<[u8; 8]> for Service {
+    fn from(_bytes: [u8; 8]) -> Service {
         Service::Unnamed
     }
 }
