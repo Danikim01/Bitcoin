@@ -1,4 +1,5 @@
-use std::io::{Write};
+use std::io::Write;
+use std::net::TcpStream;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Service {
@@ -18,5 +19,5 @@ impl From<[u8; 8]> for Service {
 }
 
 pub trait Message {
-    fn send_to(&self, stream: &mut dyn Write) -> std::io::Result<()>;
+    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()>;
 }

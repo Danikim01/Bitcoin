@@ -1,7 +1,10 @@
 use crate::messages::{Message, Service};
 use std::io::{Cursor, Read, Write};
-use std::net::Ipv6Addr;
+use std::net::{Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use bitcoin_hashes::sha256;
+use bitcoin_hashes::Hash;
 
 #[derive(Debug)]
 pub struct Version {
@@ -25,7 +28,8 @@ impl std::default::Default for Version {
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(..) => Duration::default(),
-        }.as_secs() as i64;
+        }
+        .as_secs() as i64;
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
         let addr_recv_port = 18333;
@@ -134,7 +138,9 @@ impl Version {
                 _ => {}
             };
             let mut user_agent_bytes = vec![0_u8; buffer_size];
-            cursor.read_exact(&mut user_agent_bytes).map_err(|error| error.to_string())?;
+            cursor
+                .read_exact(&mut user_agent_bytes)
+                .map_err(|error| error.to_string())?;
             user_agent_size = u64::from_be_bytes(vec_to_arr(user_agent_bytes));
         }
         let mut user_agent = vec![0_u8; user_agent_size as usize];
@@ -167,7 +173,7 @@ impl Version {
 }
 
 impl Message for Version {
-    fn send_to(&self, stream: &mut dyn Write) -> std::io::Result<()> {
+    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let mut output = Vec::new();
 
         output.extend(&self.version.to_be_bytes());
@@ -183,11 +189,28 @@ impl Message for Version {
         output.extend(&self.start_height.to_be_bytes());
         output.extend(&[self.relay as u8]);
 
-        stream.write_all(&output)?;
+        // Construct the message header
+        // http://man.hubwiz.com/docset/Bitcoin.docset/Contents/Resources/Documents/out/reference/p2p-network.html#message-headers
+        let magic_value = 0xdab5bffau32.to_be_bytes(); // testnet 
+        let command = b"version\0\0\0\0\0\0\0\0\0";
+        let payload_size = output.len() as u32;
+        let checksum = sha256::Hash::hash(&output)[0..4].to_vec();
+        let header = [
+            magic_value.to_vec(),
+            command.to_vec(),
+            payload_size.to_be_bytes().to_vec(),
+            checksum,
+        ]
+        .concat();
+
+        // stream.write_all(&output)?;
+        stream.write(&header)?;
+        stream.write(&output)?;
+        stream.flush()?;
+        println!("write data: {:?}{:?}", header, output);
         Ok(())
     }
 }
-
 
 fn vec_to_arr<T, const N: usize>(v: Vec<T>) -> [T; N] {
     v.try_into()
