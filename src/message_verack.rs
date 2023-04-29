@@ -3,44 +3,29 @@ use crate::messages::Message;
 use std::io::Cursor;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-
+use bitcoin_hashes::Hash;
+use bitcoin_hashes::sha256;
 #[derive(Debug)]
 pub struct VerAckMessage {
     pub magic: Vec<u8>,
     pub command: Vec<u8>,
     pub payload_size: u32,
-    pub payload: Vec<u8>,
-    pub checksum: [u8; 4],
+    //pub payload: Vec<u8>,
+    pub checksum: Vec<u8>,
 }
 
 impl VerAckMessage {
     pub fn new() -> VerAckMessage {
         VerAckMessage {
-            magic: 0xf9beb4d9u32.to_be_bytes().to_vec(),
-            command: b"verack\0\0\0\0\0".to_owned().to_vec(),
-            payload: Vec::new(),
+            magic: 0x0b1109079u32.to_be_bytes().to_vec(),
+            command: b"verack\0\0\0\0\0\0".to_owned().to_vec(),
+            ///payload: Vec::new(),
             payload_size: (0_u32),
-            checksum: [0x5d, 0xf6, 0xe0, 0xe2],
+            checksum: [0x5d, 0xf6, 0xe0, 0xe2].to_vec(),
         }
     }
 
-    pub fn read<R: Read>(reader: &mut R) -> Result<Self, String> {
-        let mut message = VerAckMessage::new();
-        reader
-            .read_exact(&mut message.magic)
-            .map_err(|e| e.to_string())?;
-        reader
-            .read_exact(&mut message.command)
-            .map_err(|e| e.to_string())?;
-        reader
-            .read_exact(&mut message.payload_size.to_le_bytes())
-            .map_err(|e| e.to_string())?;
-        reader
-            .read_exact(&mut message.checksum)
-            .map_err(|e| e.to_string())?;
 
-        Ok(message)
-    }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<VerAckMessage, String> {
         let mut cursor = Cursor::new(bytes);
@@ -79,15 +64,14 @@ impl VerAckMessage {
 
 impl Message for VerAckMessage {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        let message = [
-            self.magic.to_owned(),
-            self.command.to_owned(),
-            self.payload_size.to_le_bytes().to_vec(),
-            self.checksum.to_vec(),
-            self.payload.to_owned(),
-        ]
-        .concat();
+        let verack = VerAckMessage::new();
+        let magic = verack.magic.to_owned();
+        let command = verack.command.to_owned();
+        let payload_size = verack.payload_size.to_le_bytes().to_vec();
+        let checksum = verack.checksum.to_vec();
+        //let payload = Vec::new();
 
+        let message = [magic, command, payload_size, checksum].concat();
         stream.write_all(&message)?;
         stream.flush()?;
         Ok(())
