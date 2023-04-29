@@ -14,6 +14,8 @@ pub struct Version {
     addr_recv_services: u64,
     addr_recv_ip: Ipv6Addr,
     addr_recv_port: u16,
+    addr_trans_services: u64,
+    addr_trans_ip: Ipv6Addr,
     addr_trans_port: u16,
     nonce: u64,
     user_agent: String,
@@ -33,6 +35,8 @@ impl std::default::Default for Version {
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
         let addr_recv_port = 18333;
+        let addr_trans_services = 0;
+        let addr_trans_ip = Ipv6Addr::UNSPECIFIED;
         let addr_trans_port = 18333;
         let nonce = 0;
         let user_agent = "".to_string();
@@ -45,6 +49,8 @@ impl std::default::Default for Version {
             addr_recv_services,
             addr_recv_ip,
             addr_recv_port,
+            addr_trans_services,
+            addr_trans_ip,
             addr_trans_port,
             nonce,
             user_agent,
@@ -62,6 +68,8 @@ impl Version {
         addr_recv_services: u64,
         addr_recv_ip: Ipv6Addr,
         addr_recv_port: u16,
+        addr_trans_services: u64,
+        addr_trans_ip: Ipv6Addr,
         addr_trans_port: u16,
         nonce: u64,
         user_agent: String,
@@ -75,6 +83,8 @@ impl Version {
             addr_recv_services,
             addr_recv_ip,
             addr_recv_port,
+            addr_trans_services,
+            addr_trans_ip,
             addr_trans_port,
             nonce,
             user_agent,
@@ -85,19 +95,54 @@ impl Version {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, String> {
         // since this is a method, change it to modify self instead of returning a new Message
+        // println!("received: {:?}", bytes);
+
         let mut cursor = Cursor::new(bytes);
+
+        // header
+        let mut magic_bytes = [0_u8; 4];
+        let mut command_name = [0_u8; 12];
+        let mut payload_size = [0_u8; 4];
+        let mut checksum = [0_u8; 4];
+
+        // read header
+        cursor
+            .read_exact(&mut magic_bytes)
+            .map_err(|error| error.to_string())?;
+        cursor
+            .read_exact(&mut command_name)
+            .map_err(|error| error.to_string())?;
+        cursor
+            .read_exact(&mut payload_size)
+            .map_err(|error| error.to_string())?;
+        cursor
+            .read_exact(&mut checksum)
+            .map_err(|error| error.to_string())?;
+
+        println!(
+            "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
+            magic_bytes,
+            std::str::from_utf8(&command_name).map_err(|error| error.to_string())?,
+            u32::from_le_bytes(payload_size),
+            checksum
+        );
+
+        // payload
         let mut version = [0_u8; 4];
         let mut services = [0_u8; 8];
         let mut timestamp = [0_u8; 8];
         let mut addr_recv_services = [0_u8; 8];
         let mut addr_recv_ip = [0_u8; 16];
         let mut addr_recv_port = [0_u8; 2];
+        let mut addr_trans_services = [0_u8; 8]; // not used
+        let mut addr_trans_ip = [0_u8; 16]; // not used
         let mut addr_trans_port = [0_u8; 2];
         let mut nonce = [0_u8; 8];
         let user_agent_size: u64;
         let mut start_height = [0_u8; 4];
         let mut relay = [0_u8; 1];
 
+        // read payload
         cursor
             .read_exact(&mut version)
             .map_err(|error| error.to_string())?;
@@ -115,6 +160,12 @@ impl Version {
             .map_err(|error| error.to_string())?;
         cursor
             .read_exact(&mut addr_recv_port)
+            .map_err(|error| error.to_string())?;
+        cursor
+            .read_exact(&mut addr_trans_services)
+            .map_err(|error| error.to_string())?;
+        cursor
+            .read_exact(&mut addr_trans_ip)
             .map_err(|error| error.to_string())?;
         cursor
             .read_exact(&mut addr_trans_port)
@@ -155,18 +206,20 @@ impl Version {
             .map_err(|error| error.to_string())?; // pending: this field should be optional
 
         Ok(Version::new(
-            i32::from_be_bytes(version),
+            i32::from_le_bytes(version),
             Service::from(services),
-            i64::from_be_bytes(timestamp),
-            u64::from_be_bytes(addr_recv_services),
+            i64::from_le_bytes(timestamp),
+            u64::from_le_bytes(addr_recv_services),
             Ipv6Addr::from(addr_recv_ip),
             u16::from_be_bytes(addr_recv_port),
+            u64::from_le_bytes(addr_trans_services),
+            Ipv6Addr::from(addr_trans_ip),
             u16::from_be_bytes(addr_trans_port),
-            u64::from_be_bytes(nonce),
+            u64::from_le_bytes(nonce),
             std::str::from_utf8(&user_agent)
                 .map_err(|error| error.to_string())?
                 .to_string(),
-            i32::from_be_bytes(start_height),
+            i32::from_le_bytes(start_height),
             relay[0] != 0,
         ))
     }
@@ -174,40 +227,48 @@ impl Version {
 
 impl Message for Version {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        let mut output = Vec::new();
+        println!("stream: {:?}", stream);
+        let addr_trans = stream.peer_addr()?.to_string();
 
-        output.extend(&self.version.to_be_bytes());
-        output.extend(&[self.service as u8; 8]);
-        output.extend(&self.timestamp.to_be_bytes());
-        output.extend(&self.addr_recv_services.to_be_bytes());
-        output.extend(&self.addr_recv_ip.octets());
-        output.extend(&self.addr_recv_port.to_be_bytes());
-        output.extend(&self.addr_trans_port.to_be_bytes());
-        output.extend(&self.nonce.to_be_bytes());
-        output.extend(&(self.user_agent.len() as u32).to_be_bytes());
-        output.extend(self.user_agent.as_bytes()); // what happends if user_agent_bytes is 0?
-        output.extend(&self.start_height.to_be_bytes());
-        output.extend(&[self.relay as u8]);
+        // Build payload
+        // https://developer.bitcoin.org/reference/p2p_networking.html#version
+        let mut payload = Vec::new();
+        payload.extend(&self.version.to_le_bytes());
+        payload.extend(&[self.service as u8; 8]);
+        payload.extend(&self.timestamp.to_le_bytes());
+        payload.extend(&self.addr_recv_services.to_le_bytes());
+        payload.extend(&self.addr_recv_ip.octets()); // should change to be?
+        payload.extend(&self.addr_recv_port.to_be_bytes());
+        payload.extend(&[self.service as u8; 8]); // addr_trans_services
+        payload.extend(addr_trans.as_bytes()); // adr_trans_ip_addr
+        payload.extend(&self.addr_trans_port.to_be_bytes());
+        payload.extend(&self.nonce.to_le_bytes());
+        payload.extend(&(self.user_agent.len() as u32).to_le_bytes());
+        payload.extend(self.user_agent.as_bytes()); // what happends if user_agent_bytes is 0?
+        payload.extend(&self.start_height.to_le_bytes());
+        payload.extend(&[self.relay as u8]);
 
-        // Construct the message header
-        // http://man.hubwiz.com/docset/Bitcoin.docset/Contents/Resources/Documents/out/reference/p2p-network.html#message-headers
-        let magic_value = 0xdab5bffau32.to_be_bytes(); // testnet 
-        let command = b"version\0\0\0\0\0\0\0\0\0";
-        let payload_size = output.len() as u32;
-        let checksum = sha256::Hash::hash(&output)[0..4].to_vec();
-        let header = [
+        // Build message header
+        // https://developer.bitcoin.org/reference/p2p_networking.html#message-headers
+        let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes();
+        let command = b"version\0\0\0\0\0".to_owned();
+        let payload_size: [u8; 4] = (payload.len() as u32).to_le_bytes();
+        let mut checksum = sha256::Hash::hash(&payload).to_byte_array(); // first hash
+        checksum = sha256::Hash::hash(&checksum).to_byte_array(); // second hash
+
+        // Concat header and payload
+        let message = [
             magic_value.to_vec(),
             command.to_vec(),
-            payload_size.to_be_bytes().to_vec(),
-            checksum,
+            payload_size.to_vec(),
+            checksum[0..4].to_vec(),
+            payload,
         ]
         .concat();
 
-        // stream.write_all(&output)?;
-        stream.write(&header)?;
-        stream.write(&output)?;
+        stream.write_all(&message)?;
         stream.flush()?;
-        println!("write data: {:?}{:?}", header, output);
+        // println!("write data: {:?}", message);
         Ok(())
     }
 }
