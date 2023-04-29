@@ -1,4 +1,5 @@
 mod connection;
+mod message_verack;
 mod message_version;
 mod messages;
 

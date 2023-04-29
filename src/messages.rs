@@ -9,7 +9,7 @@ pub enum Service {
     NodeWitness,
     NodeXthin,
     NodeNetworkLimited,
-    Unrecognized
+    Unrecognized,
 }
 
 impl From<[u8; 8]> for Service {
@@ -37,14 +37,41 @@ mod tests {
 
     #[test]
     fn test_service_from_bytes() {
-        assert!(matches!(Service::from(0x00_u64.to_le_bytes()), Service::Unnamed));
-        assert!(matches!(Service::from(0x01_u64.to_le_bytes()), Service::NodeNetwork));
-        assert!(matches!(Service::from(0x02_u64.to_le_bytes()), Service::NodeGetUtxo));
-        assert!(matches!(Service::from(0x04_u64.to_le_bytes()), Service::NodeBloom));
-        assert!(matches!(Service::from(0x08_u64.to_le_bytes()), Service::NodeWitness));
-        assert!(matches!(Service::from(0x10_u64.to_le_bytes()), Service::NodeXthin));
-        assert!(matches!(Service::from(0x0400_u64.to_le_bytes()), Service::NodeNetworkLimited));
-        assert!(matches!(Service::from(0x518_u64.to_le_bytes()), Service::Unrecognized));
-        assert!(!matches!(Service::from(0x00_u64.to_le_bytes()), Service::Unrecognized));
+        assert!(matches!(
+            Service::from(0x00_u64.to_le_bytes()),
+            Service::Unnamed
+        ));
+        assert!(matches!(
+            Service::from(0x01_u64.to_le_bytes()),
+            Service::NodeNetwork
+        ));
+        assert!(matches!(
+            Service::from(0x02_u64.to_le_bytes()),
+            Service::NodeGetUtxo
+        ));
+        assert!(matches!(
+            Service::from(0x04_u64.to_le_bytes()),
+            Service::NodeBloom
+        ));
+        assert!(matches!(
+            Service::from(0x08_u64.to_le_bytes()),
+            Service::NodeWitness
+        ));
+        assert!(matches!(
+            Service::from(0x10_u64.to_le_bytes()),
+            Service::NodeXthin
+        ));
+        assert!(matches!(
+            Service::from(0x0400_u64.to_le_bytes()),
+            Service::NodeNetworkLimited
+        ));
+        assert!(matches!(
+            Service::from(0x518_u64.to_le_bytes()),
+            Service::Unrecognized
+        ));
+        assert!(!matches!(
+            Service::from(0x00_u64.to_le_bytes()),
+            Service::Unrecognized
+        ));
     }
 }

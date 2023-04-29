@@ -1,3 +1,4 @@
+use crate::message_verack::VerAckMessage;
 use crate::message_version::Version;
 use crate::messages::Message;
 use std::io::Read;
@@ -74,15 +75,26 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     stream.read(&mut data).map_err(|error| error.to_string())?;
 
     let _rcv_version = Version::from_bytes(&data)?;
-    println!("{:?}", _rcv_version);
+    println!("Recibido : {:?}", _rcv_version);
+
     // send and recieve VERACK
+
+    let verack_version = VerAckMessage::new();
+    verack_version
+        .send_to(&mut stream)
+        .map_err(|error| error.to_string())?;
+
+    //receive message
+    let mut data2 = [0_u8; 180];
+    stream.read(&mut data2).map_err(|error| error.to_string())?;
+
+    let _rcv_version2 = VerAckMessage::from_bytes(&data2)?;
+    println!("Recibido de Verak : {:?}", _rcv_version2);
+
     Ok(stream)
 }
 
 pub fn connect_to_network() -> Result<(), String> {
-    // testing
-    // test_handshake()?;
-
     for ip_addr in find_nodes()? {
         handshake_node(ip_addr)?;
         break; // remove once first hanshake is read properly
@@ -107,6 +119,8 @@ mod tests {
 
     #[test]
     fn test_handshake_node() {
+        // testing
+        test_handshake()?;
         assert!(true);
     }
 

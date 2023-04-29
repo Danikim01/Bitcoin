@@ -1,10 +1,12 @@
 use crate::messages::{Message, Service};
-use std::io::{Cursor, Read, Write};
-use std::net::{Ipv6Addr, TcpStream};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
+use std::io::{Cursor, Read, Write};
+use std::net::IpAddr;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv6Addr, TcpStream};
+use std::str::FromStr;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Version {
@@ -228,8 +230,32 @@ impl Version {
 impl Message for Version {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         println!("stream: {:?}", stream);
+        // Get the transmitting node's IP address
         let addr_trans = stream.peer_addr()?.to_string();
 
+        // Parse the IP address
+        let adr_trans_ip_addr = addr_trans
+            .split(":")
+            .next()
+            .unwrap()
+            .parse::<IpAddr>()
+            .unwrap();
+
+        // Convert IPv4 addresses to IPv6 if needed
+        let ip_v6 = match adr_trans_ip_addr {
+            IpAddr::V4(ip_v4) => {
+                let ipv4_bytes = ip_v4.octets();
+                let mut ipv6_bytes = [0; 16];
+                ipv6_bytes[10] = 0xff;
+                ipv6_bytes[11] = 0xff;
+                ipv6_bytes[12..].copy_from_slice(&ipv4_bytes);
+                Ipv6Addr::from(ipv6_bytes)
+            }
+            IpAddr::V6(ip_v6) => ip_v6,
+        };
+
+        // Convert the IPv6 address to a byte array
+        let mut ip_bytes: [u8; 16] = ip_v6.octets();
         // Build payload
         // https://developer.bitcoin.org/reference/p2p_networking.html#version
         let mut payload = Vec::new();
@@ -239,14 +265,12 @@ impl Message for Version {
         payload.extend(&self.addr_recv_services.to_le_bytes());
         payload.extend(&self.addr_recv_ip.octets()); // should change to be?
         payload.extend(&self.addr_recv_port.to_be_bytes());
-        payload.extend(&[self.service as u8; 8]); // addr_trans_services
-        payload.extend(addr_trans.as_bytes()); // adr_trans_ip_addr
+        payload.extend(&ip_bytes);
         payload.extend(&self.addr_trans_port.to_be_bytes());
-        payload.extend(&self.nonce.to_le_bytes());
-        payload.extend(&(self.user_agent.len() as u32).to_le_bytes());
-        payload.extend(self.user_agent.as_bytes()); // what happends if user_agent_bytes is 0?
-        payload.extend(&self.start_height.to_le_bytes());
-        payload.extend(&[self.relay as u8]);
+        payload.extend(&[self.service as u8; 8]);
+
+        // Add the IPv6 address to the payload
+        payload.extend(&ip_bytes);
 
         // Build message header
         // https://developer.bitcoin.org/reference/p2p_networking.html#message-headers
@@ -255,8 +279,7 @@ impl Message for Version {
         let payload_size: [u8; 4] = (payload.len() as u32).to_le_bytes();
         let mut checksum = sha256::Hash::hash(&payload).to_byte_array(); // first hash
         checksum = sha256::Hash::hash(&checksum).to_byte_array(); // second hash
-
-        // Concat header and payload
+                                                                  // Concat header and payload
         let message = [
             magic_value.to_vec(),
             command.to_vec(),
