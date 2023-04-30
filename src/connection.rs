@@ -92,8 +92,8 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     data = [0_u8; 180];
     stream.read(&mut data).map_err(|error| error.to_string())?;
 
-    let _rcv_version2 = VerAckMessage::from_bytes(&data)?;
-    println!("Peer responded: {:?}", _rcv_version2);
+    let _rcv_verack = VerAckMessage::from_bytes(&data)?;
+    println!("Peer responded: {:?}", _rcv_verack);
 
     Ok(stream)
 }
