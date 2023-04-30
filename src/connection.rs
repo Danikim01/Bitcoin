@@ -85,12 +85,13 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
         .map_err(|error| error.to_string())?;
 
     //receive message
-    let mut data2 = [0_u8; 24];
+    let mut data2 = [0_u8; 180];
     stream.read(&mut data2).map_err(|error| error.to_string())?;
     
+    println!("El vector data2 tiene: {:?}",data2);
+
     let _rcv_version2 = VerAckMessage::from_bytes(&data2);
     println!("Recibido: {:?}", _rcv_version2);
-
 
     
     Ok(stream)

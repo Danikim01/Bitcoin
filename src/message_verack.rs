@@ -58,21 +58,29 @@ impl VerAckMessage {
             checksum
         );
 
-        Ok(VerAckMessage::new())
+        Ok(VerAckMessage{
+            magic:magic_bytes.to_vec(),
+            command:command_name.to_vec(),
+            payload_size:payload_size[0] as u32,
+            checksum:checksum.to_vec()
+        })
     }
 }
 
 impl Message for VerAckMessage {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        let verack = VerAckMessage::new();
-        let magic = verack.magic.to_owned();
-        let command = verack.command.to_owned();
-        let payload_size = verack.payload_size.to_le_bytes().to_vec();
-        let checksum = verack.checksum.to_vec();
-        //let payload = Vec::new();
-
-        let message = [magic, command, payload_size, checksum].concat();
-        stream.write_all(&message)?;
+        let magic = self.magic.to_owned();
+        let command = self.command.to_owned();
+        let payload_size = self.payload_size.to_le_bytes().to_vec();
+        let checksum = self.checksum.to_vec();
+        // let message = [magic, command, payload_size, checksum].concat();
+        // stream.write_all(&message)?;
+        println!("Envio de datos:");
+        println!("Magic: {:?},command: {:?},payload_size:{:?},checksum:{:?}",&magic,&command,&payload_size,&checksum);
+        stream.write(&magic);
+        stream.write(&command);
+        stream.write(&payload_size);
+        stream.write(&checksum);
         stream.flush()?;
         Ok(())
     }
