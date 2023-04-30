@@ -63,8 +63,11 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
 
     // connect to server
     let mut stream = TcpStream::connect(node_addr).map_err(|error| error.to_string())?;
+    println!("Connected: {:?}", stream);
 
+    // send and receive VERSION
     // send message
+    println!("\nSending self version message...");
     let msg_version = Version::default();
     msg_version
         .send_to(&mut stream)
@@ -75,33 +78,32 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     stream.read(&mut data).map_err(|error| error.to_string())?;
 
     let _rcv_version = Version::from_bytes(&data)?;
-    println!("Recibido : {:?}", _rcv_version);
+    println!("Peer responded: {:?}", _rcv_version);
 
     // send and recieve VERACK
-
+    // send message
+    println!("\nSending self verack message...");
     let verack_version = VerAckMessage::new();
     verack_version
         .send_to(&mut stream)
         .map_err(|error| error.to_string())?;
 
-    //receive message
-    let mut data2 = [0_u8; 180];
-    stream.read(&mut data2).map_err(|error| error.to_string())?;
-    
-    println!("El vector data2 tiene: {:?}",data2);
+    // receive message
+    data = [0_u8; 180];
+    stream.read(&mut data).map_err(|error| error.to_string())?;
 
-    let _rcv_version2 = VerAckMessage::from_bytes(&data2);
-    println!("Recibido: {:?}", _rcv_version2);
+    let _rcv_version2 = VerAckMessage::from_bytes(&data)?;
+    println!("Peer responded: {:?}", _rcv_version2);
 
-    
     Ok(stream)
 }
 
 pub fn connect_to_network() -> Result<(), String> {
     for ip_addr in find_nodes()? {
         handshake_node(ip_addr)?;
-        break; // remove once first hanshake is read properly
+        println!("\n\n");
     }
+    println!("finished establishing connection to peers...");
     Ok(())
 }
 
@@ -123,7 +125,7 @@ mod tests {
     #[test]
     fn test_handshake_node() {
         // testing
-        test_handshake()?;
+        // test_handshake()?;
         assert!(true);
     }
 

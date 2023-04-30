@@ -121,13 +121,13 @@ impl Version {
             .read_exact(&mut checksum)
             .map_err(|error| error.to_string())?;
 
-        println!(
-            "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
-            magic_bytes,
-            std::str::from_utf8(&command_name).map_err(|error| error.to_string())?,
-            u32::from_le_bytes(payload_size),
-            checksum
-        );
+        // println!(
+        //     "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
+        //     magic_bytes,
+        //     std::str::from_utf8(&command_name).map_err(|error| error.to_string())?,
+        //     u32::from_le_bytes(payload_size),
+        //     checksum
+        // );
 
         // payload
         let mut version = [0_u8; 4];
@@ -225,14 +225,16 @@ impl Version {
             relay[0] != 0,
         ))
     }
-}
 
-impl Message for Version {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        println!("stream: {:?}", stream);
+    fn build_header() -> Result<Vec<u8>, String> {
+        Err("foo".to_string())
+    }
+
+    fn build_payload(&self, stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
         // Get the transmitting node's IP address
         let addr_trans = stream.peer_addr()?.to_string();
 
+        // y esto???
         // Parse the IP address
         let adr_trans_ip_addr = addr_trans
             .split(":")
@@ -253,9 +255,11 @@ impl Message for Version {
             }
             IpAddr::V6(ip_v6) => ip_v6,
         };
+        // fin y esto ???
 
         // Convert the IPv6 address to a byte array
         let mut ip_bytes: [u8; 16] = ip_v6.octets();
+        
         // Build payload
         // https://developer.bitcoin.org/reference/p2p_networking.html#version
         let mut payload = Vec::new();
@@ -271,27 +275,17 @@ impl Message for Version {
 
         // Add the IPv6 address to the payload
         payload.extend(&ip_bytes);
+        Ok(payload)
+    }
+}
 
-        // Build message header
-        // https://developer.bitcoin.org/reference/p2p_networking.html#message-headers
-        let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes();
-        let command = b"version\0\0\0\0\0".to_owned();
-        let payload_size: [u8; 4] = (payload.len() as u32).to_le_bytes();
-        let mut checksum = sha256::Hash::hash(&payload).to_byte_array(); // first hash
-        checksum = sha256::Hash::hash(&checksum).to_byte_array(); // second hash
-                                                                  // Concat header and payload
-        let message = [
-            magic_value.to_vec(),
-            command.to_vec(),
-            payload_size.to_vec(),
-            checksum[0..4].to_vec(),
-            payload,
-        ]
-        .concat();
+impl Message for Version {
+    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+        let payload = self.build_payload(stream)?;
+        let message = self.build_message("version".to_string(), Some(payload))?;
 
         stream.write_all(&message)?;
         stream.flush()?;
-        // println!("write data: {:?}", message);
         Ok(())
     }
 }
