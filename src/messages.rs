@@ -2,7 +2,7 @@ use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::net::TcpStream;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Service {
     Unnamed,
     NodeNetwork,
@@ -15,19 +15,37 @@ pub enum Service {
 }
 
 impl From<[u8; 8]> for Service {
-    fn from(_bytes: [u8; 8]) -> Service {
-        match u64::from_le_bytes(_bytes) {
-            0x00 => Service::Unnamed,
-            0x01 => Service::NodeNetwork,
-            0x02 => Service::NodeGetUtxo,
-            0x04 => Service::NodeBloom,
-            0x08 => Service::NodeWitness,
-            0x10 => Service::NodeXthin,
-            0x0400 => Service::NodeNetworkLimited,
-            _ => Service::Unrecognized,
+    fn from(bytes: [u8; 8]) -> Service {
+        let service_code = u64::from_le_bytes(bytes);
+
+        if service_code & (1 << 0) != 0 {
+            return Service::NodeNetwork;
         }
+
+        if service_code & (1 << 1) != 0 {
+            return Service::NodeGetUtxo;
+        }
+
+        if service_code & (1 << 2) != 0 {
+            return Service::NodeBloom;
+        }
+
+        if service_code & (1 << 3) != 0 {
+            return Service::NodeWitness;
+        }
+
+        if service_code & (1 << 4) != 0 {
+            return Service::NodeXthin;
+        }
+
+        if service_code & (1 << 10) != 0 {
+            return Service::NodeNetworkLimited;
+        }
+
+        Service::Unrecognized
     }
 }
+
 
 impl Into<[u8; 8]> for Service {
     fn into(self) -> [u8; 8] {
