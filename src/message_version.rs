@@ -97,8 +97,6 @@ impl Version {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, String> {
         // since this is a method, change it to modify self instead of returning a new Message
-        // println!("received: {:?}", bytes);
-
         let mut cursor = Cursor::new(bytes);
 
         // header
@@ -226,10 +224,6 @@ impl Version {
         ))
     }
 
-    fn build_header() -> Result<Vec<u8>, String> {
-        Err("foo".to_string())
-    }
-
     fn build_payload(&self, stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
         // Get the transmitting node's IP address
         let addr_trans = stream.peer_addr()?.to_string();
@@ -264,7 +258,8 @@ impl Version {
         // https://developer.bitcoin.org/reference/p2p_networking.html#version
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
-        payload.extend(&[self.service as u8; 8]);
+        let service_bytes: [u8;8] = self.service.into();
+        payload.extend(&service_bytes);
         payload.extend(&self.timestamp.to_le_bytes());
         payload.extend(&self.addr_recv_services.to_le_bytes());
         payload.extend(&self.addr_recv_ip.octets()); // should change to be?

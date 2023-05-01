@@ -1,6 +1,6 @@
-use std::net::TcpStream;
-use bitcoin_hashes::Hash;
 use bitcoin_hashes::sha256;
+use bitcoin_hashes::Hash;
+use std::net::TcpStream;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Service {
@@ -29,6 +29,21 @@ impl From<[u8; 8]> for Service {
     }
 }
 
+impl Into<[u8; 8]> for Service {
+    fn into(self) -> [u8; 8] {
+        match self {
+            Service::Unnamed => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::NodeNetwork => [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::NodeGetUtxo => [0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::NodeBloom => [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::NodeWitness => [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::NodeXthin => [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::NodeNetworkLimited => [0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            Service::Unrecognized => [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
+        }
+    }
+}
+
 /// Returns command with zeros padded to it's right
 fn get_command(cmd: String) -> [u8; 12] {
     let mut command: [u8; 12] = [0; 12];
@@ -46,7 +61,7 @@ pub trait Message {
         let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes(); // SET TO ENV
         let command: [u8; 12] = get_command(cmd);
         let mut payload_size: [u8; 4] = 0_i32.to_le_bytes();
-        
+
         let mut checksum: [u8; 32] = [0; 32];
         checksum[..4].copy_from_slice(&[0x5d, 0xf6, 0xe0, 0xe2]);
 
@@ -111,5 +126,25 @@ mod tests {
             Service::from(0x00_u64.to_le_bytes()),
             Service::Unrecognized
         ));
+    }
+
+    #[test]
+    fn test_service_into_bytes() {
+        let mut bytes: [u8; 8] = Service::Unnamed.into();
+        assert_eq!(bytes, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::NodeNetwork.into();
+        assert_eq!(bytes, [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::NodeGetUtxo.into();
+        assert_eq!(bytes, [0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::NodeBloom.into();
+        assert_eq!(bytes, [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::NodeWitness.into();
+        assert_eq!(bytes, [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::NodeXthin.into();
+        assert_eq!(bytes, [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::NodeNetworkLimited.into();
+        assert_eq!(bytes, [0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        bytes = Service::Unrecognized.into();
+        assert_eq!(bytes, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
     }
 }
