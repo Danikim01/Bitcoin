@@ -46,7 +46,6 @@ impl From<[u8; 8]> for Service {
     }
 }
 
-
 impl Into<[u8; 8]> for Service {
     fn into(self) -> [u8; 8] {
         match self {

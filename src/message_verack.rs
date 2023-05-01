@@ -1,10 +1,10 @@
 use crate::message_version::Version;
 use crate::messages::Message;
+use bitcoin_hashes::sha256;
+use bitcoin_hashes::Hash;
 use std::io::Cursor;
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use bitcoin_hashes::Hash;
-use bitcoin_hashes::sha256;
 #[derive(Debug)]
 pub struct VerAckMessage {
     pub magic: Vec<u8>,
@@ -54,13 +54,13 @@ impl VerAckMessage {
         //     checksum
         // );
 
-        Ok(VerAckMessage{
-            magic:magic_bytes.to_vec(),
+        Ok(VerAckMessage {
+            magic: magic_bytes.to_vec(),
             command: std::str::from_utf8(&command_name)
                 .map_err(|error| error.to_string())?
                 .to_string(),
-            payload_size:payload_size[0] as u32,
-            checksum:checksum.to_vec()
+            payload_size: payload_size[0] as u32,
+            checksum: checksum.to_vec(),
         })
     }
 }
