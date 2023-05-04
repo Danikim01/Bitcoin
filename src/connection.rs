@@ -3,7 +3,10 @@ use crate::message_version::Version;
 use crate::messages::Message;
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+//use std::ops::Generator;
 use crate::message_getblocks::GetBlocks;
+use std::io::Cursor;
+
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -96,28 +99,43 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     let _rcv_verack = VerAckMessage::from_bytes(&data)?;
     println!("Peer responded: {:?}", _rcv_verack);
 
+    let genesis_message = GetBlocks::default();
+    genesis_message.
+        send_to(&mut stream)
+        .map_err(|error| error.to_string())?;
+
+    // receive message
+    let mut data_genesis = [0_u8; 180];
+    stream.read(&mut data_genesis).map_err(|error| error.to_string())?;
+
+    println!("{:?}",data_genesis);
+
+    let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
+    println!("Peer responded: {:?}", _rcv_block);
+
     Ok(stream)
 }
 
-fn get_genesis_block(node: SocketAddr) -> Result<(), String>{
-    let genesis_message = GetBlocks::default();
-    genesis_message.
-        send_to(&mut node)
-        .map_err(|error| error.to_string())?;
+// fn get_genesis_block(node: SocketAddr) -> Result<(), String>{
+//     let genesis_message = GetBlocks::default();
+//     genesis_message.
+//         send_to(&mut node)
+//         .map_err(|error| error.to_string())?;
 
-    //todo rcv inv_message with all block_hashes
-    Ok(())
-}
+//     //todo rcv inv_message with all block_hashes
+//     Ok(())
+// }
 
 pub fn connect_to_network() -> Result<(), String> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         handshake_node(ip_addr)?;
         println!("\n\n");
+        break;
     }
 
-    let node = nodes[-1];
-    genesis_block = get_genesis_block(node);
+    //let node = nodes[-1];
+    //genesis_block = get_genesis_block(node);
 
 
     Ok(())
