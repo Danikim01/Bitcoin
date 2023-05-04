@@ -3,6 +3,7 @@ use crate::message_version::Version;
 use crate::messages::Message;
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use crate::message_getblocks::GetBlocks;
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -99,7 +100,12 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
 }
 
 fn get_genesis_block(node: SocketAddr) -> Result<(), String>{
-    let genesis_message =
+    let genesis_message = GetBlocks::default();
+    genesis_message.
+        send_to(&mut node)
+        .map_err(|error| error.to_string())?;
+
+    //todo rcv inv_message with all block_hashes
     Ok(())
 }
 
