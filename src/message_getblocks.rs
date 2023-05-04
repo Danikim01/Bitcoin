@@ -21,3 +21,31 @@ impl Default for GetBlocks {
 
     }
 }
+
+impl GetBlocks {
+    fn build_payload(&self) ->  std::io::Result<Vec<u8>>{
+        let mut payload = Vec::new();
+        payload.extend(&self.version.to_le_bytes());
+        payload.extend(&self.hash_count.to_le_bytes());
+
+        for &header_hash in self.block_header_hashes{
+            payload.extend(&header_hash);
+        }
+        payload.extend(self.stop_hash);
+        Ok(payload)
+    }
+
+
+}
+
+
+impl Message for GetBlocks {
+    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+        let payload = self.build_payload()?;
+        let message = self.build_message("getblocks".to_string(), Some(payload))?;
+
+        stream.write_all(&message)?;
+        stream.flush()?;
+        Ok(())
+    }
+}
