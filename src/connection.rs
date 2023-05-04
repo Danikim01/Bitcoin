@@ -99,7 +99,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
 }
 
 fn get_genesis_block(node: SocketAddr) -> Result<(), String>{
-
+    let genesis_message =
     Ok(())
 }
 
