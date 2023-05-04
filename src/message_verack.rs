@@ -1,3 +1,5 @@
+use crate::message_header;
+use crate::message_header::MessageHeader;
 use crate::message_version::Version;
 use crate::messages::Message;
 use bitcoin_hashes::sha256;
@@ -7,61 +9,28 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 #[derive(Debug)]
 pub struct VerAckMessage {
-    pub magic: Vec<u8>,
-    pub command: String,
-    pub payload_size: u32,
-    pub checksum: Vec<u8>,
+    message_header: MessageHeader,
 }
 
 impl VerAckMessage {
     pub fn new() -> VerAckMessage {
         VerAckMessage {
-            magic: 0x0b1109079u32.to_be_bytes().to_vec(),
-            command: "verack\0\0\0\0\0\0".to_string(),
-            payload_size: (0_u32),
-            checksum: [0x5d, 0xf6, 0xe0, 0xe2].to_vec(),
+            message_header: MessageHeader::default(),
         }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<VerAckMessage, String> {
         let mut cursor = Cursor::new(bytes);
 
-        // header
-        let mut magic_bytes = [0_u8; 4];
-        let mut command_name = [0_u8; 12];
-        let mut payload_size = [0_u8; 4];
-        let mut checksum = [0_u8; 4];
+        // verack only has header
+        let mut messageHeaderBytes = [0_u8; 24];
+        cursor
+            .read_exact(&mut messageHeaderBytes)
+            .map_err(|error| error.to_string())?;
+        let message_header =
+            MessageHeader::from_bytes(&messageHeaderBytes).map_err(|error| error.to_string())?;
 
-        // read header
-        cursor
-            .read_exact(&mut magic_bytes)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut command_name)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut payload_size)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut checksum)
-            .map_err(|error| error.to_string())?;
-
-        // println!(
-        //     "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
-        //     magic_bytes,
-        //     std::str::from_utf8(&command_name).map_err(|error| error.to_string())?,
-        //     u32::from_le_bytes(payload_size),
-        //     checksum
-        // );
-
-        Ok(VerAckMessage {
-            magic: magic_bytes.to_vec(),
-            command: std::str::from_utf8(&command_name)
-                .map_err(|error| error.to_string())?
-                .to_string(),
-            payload_size: payload_size[0] as u32,
-            checksum: checksum.to_vec(),
-        })
+        Ok(VerAckMessage { message_header })
     }
 }
 
