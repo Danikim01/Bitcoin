@@ -1,3 +1,7 @@
+use std::io::Write;
+use std::net::TcpStream;
+use crate::messages::Message;
+
 #[derive(Debug)]
 pub struct GetBlocks {
     version: u32,
@@ -34,8 +38,6 @@ impl GetBlocks {
         payload.extend(self.stop_hash);
         Ok(payload)
     }
-
-
 }
 
 
