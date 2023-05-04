@@ -98,12 +98,22 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     Ok(stream)
 }
 
+fn get_genesis_block(node: SocketAddr) -> Result<(), String>{
+
+    Ok(())
+}
+
 pub fn connect_to_network() -> Result<(), String> {
-    for ip_addr in find_nodes()? {
+    let nodes = find_nodes()?;
+    for ip_addr in nodes {
         handshake_node(ip_addr)?;
         println!("\n\n");
     }
-    println!("finished establishing connection to peers...");
+
+    let node = nodes[-1];
+    genesis_block = get_genesis_block(node);
+
+
     Ok(())
 }
 
@@ -114,7 +124,7 @@ mod tests {
     #[test]
     fn test_find_nodes() {
         let nodes_it = find_nodes().unwrap();
-        let mut nodes_vec: Vec<std::net::SocketAddr> = Vec::new();
+        let mut nodes_vec: Vec<SocketAddr> = Vec::new();
         for node in nodes_it {
             println!("node: {}", node);
             nodes_vec.push(node);
