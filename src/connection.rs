@@ -99,17 +99,17 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     let _rcv_verack = VerAckMessage::from_bytes(&data)?;
     println!("Peer responded: {:?}", _rcv_verack);
 
-    // let genesis_message = GetBlocks::default();
-    // genesis_message.
-    //     send_to(&mut stream)
-    //     .map_err(|error| error.to_string())?;
+    let genesis_message = GetBlocks::default();
+    genesis_message.
+        send_to(&mut stream)
+        .map_err(|error| error.to_string())?;
 
-    // // receive message
-    // let mut data_genesis = [0_u8; 180];
-    // stream.read(&mut data_genesis).map_err(|error| error.to_string())?;
+    // receive message
+    let mut data_genesis = [0_u8; 180];
+    stream.read(&mut data_genesis).map_err(|error| error.to_string())?;
 
-    // let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
-    // println!("Peer responded: {:?}", _rcv_block);
+    let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
+    println!("Peer responded: {:?}", _rcv_block);
 
     Ok(stream)
 }

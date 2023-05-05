@@ -3,6 +3,10 @@ use std::net::TcpStream;
 use crate::messages::Message;
 use std::io::Cursor;
 use std::io::Read;
+use bitcoin_hashes::sha256;
+use bitcoin_hashes::Hash;
+use crate::header::BlockHeader;
+use crate::header::Header;
 
 #[derive(Debug)]
 pub struct GetBlocks {
@@ -28,24 +32,76 @@ impl Default for GetBlocks {
 
 
 //ver: https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
-// fn to_varint(value: u64) -> Vec<u8> {
-//     let mut buf = Vec::new();
+fn to_varint(value: u64) -> Vec<u8> {
+    let mut buf = Vec::new();
 
-//     if value >= 0 && value <= 252{
-//         buf.push(value as u8);
-//     } else if value >= 253 && value <= 0xffff {
-//         buf.push(0xfd);
-//         buf.extend_from_slice(&(value as u16).to_le_bytes());
-//     } else if value >= 0x10000 && value <= 0xffffffff {
-//         buf.push(0xfe);
-//         buf.extend_from_slice(&(value as u32).to_le_bytes());
-//     } else if value >= 0x100000000 && value <= 0xffffffffffffffff{
-//         buf.push(0xff);
-//         buf.extend_from_slice(&(value as u64).to_le_bytes());
-//     }
+    if value >= 0 && value <= 252{
+        buf.push(value as u8);
+    } else if value >= 253 && value <= 0xffff {
+        buf.push(0xfd);
+        buf.extend_from_slice(&(value as u16).to_le_bytes());
+    } else if value >= 0x10000 && value <= 0xffffffff {
+        buf.push(0xfe);
+        buf.extend_from_slice(&(value as u32).to_le_bytes());
+    } else if value >= 0x100000000 && value <= 0xffffffffffffffff{
+        buf.push(0xff);
+        buf.extend_from_slice(&(value as u64).to_le_bytes());
+    }
 
-//     buf
-// }
+    buf
+}
+
+fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32,String> {
+    let mut buf = [0; 4];
+    cursor.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    Ok(i32::from_le_bytes(buf))
+}
+
+fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32,String> {
+    let mut buf = [0; 4];
+    cursor.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8,String> {
+    let mut buf = [0;1];
+    cursor.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    Ok(u8::from_le_bytes(buf))
+}
+
+fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], String> {
+    let mut hash = [0u8; 32];
+    cursor.read_exact(&mut hash).map_err(|e| e.to_string())?;
+    Ok(hash)
+}
+
+
+fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, String> {
+    let first_byte = read_u8(cursor).map_err(|error| error.to_string())?;
+    println!("the first byte is {}",&first_byte);
+    match first_byte {
+        0xff => {
+            let mut buf = [0_u8; 8];
+            cursor.read_exact(&mut buf).map_err(|error| error.to_string())?;
+            let value = u64::from_le_bytes(buf);
+            Ok(value as usize)
+        }
+        0xfe => {
+            let mut buf = [0_u8; 4];
+            cursor.read_exact(&mut buf).map_err(|error| error.to_string())?;
+            let value = u32::from_le_bytes(buf);
+            Ok(value as usize)
+        }
+        0xfd => {
+            let mut buf = [0_u8; 2];
+            cursor.read_exact(&mut buf).map_err(|error| error.to_string())?;
+            let value = u16::from_le_bytes(buf);
+            Ok(value as usize)
+        }
+        _ => Ok(first_byte as usize)
+    }
+}
+
 
 impl GetBlocks {
 
@@ -61,11 +117,10 @@ impl GetBlocks {
     fn build_payload(&self) ->  std::io::Result<Vec<u8>>{
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
-        //let hash_count_a_enviar = to_varint(self.hash_count as u64);
-        //payload.extend(&hash_count_a_enviar);
-        payload.extend(&self.hash_count.to_le_bytes());
+        let hash_count_a_enviar = to_varint(self.hash_count as u64);
+        payload.extend(&hash_count_a_enviar);
+        //payload.extend(&self.hash_count.to_le_bytes());
         for header_hash in &self.block_header_hashes{
-            println!("enviando header hash: {:?}",&header_hash);
             payload.extend(header_hash);
         }
         payload.extend(self.stop_hash);
@@ -103,32 +158,46 @@ impl GetBlocks {
             checksum
         );
 
-        // let mut version = [0_u8; 4];
-        // let mut hash_count = [0_u8; 1];
-        // let mut block_header = [0_u8; 1500];
-        // let mut stop_hash =  [0_u8;32];
+        //Leo el payload
+        //sabiendo que se recibe un varint        
+        let mut value = read_from_varint(&mut cursor);
 
-        // cursor
-        //     .read_exact(&mut version)
-        //     .map_err(|error| error.to_string())?;
-        // cursor
-        //     .read_exact(&mut hash_count)
-        //     .map_err(|error| error.to_string())?;
-        // cursor
-        //     .read_exact(&mut block_header)
-        //     .map_err(|error| error.to_string())?;
-        // cursor
-        //     .read_exact(&mut stop_hash)
-        //     .map_err(|error| error.to_string())?;
+        println!("the value is {:?}",&value); //El value deberia ser 2000 porque se envian 32 ceros
+        
+        match value{
+            Ok(v) => {
+                //let mut headers: Vec<Header<T>> = Vec::with_capacity(v as usize);
+                for _ in 0..v{
+                    let version = read_i32(&mut cursor)?;
+                    let prev_block_hash = read_hash(&mut cursor)?;
+                    let merkle_root_hash = read_hash(&mut cursor)?;
+                    let timestamp = read_u32(&mut cursor)?;
+                    let nbits = read_u32(&mut cursor)?;
+                    let nonce = read_u32(&mut cursor)?;
+        
+                    println!("Version : {}",version);
+                    println!("Prev_block_hash: {:?}",prev_block_hash);
+                    println!("Merkle_root_hash: {:?}",merkle_root_hash);
+                    println!("Timestamp: {}",timestamp);
+                    println!("nbits: {}",nbits);
+                    println!("nonce {}",nonce);
+        
 
-    
-        // let mut block_header_hashes = Vec::new();
-        // block_header_hashes.push(block_header);
-
-        // println!("Version {:?}",&i32::from_le_bytes(version));
-        // println!("Hash Count {:?}",&u8::from_le_bytes(hash_count));
-        // println!("block header {:?}",&block_header_hashes);
-        // println!("stop_hash {:?}",&stop_hash);
+                    
+                    // headers.push(BlockHeader {
+                    //     version,
+                    //     prev_block_hash,
+                    //     merkle_root_hash,
+                    //     timestamp,
+                    //     nbits,
+                    //     nonce,
+                    // });
+                }
+                Ok(())
+            },
+            _ => Err("El numero de headers es invalido".to_owned()),
+        };
+        
 
 
         // Ok(GetBlocks::new(
@@ -146,7 +215,7 @@ impl GetBlocks {
 impl Message for GetBlocks {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let payload = self.build_payload()?;
-        let message = self.build_message("getblocks".to_string(), Some(payload))?;
+        let message = self.build_message("getheaders".to_string(), Some(payload))?;
 
         stream.write_all(&message)?;
         stream.flush()?;
