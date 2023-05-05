@@ -26,6 +26,27 @@ impl Default for GetBlocks {
     }
 }
 
+
+//ver: https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
+// fn to_varint(value: u64) -> Vec<u8> {
+//     let mut buf = Vec::new();
+
+//     if value >= 0 && value <= 252{
+//         buf.push(value as u8);
+//     } else if value >= 253 && value <= 0xffff {
+//         buf.push(0xfd);
+//         buf.extend_from_slice(&(value as u16).to_le_bytes());
+//     } else if value >= 0x10000 && value <= 0xffffffff {
+//         buf.push(0xfe);
+//         buf.extend_from_slice(&(value as u32).to_le_bytes());
+//     } else if value >= 0x100000000 && value <= 0xffffffffffffffff{
+//         buf.push(0xff);
+//         buf.extend_from_slice(&(value as u64).to_le_bytes());
+//     }
+
+//     buf
+// }
+
 impl GetBlocks {
 
     fn new(version:i32,hash_count:u8,block_header_hashes:Vec<[u8;32]>,stop_hash:[u8;32])->Self{
@@ -40,15 +61,18 @@ impl GetBlocks {
     fn build_payload(&self) ->  std::io::Result<Vec<u8>>{
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
+        //let hash_count_a_enviar = to_varint(self.hash_count as u64);
+        //payload.extend(&hash_count_a_enviar);
         payload.extend(&self.hash_count.to_le_bytes());
         for header_hash in &self.block_header_hashes{
+            println!("enviando header hash: {:?}",&header_hash);
             payload.extend(header_hash);
         }
         payload.extend(self.stop_hash);
         Ok(payload)
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<GetBlocks, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<(), String> {
         let mut cursor = Cursor::new(bytes);
 
         // header
@@ -79,33 +103,42 @@ impl GetBlocks {
             checksum
         );
 
-        let mut version = [0_u8; 4];
-        let mut hash_count = [0_u8; 1];
-        let mut block_header = [0_u8; 32];
-        let mut stop_hash =  [0_u8;32];
+        // let mut version = [0_u8; 4];
+        // let mut hash_count = [0_u8; 1];
+        // let mut block_header = [0_u8; 1500];
+        // let mut stop_hash =  [0_u8;32];
 
-        cursor
-            .read_exact(&mut version)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut hash_count)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut block_header)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut stop_hash)
-            .map_err(|error| error.to_string())?;
+        // cursor
+        //     .read_exact(&mut version)
+        //     .map_err(|error| error.to_string())?;
+        // cursor
+        //     .read_exact(&mut hash_count)
+        //     .map_err(|error| error.to_string())?;
+        // cursor
+        //     .read_exact(&mut block_header)
+        //     .map_err(|error| error.to_string())?;
+        // cursor
+        //     .read_exact(&mut stop_hash)
+        //     .map_err(|error| error.to_string())?;
 
-        let mut block_header_hashes = Vec::new();
-        block_header_hashes.push(block_header);
+    
+        // let mut block_header_hashes = Vec::new();
+        // block_header_hashes.push(block_header);
 
-        Ok(GetBlocks::new(
-            i32::from_le_bytes(version),
-            u8::from_le_bytes(hash_count),
-            block_header_hashes,
-            stop_hash
-            ))
+        // println!("Version {:?}",&i32::from_le_bytes(version));
+        // println!("Hash Count {:?}",&u8::from_le_bytes(hash_count));
+        // println!("block header {:?}",&block_header_hashes);
+        // println!("stop_hash {:?}",&stop_hash);
+
+
+        // Ok(GetBlocks::new(
+        //     i32::from_le_bytes(version),
+        //     u8::from_le_bytes(hash_count),
+        //     block_header_hashes,
+        //     stop_hash
+        //     ))
+
+        Ok(())
     }
 }
 
