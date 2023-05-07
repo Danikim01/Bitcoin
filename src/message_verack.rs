@@ -67,7 +67,7 @@ impl VerAckMessage {
 
 impl Message for VerAckMessage {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        let message = self.build_message("verack".to_string(), None)?;
+        let message = self.build_message("verack", None)?;
         stream.write_all(&message)?;
         stream.flush()?;
         Ok(())

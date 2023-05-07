@@ -53,7 +53,7 @@ fn test_handshake() -> Result<TcpStream, String> {
 
     println!("Sent message:");
     println!("{:?}", msg_version);
-    let _rcv_version = Version::from_bytes(&data)?;
+    let _rcv_version = Version::from_bytes(&data).map_err(|error| error.to_string())?;
     println!("Got message:");
     println!("{:?}", _rcv_version);
     println!("Done testing");
@@ -79,7 +79,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     let mut data = [0_u8; 180];
     stream.read(&mut data).map_err(|error| error.to_string())?;
 
-    let _rcv_version = Version::from_bytes(&data)?;
+    let _rcv_version = Version::from_bytes(&data).map_err(|error| error.to_string())?;
     println!("Peer responded: {:?}", _rcv_version);
 
     // send and recieve VERACK
@@ -108,7 +108,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
         .read(&mut data_genesis)
         .map_err(|error| error.to_string())?;
 
-    let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
+    let _rcv_block = GetBlocks::from_bytes(&data_genesis).map_err(|error| error.to_string())?;
     println!("Peer responded: {:?}", _rcv_block);
 
     Ok(stream)

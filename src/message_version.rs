@@ -1,7 +1,7 @@
 use crate::messages::{Message, Services};
 // use bitcoin_hashes::sha256;
 // use bitcoin_hashes::Hash;
-use std::io::{Cursor, Read, Write};
+use std::io::{Cursor, Read, Write, self};
 use std::net::IpAddr;
 // use std::net::{Ipv4Addr, SocketAddr};
 use std::net::{Ipv6Addr, TcpStream};
@@ -95,7 +95,7 @@ impl Version {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Version, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
         // since this is a method, change it to modify self instead of returning a new Message
         let mut cursor = Cursor::new(bytes);
 
@@ -107,17 +107,13 @@ impl Version {
 
         // read header
         cursor
-            .read_exact(&mut magic_bytes)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut magic_bytes)?;
         cursor
-            .read_exact(&mut command_name)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut command_name)?;
         cursor
-            .read_exact(&mut payload_size)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut payload_size)?;
         cursor
-            .read_exact(&mut checksum)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut checksum)?;
 
         // println!(
         //     "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
@@ -144,40 +140,29 @@ impl Version {
 
         // read payload
         cursor
-            .read_exact(&mut version)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut version)?;
         cursor
-            .read_exact(&mut services)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut services)?;
         cursor
-            .read_exact(&mut timestamp)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut timestamp)?;
         cursor
-            .read_exact(&mut addr_recv_services)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut addr_recv_services)?;
         cursor
-            .read_exact(&mut addr_recv_ip)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut addr_recv_ip)?;
         cursor
-            .read_exact(&mut addr_recv_port)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut addr_recv_port)?;
         cursor
-            .read_exact(&mut addr_trans_services)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut addr_trans_services)?;
         cursor
-            .read_exact(&mut addr_trans_ip)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut addr_trans_ip)?;
         cursor
-            .read_exact(&mut addr_trans_port)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut addr_trans_port)?;
         cursor
-            .read_exact(&mut nonce)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut nonce)?;
 
         let mut byte = [0_u8; 1];
         cursor
-            .read_exact(&mut byte)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut byte)?;
         if byte[0] < 0xFD {
             user_agent_size = byte[0] as u64;
         } else {
@@ -190,20 +175,16 @@ impl Version {
             };
             let mut user_agent_bytes = vec![0_u8; buffer_size];
             cursor
-                .read_exact(&mut user_agent_bytes)
-                .map_err(|error| error.to_string())?;
+                .read_exact(&mut user_agent_bytes)?;
             user_agent_size = u64::from_be_bytes(vec_to_arr(user_agent_bytes));
         }
         let mut user_agent = vec![0_u8; user_agent_size as usize];
         cursor
-            .read_exact(&mut user_agent)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut user_agent)?;
         cursor
-            .read_exact(&mut start_height)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut start_height)?;
         cursor
-            .read_exact(&mut relay)
-            .map_err(|error| error.to_string())?; // pending: this field should be optional
+            .read_exact(&mut relay)?; // pending: this field should be optional
 
         Ok(Version::new(
             i32::from_le_bytes(version),
@@ -216,9 +197,7 @@ impl Version {
             Ipv6Addr::from(addr_trans_ip),
             u16::from_be_bytes(addr_trans_port),
             u64::from_le_bytes(nonce),
-            std::str::from_utf8(&user_agent)
-                .map_err(|error| error.to_string())?
-                .to_string(),
+            std::str::from_utf8(&user_agent).map_err(|e| {io::Error::new(io::ErrorKind::InvalidData, e.to_string())})?.to_string(),
             i32::from_le_bytes(start_height),
             relay[0] != 0,
         ))
@@ -277,7 +256,7 @@ impl Version {
 impl Message for Version {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let payload = self.build_payload(stream)?;
-        let message = self.build_message("version".to_string(), Some(payload))?;
+        let message = self.build_message("version", Some(payload))?;
 
         stream.write_all(&message)?;
         stream.flush()?;

@@ -3,9 +3,7 @@
 use crate::messages::Message;
 // use bitcoin_hashes::sha256;
 // use bitcoin_hashes::Hash;
-use std::io::Cursor;
-use std::io::Read;
-use std::io::Write;
+use std::io::{Cursor, Read, Write, self};
 use std::net::TcpStream;
 
 #[derive(Debug)]
@@ -52,55 +50,52 @@ fn to_varint(value: u64) -> Vec<u8> {
     buf
 }
 
-fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, String> {
+fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, io::Error> {
     let mut buf = [0; 4];
-    cursor.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    cursor.read_exact(&mut buf)?;
     Ok(i32::from_le_bytes(buf))
 }
 
-fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, String> {
+fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, io::Error> {
     let mut buf = [0; 4];
-    cursor.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    cursor.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
 }
 
-fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, String> {
+fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, io::Error> {
     let mut buf = [0; 1];
-    cursor.read_exact(&mut buf).map_err(|e| e.to_string())?;
+    cursor.read_exact(&mut buf)?;
     Ok(u8::from_le_bytes(buf))
 }
 
-fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], String> {
+fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
     let mut hash = [0u8; 32];
-    cursor.read_exact(&mut hash).map_err(|e| e.to_string())?;
+    cursor.read_exact(&mut hash)?;
     Ok(hash)
 }
 
-fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, String> {
-    let first_byte = read_u8(cursor).map_err(|error| error.to_string())?;
+fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, io::Error> {
+    let first_byte = read_u8(cursor)?;
     println!("the first byte is {}", &first_byte);
     match first_byte {
         0xff => {
             let mut buf = [0_u8; 8];
             cursor
-                .read_exact(&mut buf)
-                .map_err(|error| error.to_string())?;
+                .read_exact(&mut buf)?;
             let value = u64::from_le_bytes(buf);
             Ok(value as usize)
         }
         0xfe => {
             let mut buf = [0_u8; 4];
             cursor
-                .read_exact(&mut buf)
-                .map_err(|error| error.to_string())?;
+                .read_exact(&mut buf)?;
             let value = u32::from_le_bytes(buf);
             Ok(value as usize)
         }
         0xfd => {
             let mut buf = [0_u8; 2];
             cursor
-                .read_exact(&mut buf)
-                .map_err(|error| error.to_string())?;
+                .read_exact(&mut buf)?;
             let value = u16::from_le_bytes(buf);
             Ok(value as usize)
         }
@@ -136,7 +131,7 @@ impl GetBlocks {
         Ok(payload)
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<(), String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<(), io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         // header
@@ -147,22 +142,18 @@ impl GetBlocks {
 
         // read header
         cursor
-            .read_exact(&mut magic_bytes)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut magic_bytes)?;
         cursor
-            .read_exact(&mut command_name)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut command_name)?;
         cursor
-            .read_exact(&mut payload_size)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut payload_size)?;
         cursor
-            .read_exact(&mut checksum)
-            .map_err(|error| error.to_string())?;
+            .read_exact(&mut checksum)?;
 
         println!(
             "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
             magic_bytes,
-            std::str::from_utf8(&command_name).map_err(|error| error.to_string())?,
+            std::str::from_utf8(&command_name).unwrap(), // remove this println together with the unwrap
             u32::from_le_bytes(payload_size),
             checksum
         );
@@ -202,7 +193,7 @@ impl GetBlocks {
                 }
                 Ok(())
             }
-            _ => Err("El numero de headers es invalido".to_owned()),
+            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "El numero de headers es invalido")),
         }?;
 
         // Ok(GetBlocks::new(
@@ -219,7 +210,7 @@ impl GetBlocks {
 impl Message for GetBlocks {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let payload = self.build_payload()?;
-        let message = self.build_message("getheaders".to_string(), Some(payload))?;
+        let message = self.build_message("getheaders", Some(payload))?;
 
         stream.write_all(&message)?;
         stream.flush()?;
