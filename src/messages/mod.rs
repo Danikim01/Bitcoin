@@ -1,6 +1,7 @@
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::net::TcpStream;
+use std::io;
 
 mod verack;
 mod version;
@@ -21,43 +22,48 @@ impl Services {
         }
     }
 
+    pub fn from_u64(encoded_services: u64) -> Result<Self, io::Error> {
+        if encoded_services & !1055 != 0 { // invalid bitmap, uses bits with undefined purpose
+            return Err(io::Error::new(io::ErrorKind::Other, "Unrecognized services"))
+        }
+        Ok(Self::new(encoded_services))
+    }
+
     pub fn is_unnamed(self) -> bool {
         self.bitmap == 0
     }
 
     pub fn is_node_network(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 1 != 0
+        self.bitmap & 1 != 0
     }
 
     pub fn is_node_get_utxo(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 2 != 0
+        self.bitmap & 2 != 0
     }
 
     pub fn is_node_bloom(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 4 != 0
+        self.bitmap & 4 != 0
     }
 
     pub fn is_node_witness(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 8 != 0
+        self.bitmap & 8 != 0
     }
 
     pub fn is_node_xthin(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 16 != 0
+        self.bitmap & 16 != 0
     }
 
     pub fn is_node_network_limited(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 1024 != 0
-    }
-
-    pub fn is_unrecognized(self) -> bool {
-        self.bitmap & !1055 != 0
+        self.bitmap & 1024 != 0
     }
 }
 
-impl From<[u8; 8]> for Services {
-    fn from(bytes: [u8; 8]) -> Self {
+impl TryFrom<[u8; 8]> for Services {
+    type Error = std::io::Error;
+
+    fn try_from(bytes: [u8; 8]) -> Result<Self, Self::Error> {
         let service_code = u64::from_le_bytes(bytes);
-        Services::new(service_code)
+        Services::from_u64(service_code)
     }
 }
 
@@ -110,22 +116,23 @@ pub trait Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
 
     #[test]
-    fn test_single_service_from_bytes() {
-        assert!(Services::from(0x00_u64.to_le_bytes()).is_unnamed());
-        assert!(Services::from(0x01_u64.to_le_bytes()).is_node_network());
-        assert!(Services::from(0x02_u64.to_le_bytes()).is_node_get_utxo());
-        assert!(Services::from(0x04_u64.to_le_bytes()).is_node_bloom());
-        assert!(Services::from(0x08_u64.to_le_bytes()).is_node_witness());
-        assert!(Services::from(0x10_u64.to_le_bytes()).is_node_xthin());
-        assert!(Services::from(0x0400_u64.to_le_bytes()).is_node_network_limited());
-        assert!(Services::from(0x518_u64.to_le_bytes()).is_unrecognized());
+    fn test_single_service_from_bytes() -> Result<(), io::Error> {
+        assert!(Services::try_from(0x00_u64.to_le_bytes())?.is_unnamed());
+        assert!(Services::try_from(0x01_u64.to_le_bytes())?.is_node_network());
+        assert!(Services::try_from(0x02_u64.to_le_bytes())?.is_node_get_utxo());
+        assert!(Services::try_from(0x04_u64.to_le_bytes())?.is_node_bloom());
+        assert!(Services::try_from(0x08_u64.to_le_bytes())?.is_node_witness());
+        assert!(Services::try_from(0x10_u64.to_le_bytes())?.is_node_xthin());
+        assert!(Services::try_from(0x0400_u64.to_le_bytes())?.is_node_network_limited());
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_services_from_empty_bytes() {
-        let services = Services::from(0x00_u64.to_le_bytes());
+    fn test_multiple_services_from_empty_bytes() -> Result<(), io::Error> {
+        let services = Services::try_from(0x00_u64.to_le_bytes())?;
         assert!(services.is_unnamed());
         assert!(!services.is_node_network());
         assert!(!services.is_node_get_utxo());
@@ -133,12 +140,12 @@ mod tests {
         assert!(!services.is_node_witness());
         assert!(!services.is_node_xthin());
         assert!(!services.is_node_network_limited());
-        assert!(!services.is_unrecognized());
+        Ok(())
     }
 
     #[test]
-    fn test_multiple_services_from_valid_bytes() {
-        let services = Services::from(0x0401_u64.to_le_bytes());
+    fn test_multiple_services_from_valid_bytes() -> Result<(), io::Error> {
+        let services = Services::try_from(0x0401_u64.to_le_bytes())?;
         assert!(!services.is_unnamed());
         assert!(services.is_node_network());
         assert!(!services.is_node_get_utxo());
@@ -146,20 +153,13 @@ mod tests {
         assert!(!services.is_node_witness());
         assert!(!services.is_node_xthin());
         assert!(services.is_node_network_limited());
-        assert!(!services.is_unrecognized());
+        Ok(())
     }
 
     #[test]
     fn test_multiple_services_from_invalid_bytes() {
-        let services = Services::from(0x1201_u64.to_le_bytes());
-        assert!(!services.is_unnamed());
-        assert!(!services.is_node_network());
-        assert!(!services.is_node_get_utxo());
-        assert!(!services.is_node_bloom());
-        assert!(!services.is_node_witness());
-        assert!(!services.is_node_xthin());
-        assert!(!services.is_node_network_limited());
-        assert!(services.is_unrecognized());
+        let services_result = Services::try_from(0x1201_u64.to_le_bytes());
+        assert!(matches!(services_result, Err(io::Error{..})));
     }
 
     #[test]
