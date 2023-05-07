@@ -203,7 +203,7 @@ impl GetBlocks {
                 Ok(())
             }
             _ => Err("El numero de headers es invalido".to_owned()),
-        };
+        }?;
 
         // Ok(GetBlocks::new(
         //     i32::from_le_bytes(version),

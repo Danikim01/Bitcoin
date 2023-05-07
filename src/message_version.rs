@@ -1,4 +1,4 @@
-use crate::messages::{Message, Service};
+use crate::messages::{Message, Services};
 // use bitcoin_hashes::sha256;
 // use bitcoin_hashes::Hash;
 use std::io::{Cursor, Read, Write};
@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[derive(Debug)]
 pub struct Version {
     version: i32,
-    service: Service,
+    services: Services,
     timestamp: i64,
     addr_recv_services: u64,
     addr_recv_ip: Ipv6Addr,
@@ -28,7 +28,7 @@ pub struct Version {
 impl std::default::Default for Version {
     fn default() -> Self {
         let version = 70015;
-        let service = Service::Unnamed;
+        let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(..) => Duration::default(),
@@ -46,7 +46,7 @@ impl std::default::Default for Version {
         let relay = false;
         Version::new(
             version,
-            service,
+            services,
             timestamp,
             addr_recv_services,
             addr_recv_ip,
@@ -65,7 +65,7 @@ impl std::default::Default for Version {
 impl Version {
     fn new(
         version: i32,
-        service: Service,
+        services: Services,
         timestamp: i64,
         addr_recv_services: u64,
         addr_recv_ip: Ipv6Addr,
@@ -80,7 +80,7 @@ impl Version {
     ) -> Self {
         Self {
             version,
-            service,
+            services,
             timestamp,
             addr_recv_services,
             addr_recv_ip,
@@ -207,7 +207,7 @@ impl Version {
 
         Ok(Version::new(
             i32::from_le_bytes(version),
-            Service::from(services),
+            Services::from(services),
             i64::from_le_bytes(timestamp),
             u64::from_le_bytes(addr_recv_services),
             Ipv6Addr::from(addr_recv_ip),
@@ -258,8 +258,7 @@ impl Version {
         // https://developer.bitcoin.org/reference/p2p_networking.html#version
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
-        let service_bytes: [u8; 8] = self.service.into();
-        payload.extend(&service_bytes);
+        payload.extend::<[u8; 8]>(self.services.into());
 
         payload.extend(&self.timestamp.to_le_bytes());
         payload.extend(&self.addr_recv_services.to_le_bytes());
@@ -267,7 +266,7 @@ impl Version {
         payload.extend(&self.addr_recv_port.to_be_bytes());
         payload.extend(&ip_bytes);
         payload.extend(&self.addr_trans_port.to_be_bytes());
-        payload.extend(&[self.service as u8; 8]);
+        payload.extend::<[u8; 8]>(self.services.into());
 
         // Add the IPv6 address to the payload
         payload.extend(&ip_bytes);

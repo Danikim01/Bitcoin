@@ -2,46 +2,61 @@ use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::net::TcpStream;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Service {
-    Unnamed,
-    NodeNetwork,
-    NodeGetUtxo,
-    NodeBloom,
-    NodeWitness,
-    NodeXthin,
-    NodeNetworkLimited,
-    Unrecognized,
+#[derive(Debug, Clone, Copy)]
+pub struct Services {
+    bitmap: u64,
 }
 
-impl From<[u8; 8]> for Service {
-    fn from(bytes: [u8; 8]) -> Service {
-        let service_code = u64::from_le_bytes(bytes);
-        return match service_code {
-            0 => Service::Unnamed,
-            1 => Service::NodeNetwork,
-            2 => Service::NodeGetUtxo,
-            4 => Service::NodeBloom,
-            8 => Service::NodeWitness,
-            16 => Service::NodeXthin,
-            1024 => Service::NodeNetworkLimited,
-            _ => Service::Unrecognized,
-        };
+impl Services {    
+    pub fn new(encoded_services: u64) -> Self {
+        Self {
+            bitmap: encoded_services
+        }
+    }
+
+    pub fn is_unnamed(self) -> bool {
+        self.bitmap == 0
+    }
+
+    pub fn is_node_network(self) -> bool {
+        !self.is_unrecognized() && self.bitmap & 1 != 0
+    }
+
+    pub fn is_node_get_utxo(self) -> bool {
+        !self.is_unrecognized() && self.bitmap & 2 != 0
+    }
+
+    pub fn is_node_bloom(self) -> bool {
+        !self.is_unrecognized() && self.bitmap & 4 != 0
+    }
+
+    pub fn is_node_witness(self) -> bool {
+        !self.is_unrecognized() && self.bitmap & 8 != 0
+    }
+    
+    pub fn is_node_xthin(self) -> bool {
+        !self.is_unrecognized() && self.bitmap & 16 != 0
+    }
+    
+    pub fn is_node_network_limited(self) -> bool {
+        !self.is_unrecognized() && self.bitmap & 1024 != 0
+    }
+    
+    pub fn is_unrecognized(self) -> bool {    
+        self.bitmap & !1055 != 0
     }
 }
 
-impl Into<[u8; 8]> for Service {
+impl From<[u8; 8]> for Services {
+    fn from(bytes: [u8; 8]) -> Self {
+        let service_code = u64::from_le_bytes(bytes);
+        Services::new(service_code)
+    }
+}
+
+impl Into<[u8; 8]> for Services {
     fn into(self) -> [u8; 8] {
-        match self {
-            Service::Unnamed => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::NodeNetwork => [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::NodeGetUtxo => [0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::NodeBloom => [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::NodeWitness => [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::NodeXthin => [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::NodeNetworkLimited => [0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            Service::Unrecognized => [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
-        }
+        self.bitmap.to_le_bytes()
     }
 }
 
@@ -90,40 +105,73 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_service_from_bytes() {
-        assert_eq!(Service::from(0x00_u64.to_le_bytes()), Service::Unnamed);
-        assert_eq!(Service::from(0x01_u64.to_le_bytes()), Service::NodeNetwork);
-        assert_eq!(Service::from(0x02_u64.to_le_bytes()), Service::NodeGetUtxo);
-        assert_eq!(Service::from(0x04_u64.to_le_bytes()), Service::NodeBloom);
-        assert_eq!(Service::from(0x08_u64.to_le_bytes()), Service::NodeWitness);
-        assert_eq!(Service::from(0x10_u64.to_le_bytes()), Service::NodeXthin);
-        assert_eq!(
-            Service::from(0x0400_u64.to_le_bytes()),
-            Service::NodeNetworkLimited
-        );
-        assert_eq!(
-            Service::from(0x518_u64.to_le_bytes()),
-            Service::Unrecognized
-        );
+    fn test_single_service_from_bytes() {
+        assert!(Services::from(0x00_u64.to_le_bytes()).is_unnamed());
+        assert!(Services::from(0x01_u64.to_le_bytes()).is_node_network());
+        assert!(Services::from(0x02_u64.to_le_bytes()).is_node_get_utxo());
+        assert!(Services::from(0x04_u64.to_le_bytes()).is_node_bloom());
+        assert!(Services::from(0x08_u64.to_le_bytes()).is_node_witness());
+        assert!(Services::from(0x10_u64.to_le_bytes()).is_node_xthin());
+        assert!(Services::from(0x0400_u64.to_le_bytes()).is_node_network_limited());
+        assert!(Services::from(0x518_u64.to_le_bytes()).is_unrecognized());
+    }
+
+    #[test]
+    fn test_multiple_services_from_empty_bytes() {
+        let services = Services::from(0x00_u64.to_le_bytes());
+        assert!(services.is_unnamed());
+        assert!(!services.is_node_network());
+        assert!(!services.is_node_get_utxo());
+        assert!(!services.is_node_bloom());
+        assert!(!services.is_node_witness());
+        assert!(!services.is_node_xthin());
+        assert!(!services.is_node_network_limited());
+        assert!(!services.is_unrecognized());
+    }
+    
+    #[test]
+    fn test_multiple_services_from_valid_bytes() {
+        let services = Services::from(0x0401_u64.to_le_bytes());
+        assert!(!services.is_unnamed());
+        assert!(services.is_node_network());
+        assert!(!services.is_node_get_utxo());
+        assert!(!services.is_node_bloom());
+        assert!(!services.is_node_witness());
+        assert!(!services.is_node_xthin());
+        assert!(services.is_node_network_limited());
+        assert!(!services.is_unrecognized());
+    }
+    
+    #[test]
+    fn test_multiple_services_from_invalid_bytes() {
+        let services = Services::from(0x1201_u64.to_le_bytes());
+        assert!(!services.is_unnamed());
+        assert!(!services.is_node_network());
+        assert!(!services.is_node_get_utxo());
+        assert!(!services.is_node_bloom());
+        assert!(!services.is_node_witness());
+        assert!(!services.is_node_xthin());
+        assert!(!services.is_node_network_limited());
+        assert!(services.is_unrecognized());
     }
 
     #[test]
     fn test_service_into_bytes() {
-        let mut bytes: [u8; 8] = Service::Unnamed.into();
+        let mut bytes: [u8; 8] = Services::new(0x00_u64).into();
         assert_eq!(bytes, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::NodeNetwork.into();
+        bytes = Services::new(0x01_u64).into();
         assert_eq!(bytes, [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::NodeGetUtxo.into();
+        bytes = Services::new(0x02_u64).into();
         assert_eq!(bytes, [0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::NodeBloom.into();
+        bytes = Services::new(0x04_u64).into();
         assert_eq!(bytes, [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::NodeWitness.into();
+        bytes = Services::new(0x08_u64).into();
         assert_eq!(bytes, [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::NodeXthin.into();
+        bytes = Services::new(0x10_u64).into();
         assert_eq!(bytes, [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::NodeNetworkLimited.into();
+        bytes = Services::new(0x0400_u64).into();
         assert_eq!(bytes, [0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Service::Unrecognized.into();
+        bytes = Services::new(0xffffffffffffffff_u64).into();
         assert_eq!(bytes, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
     }
 }
