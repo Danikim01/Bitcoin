@@ -1,10 +1,7 @@
-use crate::message_verack::VerAckMessage;
-use crate::message_version::Version;
-use crate::messages::Message;
+use crate::messages::{Message, Version, VerAck, GetBlocks};
 use std::io::{self, Read};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
-use crate::message_getblocks::GetBlocks;
 // use std::io::Cursor;
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, io::Error> {
@@ -81,14 +78,14 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     // send and recieve VERACK
     // send message
     println!("\nSending self verack message...");
-    let verack_version = VerAckMessage::new();
+    let verack_version = VerAck::new();
     verack_version.send_to(&mut stream)?;
 
     // receive message
     data = [0_u8; 180];
     stream.read(&mut data)?;
 
-    let _rcv_verack = VerAckMessage::from_bytes(&data)?;
+    let _rcv_verack = VerAck::from_bytes(&data)?;
     println!("Peer responded: {:?}", _rcv_verack);
 
     // send getBlocks

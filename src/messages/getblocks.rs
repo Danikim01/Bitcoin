@@ -76,7 +76,6 @@ fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
 
 fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, io::Error> {
     let first_byte = read_u8(cursor)?;
-    println!("the first byte is {}", &first_byte);
     match first_byte {
         0xff => {
             let mut buf = [0_u8; 8];
@@ -132,10 +131,10 @@ impl GetBlocks {
         let mut cursor = Cursor::new(bytes);
 
         // header
-        let mut magic_bytes = [0_u8; 4];
-        let mut command_name = [0_u8; 12];
-        let mut payload_size = [0_u8; 4];
-        let mut checksum = [0_u8; 4];
+        let mut magic_bytes: [u8; 4] = [0_u8; 4];
+        let mut command_name: [u8; 12] = [0_u8; 12];
+        let mut payload_size: [u8; 4] = [0_u8; 4];
+        let mut checksum: [u8; 4] = [0_u8; 4];
 
         // read header
         cursor.read_exact(&mut magic_bytes)?;
@@ -153,52 +152,41 @@ impl GetBlocks {
 
         //Leo el payload
         //sabiendo que se recibe un varint
-        let value = read_from_varint(&mut cursor);
-
+        let value = read_from_varint(&mut cursor)?;
         println!("the value is {:?}", &value); //El value deberia ser 2000 porque se envian 32 ceros
 
-        match value {
-            Ok(v) => {
-                //let mut headers: Vec<Header<T>> = Vec::with_capacity(v as usize);
-                for _ in 0..v {
-                    let version = read_i32(&mut cursor)?;
-                    let prev_block_hash = read_hash(&mut cursor)?;
-                    let merkle_root_hash = read_hash(&mut cursor)?;
-                    let timestamp = read_u32(&mut cursor)?;
-                    let nbits = read_u32(&mut cursor)?;
-                    let nonce = read_u32(&mut cursor)?;
+        //let mut headers: Vec<Header<T>> = Vec::with_capacity(v as usize);
+        for _ in 0..value {
+            let version = read_i32(&mut cursor)?;
+            let prev_block_hash = read_hash(&mut cursor)?;
+            let merkle_root_hash = read_hash(&mut cursor)?;
+            let timestamp = read_u32(&mut cursor)?;
+            let nbits = read_u32(&mut cursor)?;
+            let nonce = read_u32(&mut cursor)?;
 
-                    println!("Version : {}", version);
-                    println!("Prev_block_hash: {:?}", prev_block_hash);
-                    println!("Merkle_root_hash: {:?}", merkle_root_hash);
-                    println!("Timestamp: {}", timestamp);
-                    println!("nbits: {}", nbits);
-                    println!("nonce {}", nonce);
+            println!("Version : {}", version);
+            println!("Prev_block_hash: {:?}", prev_block_hash);
+            println!("Merkle_root_hash: {:?}", merkle_root_hash);
+            println!("Timestamp: {}", timestamp);
+            println!("nbits: {}", nbits);
+            println!("nonce {}", nonce);
 
-                    // headers.push(BlockHeader {
-                    //     version,
-                    //     prev_block_hash,
-                    //     merkle_root_hash,
-                    //     timestamp,
-                    //     nbits,
-                    //     nonce,
-                    // });
-                }
-                Ok(())
-            }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "El numero de headers es invalido",
-            )),
-        }?;
+            // headers.push(BlockHeader {
+            //     version,
+            //     prev_block_hash,
+            //     merkle_root_hash,
+            //     timestamp,
+            //     nbits,
+            //     nonce,
+            // });
+        }
 
         // Ok(GetBlocks::new(
         //     i32::from_le_bytes(version),
         //     u8::from_le_bytes(hash_count),
         //     block_header_hashes,
         //     stop_hash
-        //     ))
-
+        // ))
         Ok(())
     }
 }

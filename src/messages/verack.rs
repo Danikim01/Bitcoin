@@ -6,16 +6,16 @@ use std::io::Cursor;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 #[derive(Debug)]
-pub struct VerAckMessage {
+pub struct VerAck {
     pub magic: Vec<u8>,
     pub command: String,
     pub payload_size: u32,
     pub checksum: Vec<u8>,
 }
 
-impl VerAckMessage {
-    pub fn new() -> VerAckMessage {
-        VerAckMessage {
+impl VerAck {
+    pub fn new() -> VerAck {
+        VerAck {
             magic: 0x0b1109079u32.to_be_bytes().to_vec(),
             command: "verack\0\0\0\0\0\0".to_string(),
             payload_size: (0_u32),
@@ -23,7 +23,7 @@ impl VerAckMessage {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<VerAckMessage, io::Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<VerAck, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         // header
@@ -46,7 +46,7 @@ impl VerAckMessage {
         //     checksum
         // );
 
-        Ok(VerAckMessage {
+        Ok(VerAck {
             magic: magic_bytes.to_vec(),
             command: std::str::from_utf8(&command_name)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
@@ -57,7 +57,7 @@ impl VerAckMessage {
     }
 }
 
-impl Message for VerAckMessage {
+impl Message for VerAck {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let message = self.build_message("verack", None)?;
         stream.write_all(&message)?;
