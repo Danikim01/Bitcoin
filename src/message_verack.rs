@@ -1,7 +1,7 @@
-use crate::message_version::Version;
+// use crate::message_version::Version;
 use crate::messages::Message;
-use bitcoin_hashes::sha256;
-use bitcoin_hashes::Hash;
+// use bitcoin_hashes::sha256;
+// use bitcoin_hashes::Hash;
 use std::io::Cursor;
 use std::io::{Read, Write};
 use std::net::TcpStream;

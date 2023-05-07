@@ -1,11 +1,11 @@
 use crate::messages::{Message, Service};
-use bitcoin_hashes::sha256;
-use bitcoin_hashes::Hash;
+// use bitcoin_hashes::sha256;
+// use bitcoin_hashes::Hash;
 use std::io::{Cursor, Read, Write};
 use std::net::IpAddr;
-use std::net::{Ipv4Addr, SocketAddr};
+// use std::net::{Ipv4Addr, SocketAddr};
 use std::net::{Ipv6Addr, TcpStream};
-use std::str::FromStr;
+// use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -252,7 +252,7 @@ impl Version {
         // fin y esto ???
 
         // Convert the IPv6 address to a byte array
-        let mut ip_bytes: [u8; 16] = ip_v6.octets();
+        let ip_bytes: [u8; 16] = ip_v6.octets();
 
         // Build payload
         // https://developer.bitcoin.org/reference/p2p_networking.html#version

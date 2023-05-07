@@ -17,32 +17,16 @@ pub enum Service {
 impl From<[u8; 8]> for Service {
     fn from(bytes: [u8; 8]) -> Service {
         let service_code = u64::from_le_bytes(bytes);
-
-        if service_code & (1 << 0) != 0 {
-            return Service::NodeNetwork;
-        }
-
-        if service_code & (1 << 1) != 0 {
-            return Service::NodeGetUtxo;
-        }
-
-        if service_code & (1 << 2) != 0 {
-            return Service::NodeBloom;
-        }
-
-        if service_code & (1 << 3) != 0 {
-            return Service::NodeWitness;
-        }
-
-        if service_code & (1 << 4) != 0 {
-            return Service::NodeXthin;
-        }
-
-        if service_code & (1 << 10) != 0 {
-            return Service::NodeNetworkLimited;
-        }
-
-        Service::Unrecognized
+        return match service_code {
+            0 => Service::Unnamed,
+            1 => Service::NodeNetwork,
+            2 => Service::NodeGetUtxo,
+            4 => Service::NodeBloom,
+            8 => Service::NodeWitness,
+            16 => Service::NodeXthin,
+            1024 => Service::NodeNetworkLimited,
+            _ => Service::Unrecognized,
+        };
     }
 }
 
@@ -107,42 +91,20 @@ mod tests {
 
     #[test]
     fn test_service_from_bytes() {
-        assert!(matches!(
-            Service::from(0x00_u64.to_le_bytes()),
-            Service::Unnamed
-        ));
-        assert!(matches!(
-            Service::from(0x01_u64.to_le_bytes()),
-            Service::NodeNetwork
-        ));
-        assert!(matches!(
-            Service::from(0x02_u64.to_le_bytes()),
-            Service::NodeGetUtxo
-        ));
-        assert!(matches!(
-            Service::from(0x04_u64.to_le_bytes()),
-            Service::NodeBloom
-        ));
-        assert!(matches!(
-            Service::from(0x08_u64.to_le_bytes()),
-            Service::NodeWitness
-        ));
-        assert!(matches!(
-            Service::from(0x10_u64.to_le_bytes()),
-            Service::NodeXthin
-        ));
-        assert!(matches!(
+        assert_eq!(Service::from(0x00_u64.to_le_bytes()), Service::Unnamed);
+        assert_eq!(Service::from(0x01_u64.to_le_bytes()), Service::NodeNetwork);
+        assert_eq!(Service::from(0x02_u64.to_le_bytes()), Service::NodeGetUtxo);
+        assert_eq!(Service::from(0x04_u64.to_le_bytes()), Service::NodeBloom);
+        assert_eq!(Service::from(0x08_u64.to_le_bytes()), Service::NodeWitness);
+        assert_eq!(Service::from(0x10_u64.to_le_bytes()), Service::NodeXthin);
+        assert_eq!(
             Service::from(0x0400_u64.to_le_bytes()),
             Service::NodeNetworkLimited
-        ));
-        assert!(matches!(
+        );
+        assert_eq!(
             Service::from(0x518_u64.to_le_bytes()),
             Service::Unrecognized
-        ));
-        assert!(!matches!(
-            Service::from(0x00_u64.to_le_bytes()),
-            Service::Unrecognized
-        ));
+        );
     }
 
     #[test]

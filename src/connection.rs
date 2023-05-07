@@ -5,8 +5,7 @@ use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
 use crate::message_getblocks::GetBlocks;
-use std::io::Cursor;
-
+// use std::io::Cursor;
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -62,7 +61,6 @@ fn test_handshake() -> Result<TcpStream, String> {
 }
 
 fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
-    // in progress, should replace all unwraps by return Err()
     // this should be implemented following https://developer.bitcoin.org/devguide/p2p_network.html#connecting-to-peers
 
     // connect to server
@@ -100,13 +98,15 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
     println!("Peer responded: {:?}", _rcv_verack);
 
     let genesis_message = GetBlocks::default();
-    genesis_message.
-        send_to(&mut stream)
+    genesis_message
+        .send_to(&mut stream)
         .map_err(|error| error.to_string())?;
 
     // receive message
     let mut data_genesis = [0_u8; 180];
-    stream.read(&mut data_genesis).map_err(|error| error.to_string())?;
+    stream
+        .read(&mut data_genesis)
+        .map_err(|error| error.to_string())?;
 
     let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
     println!("Peer responded: {:?}", _rcv_block);
@@ -134,7 +134,6 @@ pub fn connect_to_network() -> Result<(), String> {
 
     //let node = nodes[-1];
     //genesis_block = get_genesis_block(node);
-
 
     Ok(())
 }
