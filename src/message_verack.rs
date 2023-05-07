@@ -3,7 +3,7 @@ use crate::messages::Message;
 // use bitcoin_hashes::sha256;
 // use bitcoin_hashes::Hash;
 use std::io::Cursor;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::net::TcpStream;
 #[derive(Debug)]
 pub struct VerAckMessage {
@@ -23,7 +23,7 @@ impl VerAckMessage {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<VerAckMessage, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<VerAckMessage, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         // header
@@ -33,18 +33,10 @@ impl VerAckMessage {
         let mut checksum = [0_u8; 4];
 
         // read header
-        cursor
-            .read_exact(&mut magic_bytes)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut command_name)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut payload_size)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut checksum)
-            .map_err(|error| error.to_string())?;
+        cursor.read_exact(&mut magic_bytes)?;
+        cursor.read_exact(&mut command_name)?;
+        cursor.read_exact(&mut payload_size)?;
+        cursor.read_exact(&mut checksum)?;
 
         // println!(
         //     "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
@@ -57,7 +49,7 @@ impl VerAckMessage {
         Ok(VerAckMessage {
             magic: magic_bytes.to_vec(),
             command: std::str::from_utf8(&command_name)
-                .map_err(|error| error.to_string())?
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
                 .to_string(),
             payload_size: payload_size[0] as u32,
             checksum: checksum.to_vec(),

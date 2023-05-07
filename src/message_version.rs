@@ -188,6 +188,7 @@ impl Version {
 
     fn build_payload(&self, stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
         // Get the transmitting node's IP address
+        // por qué lo estamos pasando a string para después pasarlo a IP????
         let addr_trans = stream.peer_addr()?.to_string();
 
         // y esto???
