@@ -3,7 +3,7 @@
 use crate::messages::Message;
 // use bitcoin_hashes::sha256;
 // use bitcoin_hashes::Hash;
-use std::io::{Cursor, Read, Write, self};
+use std::io::{self, Cursor, Read, Write};
 use std::net::TcpStream;
 
 #[derive(Debug)]
@@ -80,22 +80,19 @@ fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, io::Error> {
     match first_byte {
         0xff => {
             let mut buf = [0_u8; 8];
-            cursor
-                .read_exact(&mut buf)?;
+            cursor.read_exact(&mut buf)?;
             let value = u64::from_le_bytes(buf);
             Ok(value as usize)
         }
         0xfe => {
             let mut buf = [0_u8; 4];
-            cursor
-                .read_exact(&mut buf)?;
+            cursor.read_exact(&mut buf)?;
             let value = u32::from_le_bytes(buf);
             Ok(value as usize)
         }
         0xfd => {
             let mut buf = [0_u8; 2];
-            cursor
-                .read_exact(&mut buf)?;
+            cursor.read_exact(&mut buf)?;
             let value = u16::from_le_bytes(buf);
             Ok(value as usize)
         }
@@ -141,14 +138,10 @@ impl GetBlocks {
         let mut checksum = [0_u8; 4];
 
         // read header
-        cursor
-            .read_exact(&mut magic_bytes)?;
-        cursor
-            .read_exact(&mut command_name)?;
-        cursor
-            .read_exact(&mut payload_size)?;
-        cursor
-            .read_exact(&mut checksum)?;
+        cursor.read_exact(&mut magic_bytes)?;
+        cursor.read_exact(&mut command_name)?;
+        cursor.read_exact(&mut payload_size)?;
+        cursor.read_exact(&mut checksum)?;
 
         println!(
             "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
@@ -193,7 +186,10 @@ impl GetBlocks {
                 }
                 Ok(())
             }
-            _ => Err(io::Error::new(io::ErrorKind::InvalidData, "El numero de headers es invalido")),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "El numero de headers es invalido",
+            )),
         }?;
 
         // Ok(GetBlocks::new(

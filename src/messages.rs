@@ -7,10 +7,10 @@ pub struct Services {
     bitmap: u64,
 }
 
-impl Services {    
+impl Services {
     pub fn new(encoded_services: u64) -> Self {
         Self {
-            bitmap: encoded_services
+            bitmap: encoded_services,
         }
     }
 
@@ -33,16 +33,16 @@ impl Services {
     pub fn is_node_witness(self) -> bool {
         !self.is_unrecognized() && self.bitmap & 8 != 0
     }
-    
+
     pub fn is_node_xthin(self) -> bool {
         !self.is_unrecognized() && self.bitmap & 16 != 0
     }
-    
+
     pub fn is_node_network_limited(self) -> bool {
         !self.is_unrecognized() && self.bitmap & 1024 != 0
     }
-    
-    pub fn is_unrecognized(self) -> bool {    
+
+    pub fn is_unrecognized(self) -> bool {
         self.bitmap & !1055 != 0
     }
 }
@@ -128,7 +128,7 @@ mod tests {
         assert!(!services.is_node_network_limited());
         assert!(!services.is_unrecognized());
     }
-    
+
     #[test]
     fn test_multiple_services_from_valid_bytes() {
         let services = Services::from(0x0401_u64.to_le_bytes());
@@ -141,7 +141,7 @@ mod tests {
         assert!(services.is_node_network_limited());
         assert!(!services.is_unrecognized());
     }
-    
+
     #[test]
     fn test_multiple_services_from_invalid_bytes() {
         let services = Services::from(0x1201_u64.to_le_bytes());
