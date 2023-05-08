@@ -1,19 +1,13 @@
-use crate::message_header::{self, MessageHeader};
-use crate::messages::{Message, Service};
-use bitcoin_hashes::sha256;
-use bitcoin_hashes::Hash;
-use std::io::{Cursor, Read, Write};
-use std::net::IpAddr;
-use std::net::{Ipv4Addr, SocketAddr};
-use std::net::{Ipv6Addr, TcpStream};
-use std::str::FromStr;
+use crate::messages::{Message, MessageHeader, Services};
+use std::io::{self, Cursor, Read, Write};
+use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Version {
     message_header: MessageHeader,
     version: i32,
-    service: Service,
+    services: Services,
     timestamp: i64,
     addr_recv_services: u64,
     addr_recv_ip: Ipv6Addr,
@@ -31,7 +25,7 @@ impl std::default::Default for Version {
     fn default() -> Self {
         let message_header = MessageHeader::default();
         let version = 70015;
-        let service = Service::Unnamed;
+        let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(..) => Duration::default(),
@@ -50,7 +44,7 @@ impl std::default::Default for Version {
         Version::new(
             message_header,
             version,
-            service,
+            services,
             timestamp,
             addr_recv_services,
             addr_recv_ip,
@@ -70,7 +64,7 @@ impl Version {
     fn new(
         message_header: MessageHeader,
         version: i32,
-        service: Service,
+        services: Services,
         timestamp: i64,
         addr_recv_services: u64,
         addr_recv_ip: Ipv6Addr,
@@ -86,7 +80,7 @@ impl Version {
         Self {
             message_header,
             version,
-            service,
+            services,
             timestamp,
             addr_recv_services,
             addr_recv_ip,
@@ -101,17 +95,13 @@ impl Version {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Version, String> {
-        // since this is a method, change it to modify self instead of returning a new Message
+    pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         // header
-        let mut messageHeaderBytes = [0_u8; 24];
-        cursor
-            .read_exact(&mut messageHeaderBytes)
-            .map_err(|error| error.to_string())?;
-        let message_header =
-            MessageHeader::from_bytes(&messageHeaderBytes).map_err(|error| error.to_string())?;
+        let mut message_header_bytes = [0_u8; 24];
+        cursor.read_exact(&mut message_header_bytes)?;
+        let message_header = MessageHeader::from_bytes(&message_header_bytes)?;
 
         // payload
         let mut version = [0_u8; 4];
@@ -129,41 +119,19 @@ impl Version {
         let mut relay = [0_u8; 1];
 
         // read payload
-        cursor
-            .read_exact(&mut version)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut services)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut timestamp)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut addr_recv_services)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut addr_recv_ip)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut addr_recv_port)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut addr_trans_services)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut addr_trans_ip)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut addr_trans_port)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut nonce)
-            .map_err(|error| error.to_string())?;
+        cursor.read_exact(&mut version)?;
+        cursor.read_exact(&mut services)?;
+        cursor.read_exact(&mut timestamp)?;
+        cursor.read_exact(&mut addr_recv_services)?;
+        cursor.read_exact(&mut addr_recv_ip)?;
+        cursor.read_exact(&mut addr_recv_port)?;
+        cursor.read_exact(&mut addr_trans_services)?;
+        cursor.read_exact(&mut addr_trans_ip)?;
+        cursor.read_exact(&mut addr_trans_port)?;
+        cursor.read_exact(&mut nonce)?;
 
         let mut byte = [0_u8; 1];
-        cursor
-            .read_exact(&mut byte)
-            .map_err(|error| error.to_string())?;
+        cursor.read_exact(&mut byte)?;
         if byte[0] < 0xFD {
             user_agent_size = byte[0] as u64;
         } else {
@@ -175,26 +143,18 @@ impl Version {
                 _ => {}
             };
             let mut user_agent_bytes = vec![0_u8; buffer_size];
-            cursor
-                .read_exact(&mut user_agent_bytes)
-                .map_err(|error| error.to_string())?;
+            cursor.read_exact(&mut user_agent_bytes)?;
             user_agent_size = u64::from_be_bytes(vec_to_arr(user_agent_bytes));
         }
         let mut user_agent = vec![0_u8; user_agent_size as usize];
-        cursor
-            .read_exact(&mut user_agent)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut start_height)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut relay)
-            .map_err(|error| error.to_string())?; // pending: this field should be optional
+        cursor.read_exact(&mut user_agent)?;
+        cursor.read_exact(&mut start_height)?;
+        cursor.read_exact(&mut relay)?; // pending: this field should be optional
 
         Ok(Version::new(
             message_header,
             i32::from_le_bytes(version),
-            Service::from(services),
+            Services::try_from(services)?,
             i64::from_le_bytes(timestamp),
             u64::from_le_bytes(addr_recv_services),
             Ipv6Addr::from(addr_recv_ip),
@@ -204,7 +164,7 @@ impl Version {
             u16::from_be_bytes(addr_trans_port),
             u64::from_le_bytes(nonce),
             std::str::from_utf8(&user_agent)
-                .map_err(|error| error.to_string())?
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
                 .to_string(),
             i32::from_le_bytes(start_height),
             relay[0] != 0,
@@ -213,6 +173,7 @@ impl Version {
 
     fn build_payload(&self, stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
         // Get the transmitting node's IP address
+        // por qué lo estamos pasando a string para después pasarlo a IP????
         let addr_trans = stream.peer_addr()?.to_string();
 
         // y esto???
@@ -239,14 +200,13 @@ impl Version {
         // fin y esto ???
 
         // Convert the IPv6 address to a byte array
-        let mut ip_bytes: [u8; 16] = ip_v6.octets();
+        let ip_bytes: [u8; 16] = ip_v6.octets();
 
         // Build payload
         // https://developer.bitcoin.org/reference/p2p_networking.html#version
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
-        let service_bytes: [u8; 8] = self.service.into();
-        payload.extend(&service_bytes);
+        payload.extend::<[u8; 8]>(self.services.into());
 
         payload.extend(&self.timestamp.to_le_bytes());
         payload.extend(&self.addr_recv_services.to_le_bytes());
@@ -254,7 +214,7 @@ impl Version {
         payload.extend(&self.addr_recv_port.to_be_bytes());
         payload.extend(&ip_bytes);
         payload.extend(&self.addr_trans_port.to_be_bytes());
-        payload.extend(&[self.service as u8; 8]);
+        payload.extend::<[u8; 8]>(self.services.into());
 
         // Add the IPv6 address to the payload
         payload.extend(&ip_bytes);
@@ -265,7 +225,7 @@ impl Version {
 impl Message for Version {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let payload = self.build_payload(stream)?;
-        let message = self.build_message("version".to_string(), Some(payload))?;
+        let message = self.build_message("version", Some(payload))?;
 
         stream.write_all(&message)?;
         stream.flush()?;

@@ -1,12 +1,9 @@
+use std::io;
+mod block_header;
 mod connection;
-mod header;
-mod message_verack;
-mod message_version;
 mod messages;
-mod message_getblocks;
-mod message_header;
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), io::Error> {
     connection::connect_to_network()?;
     Ok(())
 }

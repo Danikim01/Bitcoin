@@ -1,12 +1,9 @@
-use crate::message_header::MessageHeader;
-use crate::message_verack::VerAckMessage;
-use crate::message_version::Version;
-use crate::messages::Message;
-use std::io::{Cursor, Read};
+use crate::messages::{GetBlocks, Message, VerAck, Version};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-// use crate::message_getblocks::GetBlocks;
+//use std::ops::Generator;
+use std::io::{self, Read};
 
-fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
+fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, io::Error> {
     // The port used by Bitcoin nodes to communicate with each other is:
     // 8333 in the mainnet
     // 18333 in the testnet
@@ -14,9 +11,7 @@ fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, String> {
     // 18444 in the regtest (local)
     let port = "18333";
     let node_discovery_hostname = "seed.testnet.bitcoin.sprovoost.nl".to_owned() + ":" + port;
-    node_discovery_hostname
-        .to_socket_addrs()
-        .map_err(|error| error.to_string())
+    node_discovery_hostname.to_socket_addrs()
 }
 
 fn test_handshake() -> Result<TcpStream, String> {
@@ -52,60 +47,67 @@ fn test_handshake() -> Result<TcpStream, String> {
 
     println!("Sent message:");
     println!("{:?}", msg_version);
-    let _rcv_version = Version::from_bytes(&data)?;
+    let _rcv_version = Version::from_bytes(&data).map_err(|error| error.to_string())?;
     println!("Got message:");
     println!("{:?}", _rcv_version);
     println!("Done testing");
     Ok(stream)
 }
 
-fn handshake_version(stream: &mut TcpStream) -> Result<(), String> {
+fn handshake_version(stream: &mut TcpStream) -> Result<(), io::Error> {
     // send message
     println!("\nSending self version message...");
     let msg_version = Version::default();
-    msg_version
-        .send_to(stream)
-        .map_err(|error| error.to_string())?;
+    msg_version.send_to(stream)?;
 
     // receive message
     let mut data = [0_u8; 180];
-    stream.read(&mut data).map_err(|error| error.to_string())?;
+    stream.read(&mut data)?;
     let _rcv_version = Version::from_bytes(&data)?;
     println!("Peer responded: {:?}", _rcv_version);
 
     Ok(())
 }
 
-fn handshake_verack(stream: &mut TcpStream) -> Result<(), String> {
+fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     // send message
     println!("\nSending self verack message...");
-    let _verack_version = VerAckMessage::new()
-        .send_to(stream)
-        .map_err(|error| error.to_string())?;
+    let _verack_version = VerAck::new().send_to(stream)?;
 
     // receive message
     let mut verack_data = [0_u8; 24];
-    stream
-        .read(&mut verack_data)
-        .map_err(|error| error.to_string())?;
-    let _rcv_verack = VerAckMessage::from_bytes(&verack_data)?;
+    stream.read(&mut verack_data)?;
+    let _rcv_verack = VerAck::from_bytes(&verack_data)?;
     println!("Peer responded: {:?}\n", _rcv_verack);
 
     Ok(())
 }
 
-fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, String> {
+fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     // this should be implemented following https://developer.bitcoin.org/devguide/p2p_network.html#connecting-to-peers
 
     // connect to server
-    let mut stream = TcpStream::connect(node_addr).map_err(|error| error.to_string())?;
+    let mut stream = TcpStream::connect(node_addr)?;
     println!("Connected: {:?}", stream);
 
     // send and receive VERSION
-    handshake_version(&mut stream).map_err(|error| error)?;
+    handshake_version(&mut stream)?;
 
     // send and recieve VERACK
-    handshake_verack(&mut stream).map_err(|error| error)?;
+    handshake_verack(&mut stream)?;
+
+    // send getBlocks
+    // send message
+    println!("\nSending self getBlocks (genesis) message...");
+    let genesis_message = GetBlocks::default();
+    genesis_message.send_to(&mut stream)?;
+
+    // receive message
+    let mut data_genesis = [0_u8; 180];
+    stream.read(&mut data_genesis)?;
+
+    let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
+    println!("Peer responded: {:?}", _rcv_block);
 
     Ok(stream)
 }
@@ -120,7 +122,7 @@ fn get_genesis_block(node: SocketAddr) -> Result<(), String> {
     Ok(())
 }
 
-pub fn connect_to_network() -> Result<(), String> {
+pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         handshake_node(ip_addr)?;

@@ -1,4 +1,4 @@
-use std::io::{Cursor, Read};
+use std::io::{self, Cursor, Read};
 
 #[derive(Debug)]
 pub struct MessageHeader {
@@ -34,7 +34,7 @@ impl MessageHeader {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<MessageHeader, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<MessageHeader, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         // used bytes of each field
@@ -44,24 +44,16 @@ impl MessageHeader {
         let mut checksum = [0_u8; 4];
 
         // read all bytes
-        cursor
-            .read_exact(&mut start_string)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut command_name)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut payload_size)
-            .map_err(|error| error.to_string())?;
-        cursor
-            .read_exact(&mut checksum)
-            .map_err(|error| error.to_string())?;
+        cursor.read_exact(&mut start_string)?;
+        cursor.read_exact(&mut command_name)?;
+        cursor.read_exact(&mut payload_size)?;
+        cursor.read_exact(&mut checksum)?;
 
         // create MessageHeader from bytes read
         Ok(Self::new(
             start_string,
             std::str::from_utf8(&command_name)
-                .map_err(|error| error.to_string())?
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
                 .to_string(),
             u32::from_le_bytes(payload_size),
             checksum,
