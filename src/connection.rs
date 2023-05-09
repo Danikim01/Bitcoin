@@ -71,24 +71,22 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     let mut message_header = MessageHeader::from_bytes(&header_data)?;
     
     // read payload into version
-    let mut payload_data = vec![0_u8; message_header.payload_size.try_into().unwrap()]; // remove unwrap
+    let mut payload_data = vec![0_u8; message_header.payload_size as usize]; 
     stream.read(&mut payload_data)?;
     let version_message = Version::from_bytes(&payload_data)?;
     println!("Read version: {:?}\n", version_message);
+
+    // then read verack
+    stream.read(&mut header_data)?;
+    let verack_message = VerAck::from_bytes(&header_data)?;
+    println!("Read verack: {:?}\n", verack_message);
 
     Ok(msg_version.accepts(version_message))
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
-
-    let mut header_data = [0_u8; 24];
-    //read verack
-    stream.read(&mut header_data)?;
-    let verack_message = VerAck::from_bytes(&header_data)?;
-    println!("Read verack: {:?}", verack_message);
-
     // send message
-    println!("Sending self verack message...");
+    println!("\nSending self verack message...");
     let _verack_version = VerAck::new().send_to(stream)?;
 
     Ok(())
@@ -111,18 +109,33 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
 
     // send getBlocks
     // send message
-    /*
+    
     println!("\nSending self getBlocks (genesis) message...");
     let genesis_message = GetBlocks::default();
     genesis_message.send_to(&mut stream)?;
 
-    // receive message
-    let mut data_genesis = [0_u8; 180];
-    stream.read(&mut data_genesis)?;
+    let mut header = [0_u8; 24];
+    stream.read(&mut header)?;
 
-    let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
-    println!("Peer responded: {:?}", _rcv_block);
-    */
+    let mut message = MessageHeader::from_bytes(&header)?;
+    
+    while message.command_name != "headers\0\0\0\0\0"{
+        let mut dummy_buff = vec![0_u8; message.payload_size as usize];
+        stream.read(&mut dummy_buff)?;
+
+        stream.read(&mut header)?;
+        let response_message = MessageHeader::from_bytes(&header)?;
+
+        message = response_message;
+    }
+
+    println!("Peer responded: {:?}", message);
+    let mut data_headers = [0_u8;2000*81+24];
+    stream.read(&mut data_headers)?;
+
+    let headers_message = GetBlocks::from_bytes(&data_headers);
+    println!("Peer responded: {:?}", headers_message);
+
     Ok(stream)
 }
 
@@ -140,6 +153,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         let stream = handshake_node(ip_addr)?;
+        break;
     }
 
     // let node = nodes[-1];
