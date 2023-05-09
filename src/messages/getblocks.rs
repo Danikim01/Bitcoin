@@ -5,6 +5,7 @@ use crate::messages::Message;
 // use bitcoin_hashes::Hash;
 use std::io::{self, Cursor, Read, Write};
 use std::net::TcpStream;
+use crate::messages::MessageHeader;
 
 #[derive(Debug)]
 pub struct GetBlocks {
@@ -12,6 +13,45 @@ pub struct GetBlocks {
     hash_count: u8,
     block_header_hashes: Vec<[u8; 32]>,
     stop_hash: [u8; 32],
+}
+
+#[derive(Debug)]
+pub struct BlockHeader {
+    version:i32,
+    prev_block_hash:[u8;32],
+    merkle_root_hash:[u8;32],
+    timestamp:u32,
+    nbits:u32,
+    nonce:u32,
+}
+
+#[derive(Debug)]
+pub struct Header{
+    count:usize, //Es un Compact size uint
+    block_headers: Vec<BlockHeader>,
+}
+
+impl BlockHeader{
+    fn new(version:i32,prev_block_hash:[u8;32],merkle_root_hash:[u8;32],timestamp:u32,nbits:u32,nonce:u32) -> Self{
+        Self{
+            version,
+            prev_block_hash,
+            merkle_root_hash,
+            timestamp,
+            nbits,
+            nonce
+        }
+    }
+}
+
+
+impl Header{
+    fn new(count:usize,block_headers:Vec<BlockHeader>) -> Self{
+        Self{
+            count,
+            block_headers,
+        }
+    }
 }
 
 //Default for genesis block
@@ -127,67 +167,47 @@ impl GetBlocks {
         Ok(payload)
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<(), io::Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Header, io::Error> {
         let mut cursor = Cursor::new(bytes);
-
-        // header
-        let mut magic_bytes: [u8; 4] = [0_u8; 4];
-        let mut command_name: [u8; 12] = [0_u8; 12];
-        let mut payload_size: [u8; 4] = [0_u8; 4];
-        let mut checksum: [u8; 4] = [0_u8; 4];
-
-        // read header
-        cursor.read_exact(&mut magic_bytes)?;
-        cursor.read_exact(&mut command_name)?;
-        cursor.read_exact(&mut payload_size)?;
-        cursor.read_exact(&mut checksum)?;
-
-        println!(
-            "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
-            magic_bytes,
-            std::str::from_utf8(&command_name).unwrap(), // remove this println together with the unwrap
-            u32::from_le_bytes(payload_size),
-            checksum
-        );
-
+    
         //Leo el payload
         //sabiendo que se recibe un varint
         let value = read_from_varint(&mut cursor)?;
         println!("the value is {:?}", &value); //El value deberia ser 2000 porque se envian 32 ceros
-
-        //let mut headers: Vec<Header<T>> = Vec::with_capacity(v as usize);
-        for _ in 0..value {
+        let mut empty_tx = [0_u8;1]; 
+        
+        let mut headers: Vec<BlockHeader> = Vec::with_capacity(value as usize);
+        
+        for _ in 0..value{
             let version = read_i32(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
             let merkle_root_hash = read_hash(&mut cursor)?;
             let timestamp = read_u32(&mut cursor)?;
             let nbits = read_u32(&mut cursor)?;
             let nonce = read_u32(&mut cursor)?;
+            cursor.read_exact(&mut empty_tx)?;
 
-            println!("Version : {}", version);
-            println!("Prev_block_hash: {:?}", prev_block_hash);
-            println!("Merkle_root_hash: {:?}", merkle_root_hash);
-            println!("Timestamp: {}", timestamp);
-            println!("nbits: {}", nbits);
-            println!("nonce {}", nonce);
+            // println!("Version : {}", &version);
+            // println!("Prev_block_hash: {:?}", &prev_block_hash);
+            // println!("Merkle_root_hash: {:?}", &merkle_root_hash);
+            // println!("Timestamp: {}", &timestamp);
+            // println!("nbits: {}", &nbits);
+            // println!("nonce {}", &nonce);
 
-            // headers.push(BlockHeader {
-            //     version,
-            //     prev_block_hash,
-            //     merkle_root_hash,
-            //     timestamp,
-            //     nbits,
-            //     nonce,
-            // });
+            headers.push(BlockHeader::new(
+                version,
+                prev_block_hash,
+                merkle_root_hash,
+                timestamp,
+                nbits,
+                nonce,
+            ));
         }
 
-        // Ok(GetBlocks::new(
-        //     i32::from_le_bytes(version),
-        //     u8::from_le_bytes(hash_count),
-        //     block_header_hashes,
-        //     stop_hash
-        // ))
-        Ok(())
+        Ok(Header::new(
+            value,
+            headers,
+        ))
     }
 }
 

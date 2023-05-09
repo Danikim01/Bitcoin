@@ -49,6 +49,16 @@ impl MessageHeader {
         cursor.read_exact(&mut payload_size)?;
         cursor.read_exact(&mut checksum)?;
 
+        // Ensure that command_name is a valid UTF-8 byte sequence
+        if let Err(_) = std::str::from_utf8(&command_name) {
+            return Ok(Self::new(
+                start_string,
+                "Comando invalido".to_string(),
+                u32::from_le_bytes(payload_size),
+                checksum,
+            ));
+        }
+
         // create MessageHeader from bytes read
         Ok(Self::new(
             start_string,
