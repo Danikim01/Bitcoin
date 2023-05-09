@@ -1,4 +1,4 @@
-use crate::messages::{GetBlocks, Message, MessageHeader, VerAck, Version};
+use crate::messages::{GetHeader, Message, MessageHeader, VerAck, Version};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
 use std::io::{self, Read};
@@ -113,7 +113,7 @@ fn read_until(stream: &mut TcpStream, cmd: &str) -> Result<MessageHeader, io::Er
 
 fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
     println!("\nSending self getBlocks (genesis) message...");
-    let genesis_message = GetBlocks::default();
+    let genesis_message = GetHeader::default();
     genesis_message.send_to(stream)?;
 
     let headers_message = read_until(stream, "headers\0\0\0\0\0")?;
@@ -122,7 +122,7 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
     let mut data_headers = [0_u8;2000*81+24];
     stream.read(&mut data_headers)?;
 
-    let headers_message_data = GetBlocks::from_bytes(&data_headers);
+    let headers_message_data = GetHeader::from_bytes(&data_headers);
     println!("Peer responded: {:?}", headers_message_data);
 
     Ok(())

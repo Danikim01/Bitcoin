@@ -3,11 +3,11 @@ use bitcoin_hashes::Hash;
 use std::io;
 use std::net::TcpStream;
 
-mod getblocks;
+mod getheader;
 mod header;
 mod verack;
 mod version;
-pub use getblocks::GetBlocks;
+pub use getheader::GetHeader;
 pub use header::MessageHeader;
 pub use verack::VerAck;
 pub use version::Version;

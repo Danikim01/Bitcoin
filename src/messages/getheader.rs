@@ -10,7 +10,7 @@ use crate::block_header::{BlockHeader,Header};
 
 
 #[derive(Debug)]
-pub struct GetBlocks {
+pub struct GetHeader {
     version: i32,
     hash_count: u8,
     block_header_hashes: Vec<[u8; 32]>,
@@ -18,7 +18,7 @@ pub struct GetBlocks {
 }
 
 //Default for genesis block
-impl Default for GetBlocks {
+impl Default for GetHeader {
     fn default() -> Self {
         Self {
             version: 70015,
@@ -102,7 +102,7 @@ fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, io::Error> {
     }
 }
 
-impl GetBlocks {
+impl GetHeader {
     fn new(
         version: i32,
         hash_count: u8,
@@ -180,7 +180,7 @@ impl GetBlocks {
     }
 }
 
-impl Message for GetBlocks {
+impl Message for GetHeader {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let payload = self.build_payload()?;
         let message = self.build_message("getheaders", Some(payload))?;
