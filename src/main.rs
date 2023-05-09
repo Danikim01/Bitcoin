@@ -1,6 +1,6 @@
 use std::io;
+mod block_header;
 mod connection;
-mod header;
 mod messages;
 
 fn main() -> Result<(), io::Error> {

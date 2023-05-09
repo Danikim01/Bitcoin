@@ -1,14 +1,16 @@
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
-use std::net::TcpStream;
 use std::io;
+use std::net::TcpStream;
 
+mod getblocks;
+mod header;
 mod verack;
 mod version;
-mod getblocks;
-pub use version::Version;
-pub use verack::VerAck;
 pub use getblocks::GetBlocks;
+pub use header::MessageHeader;
+pub use verack::VerAck;
+pub use version::Version;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Services {
@@ -23,8 +25,12 @@ impl Services {
     }
 
     pub fn from_u64(encoded_services: u64) -> Result<Self, io::Error> {
-        if encoded_services & !1055 != 0 { // invalid bitmap, uses bits with undefined purpose
-            return Err(io::Error::new(io::ErrorKind::Other, "Unrecognized services"))
+        if encoded_services & !1055 != 0 {
+            // invalid bitmap, uses bits with undefined purpose
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Unrecognized services",
+            ));
         }
         Ok(Self::new(encoded_services))
     }
@@ -159,7 +165,7 @@ mod tests {
     #[test]
     fn test_multiple_services_from_invalid_bytes() {
         let services_result = Services::try_from(0x1201_u64.to_le_bytes());
-        assert!(matches!(services_result, Err(io::Error{..})));
+        assert!(matches!(services_result, Err(io::Error { .. })));
     }
 
     #[test]

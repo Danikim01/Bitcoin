@@ -1,8 +1,7 @@
-use crate::messages::{Message, Version, VerAck, GetBlocks};
-use std::io::{self, Read};
+use crate::messages::{GetBlocks, Message, VerAck, Version};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
-// use std::io::Cursor;
+use std::io::{self, Read};
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, io::Error> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -55,6 +54,35 @@ fn test_handshake() -> Result<TcpStream, String> {
     Ok(stream)
 }
 
+fn handshake_version(stream: &mut TcpStream) -> Result<(), io::Error> {
+    // send message
+    println!("\nSending self version message...");
+    let msg_version = Version::default();
+    msg_version.send_to(stream)?;
+
+    // receive message
+    let mut data = [0_u8; 180];
+    stream.read(&mut data)?;
+    let _rcv_version = Version::from_bytes(&data)?;
+    println!("Peer responded: {:?}", _rcv_version);
+
+    Ok(())
+}
+
+fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
+    // send message
+    println!("\nSending self verack message...");
+    let _verack_version = VerAck::new().send_to(stream)?;
+
+    // receive message
+    let mut verack_data = [0_u8; 24];
+    stream.read(&mut verack_data)?;
+    let _rcv_verack = VerAck::from_bytes(&verack_data)?;
+    println!("Peer responded: {:?}\n", _rcv_verack);
+
+    Ok(())
+}
+
 fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     // this should be implemented following https://developer.bitcoin.org/devguide/p2p_network.html#connecting-to-peers
 
@@ -63,30 +91,10 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     println!("Connected: {:?}", stream);
 
     // send and receive VERSION
-    // send message
-    println!("\nSending self version message...");
-    let msg_version = Version::default();
-    msg_version.send_to(&mut stream)?;
-
-    // receive message
-    let mut data = [0_u8; 180];
-    stream.read(&mut data)?;
-
-    let _rcv_version = Version::from_bytes(&data)?;
-    println!("Peer responded: {:?}", _rcv_version);
+    handshake_version(&mut stream)?;
 
     // send and recieve VERACK
-    // send message
-    println!("\nSending self verack message...");
-    let verack_version = VerAck::new();
-    verack_version.send_to(&mut stream)?;
-
-    // receive message
-    data = [0_u8; 180];
-    stream.read(&mut data)?;
-
-    let _rcv_verack = VerAck::from_bytes(&data)?;
-    println!("Peer responded: {:?}", _rcv_verack);
+    handshake_verack(&mut stream)?;
 
     // send getBlocks
     // send message
@@ -105,15 +113,15 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     Ok(stream)
 }
 
-// fn get_genesis_block(node: SocketAddr) -> Result<(), String>{
-//     let genesis_message = GetBlocks::default();
-//     genesis_message.
-//         send_to(&mut node)
-//         .map_err(|error| error.to_string())?;
+fn get_genesis_block(node: SocketAddr) -> Result<(), String> {
+    // let genesis_message = GetBlocks::default();
+    // genesis_message.
+    //     send_to(&mut node)
+    //     .map_err(|error| error.to_string())?;
 
-//     //todo rcv inv_message with all block_hashes
-//     Ok(())
-// }
+    // todo rcv inv_message with all block_hashes
+    Ok(())
+}
 
 pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
@@ -123,8 +131,8 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         break;
     }
 
-    //let node = nodes[-1];
-    //genesis_block = get_genesis_block(node);
+    // let node = nodes[-1];
+    // genesis_block = get_genesis_block(node);
 
     Ok(())
 }

@@ -1,15 +1,11 @@
-use crate::messages::{Message, Services};
-// use bitcoin_hashes::sha256;
-// use bitcoin_hashes::Hash;
+use crate::messages::{Message, MessageHeader, Services};
 use std::io::{self, Cursor, Read, Write};
-use std::net::IpAddr;
-// use std::net::{Ipv4Addr, SocketAddr};
-use std::net::{Ipv6Addr, TcpStream};
-// use std::str::FromStr;
+use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Version {
+    message_header: MessageHeader,
     version: i32,
     services: Services,
     timestamp: i64,
@@ -27,6 +23,7 @@ pub struct Version {
 
 impl std::default::Default for Version {
     fn default() -> Self {
+        let message_header = MessageHeader::default();
         let version = 70015;
         let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -45,6 +42,7 @@ impl std::default::Default for Version {
         let start_height = 0;
         let relay = false;
         Version::new(
+            message_header,
             version,
             services,
             timestamp,
@@ -64,6 +62,7 @@ impl std::default::Default for Version {
 
 impl Version {
     fn new(
+        message_header: MessageHeader,
         version: i32,
         services: Services,
         timestamp: i64,
@@ -79,6 +78,7 @@ impl Version {
         relay: bool,
     ) -> Self {
         Self {
+            message_header,
             version,
             services,
             timestamp,
@@ -96,28 +96,12 @@ impl Version {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
-        // since this is a method, change it to modify self instead of returning a new Message
         let mut cursor = Cursor::new(bytes);
 
         // header
-        let mut magic_bytes = [0_u8; 4];
-        let mut command_name = [0_u8; 12];
-        let mut payload_size = [0_u8; 4];
-        let mut checksum = [0_u8; 4];
-
-        // read header
-        cursor.read_exact(&mut magic_bytes)?;
-        cursor.read_exact(&mut command_name)?;
-        cursor.read_exact(&mut payload_size)?;
-        cursor.read_exact(&mut checksum)?;
-
-        // println!(
-        //     "\nMagic bytes: {:02X?}\nCommand name: {:?}\nPayload size: {:?}\nChecksum: {:02X?}\n",
-        //     magic_bytes,
-        //     std::str::from_utf8(&command_name).map_err(|error| error.to_string())?,
-        //     u32::from_le_bytes(payload_size),
-        //     checksum
-        // );
+        let mut message_header_bytes = [0_u8; 24];
+        cursor.read_exact(&mut message_header_bytes)?;
+        let message_header = MessageHeader::from_bytes(&message_header_bytes)?;
 
         // payload
         let mut version = [0_u8; 4];
@@ -168,6 +152,7 @@ impl Version {
         cursor.read_exact(&mut relay)?; // pending: this field should be optional
 
         Ok(Version::new(
+            message_header,
             i32::from_le_bytes(version),
             Services::try_from(services)?,
             i64::from_le_bytes(timestamp),
