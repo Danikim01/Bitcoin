@@ -76,17 +76,19 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     let version_message = Version::from_bytes(&payload_data)?;
     println!("Read version: {:?}\n", version_message);
 
-    // then read verack
-    stream.read(&mut header_data)?;
-    let verack_message = VerAck::from_bytes(&header_data)?;
-    println!("Read verack: {:?}\n", verack_message);
-
     Ok(msg_version.accepts(version_message))
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
+
+    let mut header_data = [0_u8; 24];
+    //read verack
+    stream.read(&mut header_data)?;
+    let verack_message = VerAck::from_bytes(&header_data)?;
+    println!("Read verack: {:?}", verack_message);
+
     // send message
-    println!("\nSending self verack message...");
+    println!("Sending self verack message...");
     let _verack_version = VerAck::new().send_to(stream)?;
 
     Ok(())
@@ -138,7 +140,6 @@ pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         let stream = handshake_node(ip_addr)?;
-        break;
     }
 
     // let node = nodes[-1];

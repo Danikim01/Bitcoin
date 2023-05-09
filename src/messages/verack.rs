@@ -30,7 +30,6 @@ impl Message for VerAck {
     fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         let message = self.build_message("verack", None)?;
         stream.write_all(&message)?;
-        stream.flush()?;
-        Ok(())
+        stream.flush()
     }
 }
