@@ -6,6 +6,8 @@ use crate::messages::Message;
 use std::io::{self, Cursor, Read, Write};
 use std::net::TcpStream;
 use crate::messages::MessageHeader;
+use crate::block_header::{BlockHeader,Header};
+
 
 #[derive(Debug)]
 pub struct GetBlocks {
@@ -13,45 +15,6 @@ pub struct GetBlocks {
     hash_count: u8,
     block_header_hashes: Vec<[u8; 32]>,
     stop_hash: [u8; 32],
-}
-
-#[derive(Debug)]
-pub struct BlockHeader {
-    version:i32,
-    prev_block_hash:[u8;32],
-    merkle_root_hash:[u8;32],
-    timestamp:u32,
-    nbits:u32,
-    nonce:u32,
-}
-
-#[derive(Debug)]
-pub struct Header{
-    count:usize, //Es un Compact size uint
-    block_headers: Vec<BlockHeader>,
-}
-
-impl BlockHeader{
-    fn new(version:i32,prev_block_hash:[u8;32],merkle_root_hash:[u8;32],timestamp:u32,nbits:u32,nonce:u32) -> Self{
-        Self{
-            version,
-            prev_block_hash,
-            merkle_root_hash,
-            timestamp,
-            nbits,
-            nonce
-        }
-    }
-}
-
-
-impl Header{
-    fn new(count:usize,block_headers:Vec<BlockHeader>) -> Self{
-        Self{
-            count,
-            block_headers,
-        }
-    }
 }
 
 //Default for genesis block
@@ -204,9 +167,15 @@ impl GetBlocks {
             ));
         }
 
+        let non_empty_headers: Vec<BlockHeader> = headers
+        .iter()
+        .filter(|header| **header != BlockHeader::default())
+        .cloned()
+        .collect();
+
         Ok(Header::new(
             value,
-            headers,
+            non_empty_headers,
         ))
     }
 }

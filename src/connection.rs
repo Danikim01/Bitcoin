@@ -92,6 +92,41 @@ fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
+fn accept_headers_message<'a>(message:&'a mut MessageHeader,stream: &'a mut TcpStream) -> Result<&'a mut MessageHeader, io::Error>{
+    let mut header = [0_u8; 24];
+    while message.command_name != "headers\0\0\0\0\0"{
+        let mut dummy_buff = vec![0_u8; message.payload_size as usize];
+        stream.read(&mut dummy_buff)?;
+
+        stream.read(&mut header)?;
+        let response_message = MessageHeader::from_bytes(&header)?;
+
+        *message = response_message;
+    }
+    Ok(message)
+}
+
+fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
+    println!("\nSending self getBlocks (genesis) message...");
+    let genesis_message = GetBlocks::default();
+    genesis_message.send_to(stream)?;
+
+    let mut header = [0_u8; 24];
+    stream.read(&mut header)?;
+
+    let mut message = MessageHeader::from_bytes(&header)?;
+    let message = accept_headers_message(&mut message,stream);
+    
+    println!("Peer responded: {:?}", message);
+    let mut data_headers = [0_u8;2000*81+24];
+    stream.read(&mut data_headers)?;
+
+    let headers_message = GetBlocks::from_bytes(&data_headers);
+    println!("Peer responded: {:?}", headers_message);
+
+    Ok(())
+}
+
 fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     // this should be implemented following https://developer.bitcoin.org/devguide/p2p_network.html#connecting-to-peers
 
@@ -107,34 +142,9 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     // send and recieve VERACK
     handshake_verack(&mut stream)?;
 
-    // send getBlocks
-    // send message
+    //send getheaders receive 2000 headers
     
-    println!("\nSending self getBlocks (genesis) message...");
-    let genesis_message = GetBlocks::default();
-    genesis_message.send_to(&mut stream)?;
-
-    let mut header = [0_u8; 24];
-    stream.read(&mut header)?;
-
-    let mut message = MessageHeader::from_bytes(&header)?;
-    
-    while message.command_name != "headers\0\0\0\0\0"{
-        let mut dummy_buff = vec![0_u8; message.payload_size as usize];
-        stream.read(&mut dummy_buff)?;
-
-        stream.read(&mut header)?;
-        let response_message = MessageHeader::from_bytes(&header)?;
-
-        message = response_message;
-    }
-
-    println!("Peer responded: {:?}", message);
-    let mut data_headers = [0_u8;2000*81+24];
-    stream.read(&mut data_headers)?;
-
-    let headers_message = GetBlocks::from_bytes(&data_headers);
-    println!("Peer responded: {:?}", headers_message);
+    handle_headers_message(&mut stream)?;
 
     Ok(stream)
 }
