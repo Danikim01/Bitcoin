@@ -1,4 +1,4 @@
-use crate::messages::{GetBlocks, Message, VerAck, Version, MessageHeader};
+use crate::messages::{GetBlocks, Message, MessageHeader, VerAck, Version};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
 use std::io::{self, Read};
@@ -60,36 +60,31 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     let msg_version = Version::default();
     msg_version.send_to(stream)?;
 
-    // receive message
-    let mut data = [0_u8; 180];
-    stream.read(&mut data)?;
-    let _rcv_version = Version::from_bytes(&data)?;
-    println!("Peer responded: {:?}", _rcv_version);
+    // TODO: we may receive verack first 
+    //       if header read is of version read into version, 
+    //       if verack read into verack
+    //       for now we read first into version
+    
+    // first read message header
+    let mut header_data = [0_u8; 24];
+    stream.read(&mut header_data)?;
+    let mut message_header = MessageHeader::from_bytes(&header_data)?;
+    
+    // read payload into version
+    let mut payload_data = vec![0_u8; message_header.payload_size.try_into().unwrap()]; // remove unwrap
+    stream.read(&mut payload_data)?;
+    let version_message = Version::from_bytes(&payload_data)?;
+    println!("Read version: {:?}\n", version_message);
 
-    Ok(msg_version.accepts(_rcv_version))
+    // then read verack
+    stream.read(&mut header_data)?;
+    let verack_message = VerAck::from_bytes(&header_data)?;
+    println!("Read verack: {:?}\n", verack_message);
+
+    Ok(msg_version.accepts(version_message))
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
-    // receive message
-    let mut verack_data = [0_u8; 24];
-    stream.read(&mut verack_data)?;
-    
-    let mut message_header = MessageHeader::from_bytes(&verack_data)?;
-    while !message_header.command_name.eq("verack") {
-        println!("didn't read verack, skip payload of {:?}bytes and read again...", message_header.payload_size);
-        // skip payload
-        let mut dummy_buff = vec![0_u8; message_header.payload_size.try_into().unwrap()]; // remove unwrap
-        stream.read(&mut dummy_buff); // handle possible error
-        // read header again
-        stream.read(&mut verack_data); // handle possible error
-        message_header = MessageHeader::from_bytes(&verack_data).unwrap(); // remove unwrap
-        println!("Header read: {:?}", message_header);
-    }
-
-    let _rcv_verack = VerAck::from_bytes(&verack_data)?;
-    println!("Peer responded: {:?}\n", _rcv_verack);
-
-
     // send message
     println!("\nSending self verack message...");
     let _verack_version = VerAck::new().send_to(stream)?;
@@ -106,7 +101,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
 
     // send and receive VERSION
     if !handshake_version(&mut stream)? {
-        return Ok(stream)
+        return Ok(stream);
     }
 
     // send and recieve VERACK
@@ -143,6 +138,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         let stream = handshake_node(ip_addr)?;
+        break;
     }
 
     // let node = nodes[-1];

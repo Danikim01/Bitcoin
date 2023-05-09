@@ -25,7 +25,8 @@ impl Services {
     }
 
     pub fn from_u64(encoded_services: u64) -> Result<Self, io::Error> {
-        if encoded_services & !1055 != 0 {
+        // if encoded_services & !1055 != 0 {
+        if false {
             // invalid bitmap, uses bits with undefined purpose
             return Err(io::Error::new(
                 io::ErrorKind::Other,

@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Version {
-    message_header: MessageHeader,
+    // message_header: MessageHeader,
     version: i32,
     services: Services,
     timestamp: i64,
@@ -23,7 +23,7 @@ pub struct Version {
 
 impl std::default::Default for Version {
     fn default() -> Self {
-        let message_header = MessageHeader::default();
+        // let message_header = MessageHeader::default();
         let version = 70015;
         let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -42,7 +42,7 @@ impl std::default::Default for Version {
         let start_height = 0;
         let relay = false;
         Version::new(
-            message_header,
+            // message_header,
             version,
             services,
             timestamp,
@@ -62,7 +62,7 @@ impl std::default::Default for Version {
 
 impl Version {
     fn new(
-        message_header: MessageHeader,
+        // message_header: MessageHeader,
         version: i32,
         services: Services,
         timestamp: i64,
@@ -78,7 +78,7 @@ impl Version {
         relay: bool,
     ) -> Self {
         Self {
-            message_header,
+            // message_header,
             version,
             services,
             timestamp,
@@ -99,9 +99,10 @@ impl Version {
         let mut cursor = Cursor::new(bytes);
 
         // header
-        let mut message_header_bytes = [0_u8; 24];
-        cursor.read_exact(&mut message_header_bytes)?;
-        let message_header = MessageHeader::from_bytes(&message_header_bytes)?;
+        // let mut message_header_bytes = [0_u8; 24];
+        // cursor.read_exact(&mut message_header_bytes)?;
+        // let message_header = MessageHeader::from_bytes(&message_header_bytes)?;
+        // let message_header = MessageHeader::default();
 
         // payload
         let mut version = [0_u8; 4];
@@ -152,7 +153,7 @@ impl Version {
         cursor.read_exact(&mut relay)?; // pending: this field should be optional
 
         Ok(Version::new(
-            message_header,
+            // message_header,
             i32::from_le_bytes(version),
             Services::try_from(services)?,
             i64::from_le_bytes(timestamp),
