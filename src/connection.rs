@@ -1,4 +1,4 @@
-use crate::messages::{GetBlocks, Message, VerAck, Version};
+use crate::messages::{GetBlocks, Message, VerAck, Version, MessageHeader};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
 use std::io::{self, Read};
@@ -77,6 +77,19 @@ fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     // receive message
     let mut verack_data = [0_u8; 24];
     stream.read(&mut verack_data)?;
+    
+    let mut message_header = MessageHeader::from_bytes(&verack_data)?;
+    while !message_header.command_name.eq("verack") {
+        println!("didn't read verack, skip payload of {:?}bytes and read again...", message_header.payload_size);
+        // skip payload
+        let mut dummy_buff = vec![0_u8; message_header.payload_size.try_into().unwrap()]; // remove unwrap
+        stream.read(&mut dummy_buff); // handle possible error
+        // read header again
+        stream.read(&mut verack_data); // handle possible error
+        message_header = MessageHeader::from_bytes(&verack_data).unwrap(); // remove unwrap
+        println!("Header read: {:?}", message_header);
+    }
+
     let _rcv_verack = VerAck::from_bytes(&verack_data)?;
     println!("Peer responded: {:?}\n", _rcv_verack);
 
