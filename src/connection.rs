@@ -90,6 +90,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
 
     // send getBlocks
     // send message
+    /*
     println!("\nSending self getBlocks (genesis) message...");
     let genesis_message = GetBlocks::default();
     genesis_message.send_to(&mut stream)?;
@@ -100,7 +101,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
 
     let _rcv_block = GetBlocks::from_bytes(&data_genesis)?;
     println!("Peer responded: {:?}", _rcv_block);
-
+    */
     Ok(stream)
 }
 

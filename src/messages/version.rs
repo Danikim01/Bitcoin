@@ -229,8 +229,6 @@ impl Version {
         payload.extend(&self.addr_recv_port.to_be_bytes());
         payload.extend(&ip_bytes);
         payload.extend(&self.addr_trans_port.to_be_bytes());
-        payload.extend::<[u8; 8]>(self.services.into());
-
         // Add the IPv6 address to the payload
         payload.extend(&ip_bytes);
         Ok(payload)
