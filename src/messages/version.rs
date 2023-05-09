@@ -218,6 +218,10 @@ impl Version {
         payload.extend(&ip_bytes);
         Ok(payload)
     }
+
+    pub fn accepts(&self, another_version: Version) -> bool {
+        self.version <= another_version.version
+    }
 }
 
 impl Message for Version {

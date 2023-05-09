@@ -54,7 +54,7 @@ fn test_handshake() -> Result<TcpStream, String> {
     Ok(stream)
 }
 
-fn handshake_version(stream: &mut TcpStream) -> Result<(), io::Error> {
+fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     // send message
     println!("\nSending self version message...");
     let msg_version = Version::default();
@@ -66,14 +66,10 @@ fn handshake_version(stream: &mut TcpStream) -> Result<(), io::Error> {
     let _rcv_version = Version::from_bytes(&data)?;
     println!("Peer responded: {:?}", _rcv_version);
 
-    Ok(())
+    Ok(msg_version.accepts(_rcv_version))
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
-    // send message
-    println!("\nSending self verack message...");
-    let _verack_version = VerAck::new().send_to(stream)?;
-
     // receive message
     let mut verack_data = [0_u8; 24];
     stream.read(&mut verack_data)?;
@@ -93,6 +89,11 @@ fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     let _rcv_verack = VerAck::from_bytes(&verack_data)?;
     println!("Peer responded: {:?}\n", _rcv_verack);
 
+
+    // send message
+    println!("\nSending self verack message...");
+    let _verack_version = VerAck::new().send_to(stream)?;
+
     Ok(())
 }
 
@@ -104,7 +105,9 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     println!("Connected: {:?}", stream);
 
     // send and receive VERSION
-    handshake_version(&mut stream)?;
+    if !handshake_version(&mut stream)? {
+        return Ok(stream)
+    }
 
     // send and recieve VERACK
     handshake_verack(&mut stream)?;
@@ -139,9 +142,7 @@ fn get_genesis_block(node: SocketAddr) -> Result<(), String> {
 pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
-        handshake_node(ip_addr)?;
-        println!("\n\n");
-        break;
+        let stream = handshake_node(ip_addr)?;
     }
 
     // let node = nodes[-1];
