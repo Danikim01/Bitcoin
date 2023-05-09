@@ -66,9 +66,9 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     //       for now we read first into version
     
     // first read message header
-    let mut header_data = [0_u8; 24];
-    stream.read(&mut header_data)?;
-    let mut message_header = MessageHeader::from_bytes(&header_data)?;
+    let mut header_buffer = [0_u8; 24];
+    stream.read(&mut header_buffer)?;
+    let mut message_header = MessageHeader::from_bytes(&header_buffer)?;
     
     // read payload into version
     let mut payload_data = vec![0_u8; message_header.payload_size as usize]; 
@@ -76,32 +76,37 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     let version_message = Version::from_bytes(&payload_data)?;
     println!("Read version: {:?}\n", version_message);
 
-    // then read verack
-    stream.read(&mut header_data)?;
-    let verack_message = VerAck::from_bytes(&header_data)?;
-    println!("Read verack: {:?}\n", verack_message);
-
     Ok(msg_version.accepts(version_message))
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
-    // send message
+
+    let mut header_buffer = [0_u8; 24];
+    //read verack
+    stream.read(&mut header_buffer)?;
+    let verack_message = VerAck::from_bytes(&header_buffer)?;
+    println!("Read verack: {:?}\n", verack_message);
+
+    //then send message
     println!("\nSending self verack message...");
     let _verack_version = VerAck::new().send_to(stream)?;
 
     Ok(())
 }
 
-fn accept_headers_message<'a>(message:&'a mut MessageHeader,stream: &'a mut TcpStream) -> Result<&'a mut MessageHeader, io::Error>{
-    let mut header = [0_u8; 24];
-    while message.command_name != "headers\0\0\0\0\0"{
+fn read_until(stream: &mut TcpStream, cmd: &str) -> Result<MessageHeader, io::Error> {
+    let mut header_buffer = [0_u8; 24];
+    stream.read(&mut header_buffer)?;
+
+    let mut message = MessageHeader::from_bytes(&header_buffer)?;
+
+    while message.command_name != cmd{
         let mut dummy_buff = vec![0_u8; message.payload_size as usize];
         stream.read(&mut dummy_buff)?;
 
-        stream.read(&mut header)?;
-        let response_message = MessageHeader::from_bytes(&header)?;
+        stream.read(&mut header_buffer)?;
+        message = MessageHeader::from_bytes(&header_buffer)?;
 
-        *message = response_message;
     }
     Ok(message)
 }
@@ -111,18 +116,14 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
     let genesis_message = GetBlocks::default();
     genesis_message.send_to(stream)?;
 
-    let mut header = [0_u8; 24];
-    stream.read(&mut header)?;
-
-    let mut message = MessageHeader::from_bytes(&header)?;
-    let message = accept_headers_message(&mut message,stream);
+    let headers_message = read_until(stream, "headers\0\0\0\0\0")?;
     
-    println!("Peer responded: {:?}", message);
+    println!("Peer responded: {:?}", headers_message);
     let mut data_headers = [0_u8;2000*81+24];
     stream.read(&mut data_headers)?;
 
-    let headers_message = GetBlocks::from_bytes(&data_headers);
-    println!("Peer responded: {:?}", headers_message);
+    let headers_message_data = GetBlocks::from_bytes(&data_headers);
+    println!("Peer responded: {:?}", headers_message_data);
 
     Ok(())
 }
