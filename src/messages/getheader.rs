@@ -36,37 +36,40 @@ impl Default for GetHeader {
 //ver: https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 fn to_varint(value: u64) -> Vec<u8> {
     let mut buf = Vec::new();
-
-    if value <= 252 {
-        buf.push(value as u8);
-    } else if value >= 253 && value <= 0xffff {
-        buf.push(0xfd);
-        buf.extend_from_slice(&(value as u16).to_le_bytes());
-    } else if value >= 0x10000 && value <= 0xffffffff {
-        buf.push(0xfe);
-        buf.extend_from_slice(&(value as u32).to_le_bytes());
-    } else if value >= 0x100000000 {
-        buf.push(0xff);
-        buf.extend_from_slice(&(value as u64).to_le_bytes());
+    match value {
+        0..=252 => {
+            buf.push(value as u8);
+        }
+        253..=0xffff => {
+            buf.push(0xfd);
+            buf.extend_from_slice(&(value as u16).to_le_bytes());
+        }
+        0x10000..=0xffffffff => {
+            buf.push(0xfe);
+            buf.extend_from_slice(&(value as u32).to_le_bytes());
+        }
+        _ => {
+            buf.push(0xff);
+            buf.extend_from_slice(&(value as u64).to_le_bytes());
+        }        
     }
-
     buf
 }
 
 fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, io::Error> {
-    let mut buf = [0; 4];
+    let mut buf = [0u8; 4];
     cursor.read_exact(&mut buf)?;
     Ok(i32::from_le_bytes(buf))
 }
 
 fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, io::Error> {
-    let mut buf = [0; 4];
+    let mut buf = [0u8; 4];
     cursor.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
 }
 
 fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, io::Error> {
-    let mut buf = [0; 1];
+    let mut buf = [0u8; 1];
     cursor.read_exact(&mut buf)?;
     Ok(u8::from_le_bytes(buf))
 }
@@ -81,19 +84,19 @@ fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<usize, io::Error> {
     let first_byte = read_u8(cursor)?;
     match first_byte {
         0xff => {
-            let mut buf = [0_u8; 8];
+            let mut buf = [0u8; 8];
             cursor.read_exact(&mut buf)?;
             let value = u64::from_le_bytes(buf);
             Ok(value as usize)
         }
         0xfe => {
-            let mut buf = [0_u8; 4];
+            let mut buf = [0u8; 4];
             cursor.read_exact(&mut buf)?;
             let value = u32::from_le_bytes(buf);
             Ok(value as usize)
         }
         0xfd => {
-            let mut buf = [0_u8; 2];
+            let mut buf = [0u8; 2];
             cursor.read_exact(&mut buf)?;
             let value = u16::from_le_bytes(buf);
             Ok(value as usize)
