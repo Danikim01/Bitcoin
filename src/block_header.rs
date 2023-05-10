@@ -18,6 +18,12 @@ pub struct Header{
     block_headers: Vec<BlockHeader>,
 }
 
+impl Header {
+    pub fn is_last_header(&self) -> bool{
+        self.count < 2000
+    }
+}
+
 
 impl BlockHeader{
     pub fn new(version:i32,prev_block_hash:[u8;32],merkle_root_hash:[u8;32],timestamp:u32,nbits:u32,nonce:u32) -> Self{

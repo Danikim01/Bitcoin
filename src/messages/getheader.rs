@@ -5,7 +5,7 @@ use crate::messages::Message;
 // use bitcoin_hashes::Hash;
 use std::io::{self, Cursor, Read, Write};
 use std::net::TcpStream;
-use crate::messages::MessageHeader;
+
 use crate::block_header::{BlockHeader,Header};
 
 
@@ -143,7 +143,7 @@ impl GetHeader {
         let mut empty_tx = [0_u8;1]; 
         
         let mut headers: Vec<BlockHeader> = Vec::with_capacity(value as usize);
-        
+        println!("headers capacity: {}", headers.capacity());
         for _ in 0..value{
             let version = read_i32(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
