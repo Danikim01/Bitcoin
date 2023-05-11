@@ -144,7 +144,8 @@ impl GetHeader {
 
         let mut headers: Vec<BlockHeader> = Vec::with_capacity(value as usize);
         println!("headers capacity: {}", headers.capacity());
-        for _ in 0..value{
+
+        loop{
             let version = read_i32(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
             let merkle_root_hash = read_hash(&mut cursor)?;
@@ -153,32 +154,26 @@ impl GetHeader {
             let nonce = read_u32(&mut cursor)?;
             cursor.read_exact(&mut empty_tx)?;
 
-            // println!("Version : {}", &version);
-            // println!("Prev_block_hash: {:?}", &prev_block_hash);
-            // println!("Merkle_root_hash: {:?}", &merkle_root_hash);
-            // println!("Timestamp: {}", &timestamp);
-            // println!("nbits: {}", &nbits);
-            // println!("nonce {}", &nonce);
-
-            headers.push(BlockHeader::new(
+            let actual_header = BlockHeader::new(
                 version,
                 prev_block_hash,
                 merkle_root_hash,
                 timestamp,
                 nbits,
                 nonce,
-            ));
+            );
+
+            if actual_header == BlockHeader::default(){
+                break;
+            }
+
+            headers.push(actual_header);
         }
 
-        let non_empty_headers: Vec<BlockHeader> = headers
-        .iter()
-        .filter(|header| **header != BlockHeader::default())
-        .cloned()
-        .collect();
-
+        println!("The capacity of headers is: {}", headers.len());
         Ok(Header::new(
-            non_empty_headers.len(),
-            non_empty_headers,
+            headers.len(),
+            headers,
         ))
     }
 

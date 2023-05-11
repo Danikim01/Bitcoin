@@ -126,7 +126,8 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
         stream.read(&mut data_headers)?;
 
         let headers_data = GetHeader::from_bytes(&data_headers)?;
-        println!("Peer responded: {:?}\n", headers_data);
+        //println!("Peer responded: {:?}\n", headers_data);
+        println!("Is last header: {:?}\n", headers_data.is_last_header());
 
         if headers_data.is_last_header(){
             break;
@@ -134,7 +135,6 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
 
         genesis_message = GetHeader::from_last_header(&headers_data.last_header_hash());
     }
-
 
     Ok(())
 }
@@ -175,7 +175,6 @@ pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         let stream = handshake_node(ip_addr)?;
-        break;
     }
 
     // let node = nodes[-1];
