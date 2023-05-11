@@ -9,7 +9,9 @@ mod verack;
 mod version;
 mod messages;
 mod constants;
+mod getdata;
 
+pub use getdata::{Inventory,InvType,GetData};
 pub use getheader::GetHeader;
 pub use header::MessageHeader;
 pub use verack::VerAck;
