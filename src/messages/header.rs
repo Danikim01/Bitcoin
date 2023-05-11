@@ -1,11 +1,13 @@
 use std::io::{self, Cursor, Read};
+use std::net::TcpStream;
+use crate::messages::constants::header_constants::*;
 
 #[derive(Debug)]
 pub struct MessageHeader {
-    pub start_string: [u8; 4],
+    pub start_string: [u8; START_STRING_SIZE],
     pub command_name: String,
     pub payload_size: u32,
-    pub checksum: [u8; 4],
+    pub checksum: [u8; CHECKSUM_SIZE],
 }
 
 impl std::default::Default for MessageHeader {
@@ -21,10 +23,10 @@ impl std::default::Default for MessageHeader {
 
 impl MessageHeader {
     fn new(
-        start_string: [u8; 4],
+        start_string: [u8; START_STRING_SIZE],
         command_name: String,
         payload_size: u32,
-        checksum: [u8; 4],
+        checksum: [u8; CHECKSUM_SIZE],
     ) -> Self {
         Self {
             start_string,
@@ -38,10 +40,10 @@ impl MessageHeader {
         let mut cursor = Cursor::new(bytes);
 
         // used bytes of each field
-        let mut start_string = [0_u8; 4];
-        let mut command_name = [0_u8; 12];
-        let mut payload_size = [0_u8; 4];
-        let mut checksum = [0_u8; 4];
+        let mut start_string = [0_u8; START_STRING_SIZE];
+        let mut command_name = [0_u8; COMMAND_NAME_SIZE];
+        let mut payload_size = [0_u8; PAYLOAD_SIZE];
+        let mut checksum = [0_u8; CHECKSUM_SIZE];
 
         // read all bytes
         cursor.read_exact(&mut start_string)?;
@@ -68,6 +70,28 @@ impl MessageHeader {
             u32::from_le_bytes(payload_size),
             checksum,
         ))
+    }
+
+    pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
+        let mut header_buffer = [0_u8; HEADER_SIZE];
+        stream.read(&mut header_buffer)?;
+        MessageHeader::from_bytes(&header_buffer)
+    }
+
+    pub fn read_until_command(stream: &mut TcpStream, cmd: &str) -> Result<MessageHeader, io::Error> {
+        let mut message = MessageHeader::from_stream(stream)?;
+
+        while message.command_name != cmd{
+            message.read_payload(stream)?;
+            message = MessageHeader::from_stream(stream)?;
+        }
+        Ok(message)
+    }
+
+    pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
+        let mut payload_buffer = vec![0_u8; self.payload_size as usize];
+        stream.read(&mut payload_buffer)?;
+        Ok(payload_buffer)
     }
 }
 

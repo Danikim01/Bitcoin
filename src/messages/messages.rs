@@ -7,6 +7,7 @@ pub struct Services {
     bitmap: u64,
 }
 
+
 /// Returns command with zeros padded to it's right
 fn get_command(cmd: &str) -> [u8; 12] {
     let mut command: [u8; 12] = [0; 12];
@@ -46,6 +47,7 @@ pub trait Message {
         Ok(message)
     }
 }
+
 
 #[cfg(test)]
 mod tests {

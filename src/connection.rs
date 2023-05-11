@@ -2,7 +2,7 @@ use crate::messages::{GetHeader, Message, MessageHeader, VerAck, Version};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
 use std::io::{self, Read};
-use crate::block_header::Header;
+
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, io::Error> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -95,23 +95,6 @@ fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn read_until(stream: &mut TcpStream, cmd: &str) -> Result<MessageHeader, io::Error> {
-    let mut header_buffer = [0_u8; 24];
-    stream.read(&mut header_buffer)?;
-
-    let mut message = MessageHeader::from_bytes(&header_buffer)?;
-
-    while message.command_name != cmd{
-        let mut dummy_buff = vec![0_u8; message.payload_size as usize];
-        stream.read(&mut dummy_buff)?;
-
-        stream.read(&mut header_buffer)?;
-        message = MessageHeader::from_bytes(&header_buffer)?;
-
-    }
-    Ok(message)
-}
-
 fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
     println!("\nSending self getBlocks (genesis) message...");
     let mut genesis_message = GetHeader::default();
@@ -119,11 +102,10 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
         print!("Send genesis message: {:?}\n", genesis_message);
         genesis_message.send_to(stream)?;
         println!("Wait til headers message...\n");
-        let headers_message: MessageHeader = read_until(stream, "headers\0\0\0\0\0")?;
+        let headers_message = MessageHeader::read_until_command (stream, "headers\0\0\0\0\0")?;
 
         println!("Peer responded: {:?}\n", headers_message);
-        let mut data_headers = vec![0_u8;headers_message.payload_size as usize];
-        stream.read(&mut data_headers)?;
+        let data_headers = headers_message.read_payload(stream)?;
 
         let headers_data = GetHeader::from_bytes(&data_headers)?;
         //println!("Peer responded: {:?}\n", headers_data);
