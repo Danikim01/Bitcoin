@@ -113,9 +113,9 @@ fn read_until(stream: &mut TcpStream, cmd: &str) -> Result<MessageHeader, io::Er
 }
 
 fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
+    println!("\nSending self getBlocks (genesis) message...");
+    let mut genesis_message = GetHeader::default();
     loop{
-        println!("\nSending self getBlocks (genesis) message...");
-        let genesis_message = GetHeader::default();
         print!("Send genesis message: {:?}\n", genesis_message);
         genesis_message.send_to(stream)?;
         println!("Wait til headers message...\n");
@@ -125,12 +125,14 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
         let mut data_headers = vec![0_u8;headers_message.payload_size as usize];
         stream.read(&mut data_headers)?;
 
-        let headers_message_data = GetHeader::from_bytes(&data_headers);
-        println!("Peer responded: {:?}\n", headers_message_data);
+        let headers_data = GetHeader::from_bytes(&data_headers)?;
+        println!("Peer responded: {:?}\n", headers_data);
 
-        if headers_message_data?.is_last_header(){
+        if headers_data.is_last_header(){
             break;
         }
+
+        genesis_message = GetHeader::from_last_header(&headers_data.last_header_hash());
     }
 
 

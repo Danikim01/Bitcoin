@@ -22,6 +22,15 @@ impl Header {
     pub fn is_last_header(&self) -> bool{
         self.count < 2000
     }
+
+    fn last_header(&self) -> &BlockHeader {
+        &self.block_headers[self.block_headers.len()-1]
+    }
+
+    pub fn last_header_hash(&self) -> &[u8;32] {
+        println!("Amount of headers: {}\n", self.block_headers.len());
+        &self.last_header().prev_hash()
+    }
 }
 
 
@@ -35,6 +44,10 @@ impl BlockHeader{
             nbits,
             nonce
         }
+    }
+
+    pub fn prev_hash(&self) -> &[u8;32]{
+        &self.merkle_root_hash
     }
 }
 
