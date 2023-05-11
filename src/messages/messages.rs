@@ -7,59 +7,6 @@ pub struct Services {
     bitmap: u64,
 }
 
-impl Services {
-    pub fn new(encoded_services: u64) -> Self {
-        Self {
-            bitmap: encoded_services,
-        }
-    }
-
-    pub fn is_unnamed(self) -> bool {
-        self.bitmap == 0
-    }
-
-    pub fn is_node_network(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 1 != 0
-    }
-
-    pub fn is_node_get_utxo(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 2 != 0
-    }
-
-    pub fn is_node_bloom(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 4 != 0
-    }
-
-    pub fn is_node_witness(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 8 != 0
-    }
-
-    pub fn is_node_xthin(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 16 != 0
-    }
-
-    pub fn is_node_network_limited(self) -> bool {
-        !self.is_unrecognized() && self.bitmap & 1024 != 0
-    }
-
-    pub fn is_unrecognized(self) -> bool {
-        self.bitmap & !1055 != 0
-    }
-}
-
-impl From<[u8; 8]> for Services {
-    fn from(bytes: [u8; 8]) -> Self {
-        let service_code = u64::from_le_bytes(bytes);
-        Services::new(service_code)
-    }
-}
-
-impl Into<[u8; 8]> for Services {
-    fn into(self) -> [u8; 8] {
-        self.bitmap.to_le_bytes()
-    }
-}
-
 /// Returns command with zeros padded to it's right
 fn get_command(cmd: &str) -> [u8; 12] {
     let mut command: [u8; 12] = [0; 12];
