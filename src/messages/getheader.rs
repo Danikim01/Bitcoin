@@ -5,7 +5,7 @@ use crate::messages::Message;
 // use bitcoin_hashes::Hash;
 use std::io::{self, Cursor, Read, Write};
 use std::net::TcpStream;
-use crate::messages::MessageHeader;
+
 use crate::block_header::{BlockHeader,Header};
 
 
@@ -135,15 +135,15 @@ impl GetHeader {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Header, io::Error> {
         let mut cursor = Cursor::new(bytes);
-    
+
         //Leo el payload
         //sabiendo que se recibe un varint
         let value = read_from_varint(&mut cursor)?;
         println!("the value is {:?}", &value); //El value deberia ser 2000 porque se envian 32 ceros
-        let mut empty_tx = [0_u8;1]; 
-        
+        let mut empty_tx = [0_u8;1];
+
         let mut headers: Vec<BlockHeader> = Vec::with_capacity(value as usize);
-        
+        println!("headers capacity: {}", headers.capacity());
         for _ in 0..value{
             let version = read_i32(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
@@ -177,9 +177,18 @@ impl GetHeader {
         .collect();
 
         Ok(Header::new(
-            value,
+            non_empty_headers.len(),
             non_empty_headers,
         ))
+    }
+
+    pub fn from_last_header(last_header: &[u8; 32]) -> Self {
+        Self {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes: vec![*last_header],
+            stop_hash: [0; 32],
+        }
     }
 }
 

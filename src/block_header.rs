@@ -18,6 +18,21 @@ pub struct Header{
     block_headers: Vec<BlockHeader>,
 }
 
+impl Header {
+    pub fn is_last_header(&self) -> bool{
+        self.count < 2000
+    }
+
+    fn last_header(&self) -> &BlockHeader {
+        &self.block_headers[self.block_headers.len()-1]
+    }
+
+    pub fn last_header_hash(&self) -> &[u8;32] {
+        println!("Amount of headers: {}\n", self.block_headers.len());
+        &self.last_header().prev_hash()
+    }
+}
+
 
 impl BlockHeader{
     pub fn new(version:i32,prev_block_hash:[u8;32],merkle_root_hash:[u8;32],timestamp:u32,nbits:u32,nonce:u32) -> Self{
@@ -29,6 +44,10 @@ impl BlockHeader{
             nbits,
             nonce
         }
+    }
+
+    pub fn prev_hash(&self) -> &[u8;32]{
+        &self.merkle_root_hash
     }
 }
 

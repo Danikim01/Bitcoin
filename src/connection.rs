@@ -2,6 +2,7 @@ use crate::messages::{GetHeader, Message, MessageHeader, VerAck, Version};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 //use std::ops::Generator;
 use std::io::{self, Read};
+use crate::block_header::Header;
 
 fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, io::Error> {
     // The port used by Bitcoin nodes to communicate with each other is:
@@ -113,17 +114,27 @@ fn read_until(stream: &mut TcpStream, cmd: &str) -> Result<MessageHeader, io::Er
 
 fn handle_headers_message(stream: &mut TcpStream) -> Result<(), io::Error> {
     println!("\nSending self getBlocks (genesis) message...");
-    let genesis_message = GetHeader::default();
-    genesis_message.send_to(stream)?;
+    let mut genesis_message = GetHeader::default();
+    loop{
+        print!("Send genesis message: {:?}\n", genesis_message);
+        genesis_message.send_to(stream)?;
+        println!("Wait til headers message...\n");
+        let headers_message: MessageHeader = read_until(stream, "headers\0\0\0\0\0")?;
 
-    let headers_message = read_until(stream, "headers\0\0\0\0\0")?;
-    
-    println!("Peer responded: {:?}", headers_message);
-    let mut data_headers = [0_u8;2000*81+24];
-    stream.read(&mut data_headers)?;
+        println!("Peer responded: {:?}\n", headers_message);
+        let mut data_headers = vec![0_u8;headers_message.payload_size as usize];
+        stream.read(&mut data_headers)?;
 
-    let headers_message_data = GetHeader::from_bytes(&data_headers);
-    println!("Peer responded: {:?}", headers_message_data);
+        let headers_data = GetHeader::from_bytes(&data_headers)?;
+        println!("Peer responded: {:?}\n", headers_data);
+
+        if headers_data.is_last_header(){
+            break;
+        }
+
+        genesis_message = GetHeader::from_last_header(&headers_data.last_header_hash());
+    }
+
 
     Ok(())
 }
