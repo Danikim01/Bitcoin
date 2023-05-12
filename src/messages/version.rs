@@ -2,6 +2,7 @@ use crate::messages::{Message, MessageHeader, Services};
 use std::io::{self, Cursor, Read, Write};
 use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::messages::utility::read_from_varint;
 
 #[derive(Debug)]
 pub struct Version {
@@ -131,22 +132,7 @@ impl Version {
         cursor.read_exact(&mut addr_trans_port)?;
         cursor.read_exact(&mut nonce)?;
 
-        let mut byte = [0_u8; 1];
-        cursor.read_exact(&mut byte)?;
-        if byte[0] < 0xFD {
-            user_agent_size = byte[0] as u64;
-        } else {
-            let mut buffer_size = 0;
-            match byte[0] {
-                0xFF => buffer_size = 8,
-                0xFE => buffer_size = 4,
-                0xFD => buffer_size = 2,
-                _ => {}
-            };
-            let mut user_agent_bytes = vec![0_u8; buffer_size];
-            cursor.read_exact(&mut user_agent_bytes)?;
-            user_agent_size = u64::from_be_bytes(vec_to_arr(user_agent_bytes));
-        }
+        user_agent_size = read_from_varint(&mut cursor)?;
         let mut user_agent = vec![0_u8; user_agent_size as usize];
         cursor.read_exact(&mut user_agent)?;
         cursor.read_exact(&mut start_height)?;

@@ -9,6 +9,7 @@ mod verack;
 mod version;
 mod messages;
 mod constants;
+mod utility;
 
 pub use getheader::GetHeader;
 pub use header::MessageHeader;

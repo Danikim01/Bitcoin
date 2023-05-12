@@ -65,15 +65,11 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     //       if header read is of version read into version, 
     //       if verack read into verack
     //       for now we read first into version
-    
-    // first read message header
-    let mut header_buffer = [0_u8; 24];
-    stream.read(&mut header_buffer)?;
-    let mut message_header = MessageHeader::from_bytes(&header_buffer)?;
+
+    let message_header = MessageHeader::from_stream(stream)?;
     
     // read payload into version
-    let mut payload_data = vec![0_u8; message_header.payload_size as usize]; 
-    stream.read(&mut payload_data)?;
+    let payload_data = message_header.read_payload(stream)?;
     let version_message = Version::from_bytes(&payload_data)?;
     println!("Read version: {:?}\n", version_message);
 
@@ -81,11 +77,7 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
-
-    let mut header_buffer = [0_u8; 24];
-    //read verack
-    stream.read(&mut header_buffer)?;
-    let verack_message = VerAck::from_bytes(&header_buffer)?;
+    let verack_message = VerAck::from_stream(stream)?;
     println!("Read verack: {:?}\n", verack_message);
 
     //then send message
