@@ -1,12 +1,11 @@
 use crate::messages::{
-    GetData, GetHeader, InvType, Inventory, Message, MessageHeader, VerAck, Version,
+    GetData, GetHeader, InvType, Inventory, Message, MessageHeader, VerAck, Version, constants::message_constants::HEADER,
 };
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-//use std::ops::Generator;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use crate::block_header::{BlockHeader, Header};
-use std::io::{self, Read};
+use std::io;
 
-fn find_nodes() -> Result<std::vec::IntoIter<std::net::SocketAddr>, io::Error> {
+fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     // The port used by Bitcoin nodes to communicate with each other is:
     // 8333 in the mainnet
     // 18333 in the testnet
@@ -28,28 +27,21 @@ fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
     //       for now we read first into version
 
     // first read message header
-    let mut header_buffer = [0_u8; 24];
-    stream.read(&mut header_buffer)?;
-    let message_header = MessageHeader::from_bytes(&header_buffer)?;
 
-    // read payload into version
-    let mut payload_data = vec![0_u8; message_header.payload_size as usize];
-    stream.read(&mut payload_data)?;
+    let message_header = MessageHeader::from_stream(stream)?;
+    let payload_data = message_header.read_payload(stream)?;
     let version_message = Version::from_bytes(&payload_data)?;
 
     Ok(msg_version.accepts(version_message))
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
-    let mut header_buffer = [0_u8; 24];
-    //read verack
-    stream.read(&mut header_buffer)?;
-    let verack_message = VerAck::from_bytes(&header_buffer)?;
+    VerAck::from_stream(stream)?;
     //println!("Read verack: {:?}\n", verack_message);
 
     //then send message
     //println!("\nSending self verack message...");
-    let _verack_version = VerAck::new().send_to(stream)?;
+    VerAck::new().send_to(stream)?;
 
     Ok(())
 }
@@ -59,11 +51,10 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Header, io::Error> {
     let genesis_message = GetHeader::default();
     genesis_message.send_to(stream)?;
 
-    let headers_message = MessageHeader::read_until_command(stream, "headers\0\0\0\0\0")?;
+    let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
 
     //println!("Peer responded: {:?}", headers_message);
-    let mut data_headers = [0_u8; 2000 * 81 + 24];
-    stream.read(&mut data_headers)?;
+    let data_headers = headers_message.read_payload(stream)?;
 
     let headers_message_data = GetHeader::from_bytes(&data_headers);
     //println!("Peer responded: {:?}", headers_message_data);
@@ -117,7 +108,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
         let stream = handshake_node(ip_addr)?;
-        break;
+        //break;
     }
 
     // let node = nodes[-1];
@@ -147,7 +138,7 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:18333").unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let mut stream_peer = std::net::TcpStream::connect(addr).unwrap();
+        let mut stream_peer = TcpStream::connect(addr).unwrap();
         let response = Version::default();
         response.send_to(&mut stream_peer).unwrap();
 

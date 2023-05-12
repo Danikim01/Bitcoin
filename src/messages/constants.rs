@@ -9,5 +9,11 @@ pub mod header_constants{
 }
 
 pub mod message_constants{
+    pub const VERACK: &str = "verack\0\0\0\0\0\0";
+    pub const HEADER: &str = "headers\0\0\0\0\0";
+    pub const UNKNOWN: &str = "no_command\0\0";
+}
 
+pub mod version_constants{
+    pub const LATEST_VERSION: i32 = 70015;
 }

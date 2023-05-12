@@ -8,7 +8,7 @@ mod header;
 mod verack;
 mod version;
 mod messages;
-mod constants;
+pub(crate) mod constants;
 mod utility;
 mod getdata;
 
@@ -72,7 +72,7 @@ impl Services {
 }
 
 impl TryFrom<[u8; 8]> for Services {
-    type Error = std::io::Error;
+    type Error = io::Error;
 
     fn try_from(bytes: [u8; 8]) -> Result<Self, Self::Error> {
         let service_code = u64::from_le_bytes(bytes);
@@ -95,11 +95,11 @@ fn get_command(cmd: &str) -> [u8; 12] {
 }
 
 pub trait Message {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()>;
+    fn send_to(&self, stream: &mut TcpStream) -> io::Result<()>;
 
     /// Builds message appending header with optional payload
     /// https://developer.bitcoin.org/reference/p2p_networking.html#message-headers
-    fn build_message(&self, cmd: &str, payload: Option<Vec<u8>>) -> std::io::Result<Vec<u8>> {
+    fn build_message(&self, cmd: &str, payload: Option<Vec<u8>>) -> io::Result<Vec<u8>> {
         let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes(); // SET TO ENV
         let command: [u8; 12] = get_command(cmd);
         let mut payload_size: [u8; 4] = 0_i32.to_le_bytes();

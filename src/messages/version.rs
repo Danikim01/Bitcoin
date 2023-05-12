@@ -1,7 +1,8 @@
-use crate::messages::{Message, MessageHeader, Services};
+use crate::messages::{Message, Services};
 use std::io::{self, Cursor, Read, Write};
 use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::messages::constants::version_constants::LATEST_VERSION;
 use crate::messages::utility::read_from_varint;
 
 #[derive(Debug)]
@@ -22,16 +23,16 @@ pub struct Version {
     relay: bool,
 }
 
-impl std::default::Default for Version {
+impl Default for Version {
     fn default() -> Self {
         // let message_header = MessageHeader::default();
-        let version = 70015;
+        let version = LATEST_VERSION;
         let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(..) => Duration::default(),
         }
-        .as_secs() as i64;
+            .as_secs() as i64;
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
         let addr_recv_port = 18333;
@@ -158,7 +159,7 @@ impl Version {
         ))
     }
 
-    fn build_payload(&self, stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
+    fn build_payload(&self, stream: &mut TcpStream) -> io::Result<Vec<u8>> {
         // Get the transmitting node's IP address
         // por qué lo estamos pasando a string para después pasarlo a IP????
         let addr_trans = stream.peer_addr()?.to_string();
@@ -212,7 +213,7 @@ impl Version {
 }
 
 impl Message for Version {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+    fn send_to(&self, stream: &mut TcpStream) -> io::Result<()> {
         let payload = self.build_payload(stream)?;
         let message = self.build_message("version", Some(payload))?;
 
@@ -220,9 +221,4 @@ impl Message for Version {
         stream.flush()?;
         Ok(())
     }
-}
-
-fn vec_to_arr<T, const N: usize>(v: Vec<T>) -> [T; N] {
-    v.try_into()
-        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
 }

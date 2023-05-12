@@ -1,6 +1,7 @@
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
 use crate::messages::constants::header_constants::*;
+use crate::messages::constants::message_constants::UNKNOWN;
 
 #[derive(Debug)]
 pub struct MessageHeader {
@@ -10,10 +11,10 @@ pub struct MessageHeader {
     pub checksum: [u8; CHECKSUM_SIZE],
 }
 
-impl std::default::Default for MessageHeader {
+impl Default for MessageHeader {
     fn default() -> Self {
         let start_string = [0, 0, 0, 0];
-        let command_name = "no_command".to_string();
+        let command_name = UNKNOWN.to_string();
         let payload_size = 0;
         let checksum = [0, 0, 0, 0];
 
@@ -55,7 +56,7 @@ impl MessageHeader {
         if let Err(_) = std::str::from_utf8(&command_name) {
             return Ok(Self::new(
                 start_string,
-                "Comando invalido".to_string(),
+                UNKNOWN.to_string(),
                 u32::from_le_bytes(payload_size),
                 checksum,
             ));
@@ -82,7 +83,7 @@ impl MessageHeader {
         let mut message = MessageHeader::from_stream(stream)?;
 
         while message.command_name != cmd{
-            message.read_payload(stream)?;
+            println!("For message: {} Read content {:?}", message.command_name, message.read_payload(stream)?);
             message = MessageHeader::from_stream(stream)?;
         }
         Ok(message)
@@ -101,14 +102,14 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let messageHeaderDefault = MessageHeader::default();
+        let message_header_default = MessageHeader::default();
 
-        assert!(messageHeaderDefault.start_string == [0, 0, 0, 0]);
+        assert_eq!(message_header_default.start_string, [0, 0, 0, 0]);
         assert!("no_command"
             .to_string()
-            .eq(&messageHeaderDefault.command_name));
-        assert_eq!(messageHeaderDefault.payload_size, 0);
-        assert!(messageHeaderDefault.checksum == [0, 0, 0, 0]);
+            .eq(&message_header_default.command_name));
+        assert_eq!(message_header_default.payload_size, 0);
+        assert_eq!(message_header_default.checksum, [0, 0, 0, 0]);
     }
 
     #[test]
@@ -123,7 +124,7 @@ mod tests {
         // 00000000 ................... Byte count: 0
         // 5df6e0e2 ................... Checksum: SHA256(SHA256(<empty>))
 
-        let messageHeader = MessageHeader::from_bytes(&bytes);
-        println!("{:?}", messageHeader);
+        let message_header = MessageHeader::from_bytes(&bytes);
+        println!("{:?}", message_header);
     }
 }
