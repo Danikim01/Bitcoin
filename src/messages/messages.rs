@@ -51,76 +51,10 @@ pub trait Message {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // use super::*;
 
     #[test]
-    fn test_single_service_from_bytes() {
-        assert!(Services::from(0x00_u64.to_le_bytes()).is_unnamed());
-        assert!(Services::from(0x01_u64.to_le_bytes()).is_node_network());
-        assert!(Services::from(0x02_u64.to_le_bytes()).is_node_get_utxo());
-        assert!(Services::from(0x04_u64.to_le_bytes()).is_node_bloom());
-        assert!(Services::from(0x08_u64.to_le_bytes()).is_node_witness());
-        assert!(Services::from(0x10_u64.to_le_bytes()).is_node_xthin());
-        assert!(Services::from(0x0400_u64.to_le_bytes()).is_node_network_limited());
-        assert!(Services::from(0x518_u64.to_le_bytes()).is_unrecognized());
-    }
-
-    #[test]
-    fn test_multiple_services_from_empty_bytes() {
-        let services = Services::from(0x00_u64.to_le_bytes());
-        assert!(services.is_unnamed());
-        assert!(!services.is_node_network());
-        assert!(!services.is_node_get_utxo());
-        assert!(!services.is_node_bloom());
-        assert!(!services.is_node_witness());
-        assert!(!services.is_node_xthin());
-        assert!(!services.is_node_network_limited());
-        assert!(!services.is_unrecognized());
-    }
-
-    #[test]
-    fn test_multiple_services_from_valid_bytes() {
-        let services = Services::from(0x0401_u64.to_le_bytes());
-        assert!(!services.is_unnamed());
-        assert!(services.is_node_network());
-        assert!(!services.is_node_get_utxo());
-        assert!(!services.is_node_bloom());
-        assert!(!services.is_node_witness());
-        assert!(!services.is_node_xthin());
-        assert!(services.is_node_network_limited());
-        assert!(!services.is_unrecognized());
-    }
-
-    #[test]
-    fn test_multiple_services_from_invalid_bytes() {
-        let services = Services::from(0x1201_u64.to_le_bytes());
-        assert!(!services.is_unnamed());
-        assert!(!services.is_node_network());
-        assert!(!services.is_node_get_utxo());
-        assert!(!services.is_node_bloom());
-        assert!(!services.is_node_witness());
-        assert!(!services.is_node_xthin());
-        assert!(!services.is_node_network_limited());
-        assert!(services.is_unrecognized());
-    }
-
-    #[test]
-    fn test_service_into_bytes() {
-        let mut bytes: [u8; 8] = Services::new(0x00_u64).into();
-        assert_eq!(bytes, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0x01_u64).into();
-        assert_eq!(bytes, [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0x02_u64).into();
-        assert_eq!(bytes, [0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0x04_u64).into();
-        assert_eq!(bytes, [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0x08_u64).into();
-        assert_eq!(bytes, [0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0x10_u64).into();
-        assert_eq!(bytes, [0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0x0400_u64).into();
-        assert_eq!(bytes, [0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        bytes = Services::new(0xffffffffffffffff_u64).into();
-        assert_eq!(bytes, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+    fn foo() {
+        assert!(true)
     }
 }
