@@ -4,7 +4,7 @@
 #[derive(Clone)]
 pub struct BlockHeader {
     version:i32,
-    prev_block_hash:[u8;32],
+    pub prev_block_hash:[u8;32],
     merkle_root_hash:[u8;32],
     timestamp:u32,
     nbits:u32,
@@ -14,8 +14,8 @@ pub struct BlockHeader {
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
 #[derive(Debug)]
 pub struct Header{
-    count:usize, //Es un Compact size uint
-    block_headers: Vec<BlockHeader>,
+    pub count:usize, //Es un Compact size uint
+    pub block_headers: Vec<BlockHeader>,
 }
 
 impl Header {
