@@ -2,6 +2,8 @@ use crate::messages::{Message, Services};
 use std::io::{self, Cursor, Read, Write};
 use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::config::Config;
+use crate::messages::constants::config::PORT;
 use crate::messages::constants::version_constants::LATEST_VERSION;
 use crate::messages::utility::read_from_varint;
 
@@ -33,12 +35,17 @@ impl Default for Version {
             Err(..) => Duration::default(),
         }
             .as_secs() as i64;
+        let config = match Config::from_file(){
+            Ok(config) => config,
+            Err(..) => Config::default(),
+        };
+
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
-        let addr_recv_port = 18333;
+        let addr_recv_port = config.get_port().parse().unwrap_or(PORT);
         let addr_trans_services = 0;
         let addr_trans_ip = Ipv6Addr::UNSPECIFIED;
-        let addr_trans_port = 18333;
+        let addr_trans_port = config.get_port().parse().unwrap_or(PORT);
         let nonce = 0;
         let user_agent = "".to_string();
         let start_height = 0;

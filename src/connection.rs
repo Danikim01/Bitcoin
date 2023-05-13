@@ -4,15 +4,10 @@ use crate::messages::{
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use crate::block_header::{BlockHeader, Header};
 use std::io;
+use crate::config::Config;
 
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
-    // The port used by Bitcoin nodes to communicate with each other is:
-    // 8333 in the mainnet
-    // 18333 in the testnet
-    // 38333 in the signet
-    // 18444 in the regtest (local)
-    let port = "18333";
-    let node_discovery_hostname = "seed.testnet.bitcoin.sprovoost.nl".to_owned() + ":" + port;
+    let node_discovery_hostname = Config::from_file()?.get_hostname();
     node_discovery_hostname.to_socket_addrs()
 }
 

@@ -13,7 +13,7 @@ pub struct GetHeader {
     stop_hash: [u8; 32],
 }
 
-//Default for genesis block
+//default for genesis block
 impl Default for GetHeader {
     fn default() -> Self {
         Self {
