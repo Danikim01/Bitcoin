@@ -1,7 +1,7 @@
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
 use crate::messages::constants::header_constants::*;
-use crate::messages::constants::message_constants::UNKNOWN;
+use crate::messages::constants::commands::UNKNOWN;
 
 #[derive(Debug)]
 pub struct MessageHeader {

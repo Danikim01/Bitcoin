@@ -2,15 +2,16 @@ use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use crate::messages::constants::config::PATH;
+use crate::messages::constants::config::PORT;
 
 pub struct Config {
     seed: String,
-    port: String,
+    port: u16,
     start_date: String,
 }
 
 impl Config {
-    pub fn new(seed: String, port: String, start_date: String) -> Config {
+    pub fn new(seed: String, port: u16, start_date: String) -> Config {
         Config {
             seed,
             port,
@@ -21,7 +22,7 @@ impl Config {
     pub fn default() -> Config {
         Config {
             seed: "".to_string(),
-            port: "".to_string(),
+            port: "".to_string().parse().unwrap_or(PORT),
             start_date: "".to_string(),
         }
     }
@@ -30,7 +31,7 @@ impl Config {
         &self.seed
     }
 
-    pub fn get_port(&self) -> &String {
+    pub fn get_port(&self) -> &u16 {
         &self.port
     }
 
@@ -39,7 +40,7 @@ impl Config {
     }
 
     pub fn get_hostname(&self) -> String {
-        self.seed.to_owned() + ":" + &self.port
+        self.seed.to_owned() + ":" + &self.port.to_string()
     }
 
     pub fn from_file() -> Result<Config, io::Error> {
@@ -51,7 +52,7 @@ impl Config {
             let line = line?;
             match index {
                 0 => config.seed = line,
-                1 => config.port = line,
+                1 => config.port = line.parse().unwrap_or(PORT),
                 2 => config.start_date = line,
                 _ => (),
             }

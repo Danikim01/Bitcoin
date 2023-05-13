@@ -8,7 +8,7 @@ pub mod header_constants{
     pub const CHECKSUM_SIZE: usize = 4;
 }
 
-pub mod message_constants{
+pub mod commands{
     pub const VERACK: &str = "verack\0\0\0\0\0\0";
     pub const HEADER: &str = "headers\0\0\0\0\0";
     pub const UNKNOWN: &str = "no_command\0\0";

@@ -2,7 +2,7 @@ use crate::messages::{MessageHeader, Message};
 use std::io::Cursor;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
-use crate::messages::constants::message_constants::VERACK;
+use crate::messages::constants::commands::VERACK;
 
 #[derive(Debug)]
 pub struct VerAck {

@@ -1,5 +1,5 @@
 use crate::messages::{
-    GetData, GetHeader, InvType, Inventory, Message, MessageHeader, VerAck, Version, constants::message_constants::HEADER,
+    GetData, GetHeader, InvType, Inventory, Message, MessageHeader, VerAck, Version, constants::commands::HEADER,
 };
 use std::{net::{SocketAddr, TcpStream, ToSocketAddrs}, io::ErrorKind};
 use crate::block_header::{BlockHeader, Header};
