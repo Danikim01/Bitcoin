@@ -24,22 +24,46 @@ pub fn to_varint(value: u64) -> Vec<u8> {
     buf
 }
 
-pub fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, io::Error> {
+pub fn read_le_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, io::Error> {
+    let mut buf = [0u8; 1];
+    cursor.read_exact(&mut buf)?;
+    Ok(u8::from_le_bytes(buf))
+}
+
+pub fn read_be_u16(cursor: &mut Cursor<&[u8]>) -> Result<u16, io::Error> {
+    let mut buf = [0u8; 2];
+    cursor.read_exact(&mut buf)?;
+    Ok(u16::from_be_bytes(buf))
+}
+
+pub fn read_le_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, io::Error> {
     let mut buf = [0u8; 4];
     cursor.read_exact(&mut buf)?;
     Ok(i32::from_le_bytes(buf))
 }
 
-pub fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, io::Error> {
+pub fn read_le_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, io::Error> {
     let mut buf = [0u8; 4];
     cursor.read_exact(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
 }
 
-pub fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, io::Error> {
-    let mut buf = [0u8; 1];
+pub fn read_le_u64(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
+    let mut buf = [0u8; 8];
     cursor.read_exact(&mut buf)?;
-    Ok(u8::from_le_bytes(buf))
+    Ok(u64::from_le_bytes(buf))
+}
+
+pub fn read_le_i64(cursor: &mut Cursor<&[u8]>) -> Result<i64, io::Error> {
+    let mut buf = [0u8; 8];
+    cursor.read_exact(&mut buf)?;
+    Ok(i64::from_le_bytes(buf))
+}
+
+pub fn read_be_u128(cursor: &mut Cursor<&[u8]>) -> Result<u128, io::Error> {
+    let mut buf = [0u8; 16];
+    cursor.read_exact(&mut buf)?;
+    Ok(u128::from_be_bytes(buf))
 }
 
 pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
@@ -49,7 +73,7 @@ pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
 }
 
 pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
-    let first_byte = read_u8(cursor)?;
+    let first_byte = read_le_u8(cursor)?;
     match first_byte {
         0xff => {
             let mut buf = [0u8; 8];

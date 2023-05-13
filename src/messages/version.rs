@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::config::Config;
 use crate::messages::constants::version_constants::LATEST_VERSION;
-use crate::messages::utility::read_from_varint;
+use crate::messages::utility::{read_from_varint, read_le_u8, read_be_u16, read_le_i32, read_le_u32, read_le_u64, read_le_i64, read_be_u128};
 
 #[derive(Debug)]
 pub struct Version {
@@ -106,63 +106,23 @@ impl Version {
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
-        // header
-        // let mut message_header_bytes = [0_u8; 24];
-        // cursor.read_exact(&mut message_header_bytes)?;
-        // let message_header = MessageHeader::from_bytes(&message_header_bytes)?;
-        // let message_header = MessageHeader::default();
+        let version = Version::new(
+            read_le_i32(&mut cursor)?,
+            Services::new(read_le_u64(&mut cursor)?),
+            read_le_i64(&mut cursor)?,
+            read_le_u64(&mut cursor)?,
+            Ipv6Addr::from(read_be_u128(&mut cursor)?),
+            read_be_u16(&mut cursor)?,
+            read_le_u64(&mut cursor)?, // not used
+            Ipv6Addr::from(read_be_u128(&mut cursor)?),
+            read_be_u16(&mut cursor)?,
+            read_le_u64(&mut cursor)?,
+            deser_user_agent(&mut cursor)?,
+            read_le_i32(&mut cursor)?,
+            read_le_u8(&mut cursor)? != 0 // pending: this field should be optional
+        );
 
-        // payload
-        let mut version = [0_u8; 4];
-        let mut services = [0_u8; 8];
-        let mut timestamp = [0_u8; 8];
-        let mut addr_recv_services = [0_u8; 8];
-        let mut addr_recv_ip = [0_u8; 16];
-        let mut addr_recv_port = [0_u8; 2];
-        let mut addr_trans_services = [0_u8; 8]; // not used
-        let mut addr_trans_ip = [0_u8; 16]; // not used
-        let mut addr_trans_port = [0_u8; 2];
-        let mut nonce = [0_u8; 8];
-        let user_agent_size: u64;
-        let mut start_height = [0_u8; 4];
-        let mut relay = [0_u8; 1];
-
-        // read payload
-        cursor.read_exact(&mut version)?;
-        cursor.read_exact(&mut services)?;
-        cursor.read_exact(&mut timestamp)?;
-        cursor.read_exact(&mut addr_recv_services)?;
-        cursor.read_exact(&mut addr_recv_ip)?;
-        cursor.read_exact(&mut addr_recv_port)?;
-        cursor.read_exact(&mut addr_trans_services)?;
-        cursor.read_exact(&mut addr_trans_ip)?;
-        cursor.read_exact(&mut addr_trans_port)?;
-        cursor.read_exact(&mut nonce)?;
-
-        user_agent_size = read_from_varint(&mut cursor)?;
-        let mut user_agent = vec![0_u8; user_agent_size as usize];
-        cursor.read_exact(&mut user_agent)?;
-        cursor.read_exact(&mut start_height)?;
-        cursor.read_exact(&mut relay)?; // pending: this field should be optional
-
-        Ok(Version::new(
-            // message_header,
-            i32::from_le_bytes(version),
-            Services::from(services),
-            i64::from_le_bytes(timestamp),
-            u64::from_le_bytes(addr_recv_services),
-            Ipv6Addr::from(addr_recv_ip),
-            u16::from_be_bytes(addr_recv_port),
-            u64::from_le_bytes(addr_trans_services),
-            Ipv6Addr::from(addr_trans_ip),
-            u16::from_be_bytes(addr_trans_port),
-            u64::from_le_bytes(nonce),
-            std::str::from_utf8(&user_agent)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
-                .to_string(),
-            i32::from_le_bytes(start_height),
-            relay[0] != 0,
-        ))
+        Ok(version)
     }
 
     fn build_payload(&self, stream: &mut TcpStream) -> io::Result<Vec<u8>> {
@@ -226,5 +186,16 @@ impl Message for Version {
         stream.write_all(&message)?;
         stream.flush()?;
         Ok(())
+    }
+}
+
+fn deser_user_agent(cursor: &mut Cursor<&[u8]>) -> Result<String, io::Error> {
+    let user_agent_size = read_from_varint(cursor)? as usize;
+    let mut buffer = vec![0_u8; user_agent_size];
+    cursor.read_exact(&mut buffer)?;
+
+    match std::str::from_utf8(&buffer) {
+        Ok(user_agent) => Ok(user_agent.to_string()),
+        Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
     }
 }
