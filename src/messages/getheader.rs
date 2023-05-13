@@ -1,5 +1,5 @@
 use crate::messages::Message;
-use crate::messages::utility::*;
+use crate::messages::utility::{EndianRead, read_from_varint, read_hash, to_varint};
 use std::io::{self, Cursor, Read, Write};
 use std::net::TcpStream;
 use crate::block_header::{BlockHeader,Header};
@@ -70,12 +70,12 @@ impl GetHeader {
         println!("headers capacity: {}", headers.capacity());
 
         loop{
-            let version = read_le_i32(&mut cursor)?;
+            let version = <i32 as EndianRead>::from_le_bytes(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
             let merkle_root_hash = read_hash(&mut cursor)?;
-            let timestamp = read_le_u32(&mut cursor)?;
-            let nbits = read_le_u32(&mut cursor)?;
-            let nonce = read_le_u32(&mut cursor)?;
+            let timestamp = <u32 as EndianRead>::from_le_bytes(&mut cursor)?;
+            let nbits = <u32 as EndianRead>::from_le_bytes(&mut cursor)?;
+            let nonce = <u32 as EndianRead>::from_le_bytes(&mut cursor)?;
             cursor.read_exact(&mut empty_tx)?;
 
             let actual_header = BlockHeader::new(

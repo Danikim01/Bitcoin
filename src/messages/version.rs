@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::config::Config;
 use crate::messages::constants::version_constants::LATEST_VERSION;
-use crate::messages::utility::{read_from_varint, read_le_u8, read_be_u16, read_le_i32, read_le_u32, read_le_u64, read_le_i64, read_be_u128};
+use crate::messages::utility::{read_from_varint, EndianRead};
 
 #[derive(Debug)]
 pub struct Version {
@@ -107,19 +107,19 @@ impl Version {
         let mut cursor = Cursor::new(bytes);
 
         let version = Version::new(
-            read_le_i32(&mut cursor)?,
-            Services::new(read_le_u64(&mut cursor)?),
-            read_le_i64(&mut cursor)?,
-            read_le_u64(&mut cursor)?,
-            Ipv6Addr::from(read_be_u128(&mut cursor)?),
-            read_be_u16(&mut cursor)?,
-            read_le_u64(&mut cursor)?, // not used
-            Ipv6Addr::from(read_be_u128(&mut cursor)?),
-            read_be_u16(&mut cursor)?,
-            read_le_u64(&mut cursor)?,
+            <i32 as EndianRead>::from_le_bytes(&mut cursor)?,
+            Services::new(<u64 as EndianRead>::from_le_bytes(&mut cursor)?),
+            <i64 as EndianRead>::from_le_bytes(&mut cursor)?,
+            <u64 as EndianRead>::from_le_bytes(&mut cursor)?,
+            Ipv6Addr::from(<u128 as EndianRead>::from_be_bytes(&mut cursor)?),
+            <u16 as EndianRead>::from_be_bytes(&mut cursor)?,
+            <u64 as EndianRead>::from_le_bytes(&mut cursor)?, // not used
+            Ipv6Addr::from(<u128 as EndianRead>::from_be_bytes(&mut cursor)?),
+            <u16 as EndianRead>::from_be_bytes(&mut cursor)?,
+            <u64 as EndianRead>::from_le_bytes(&mut cursor)?,
             deser_user_agent(&mut cursor)?,
-            read_le_i32(&mut cursor)?,
-            read_le_u8(&mut cursor)? != 0 // pending: this field should be optional
+            <i32 as EndianRead>::from_le_bytes(&mut cursor)?,
+            <u8 as EndianRead>::from_le_bytes(&mut cursor)? != 0 // pending: this field should be optional
         );
 
         Ok(version)
