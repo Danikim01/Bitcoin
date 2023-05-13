@@ -149,7 +149,7 @@ impl Version {
         Ok(Version::new(
             // message_header,
             i32::from_le_bytes(version),
-            Services::try_from(services)?,
+            Services::from(services),
             i64::from_le_bytes(timestamp),
             u64::from_le_bytes(addr_recv_services),
             Ipv6Addr::from(addr_recv_ip),

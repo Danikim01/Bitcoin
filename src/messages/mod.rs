@@ -7,7 +7,6 @@ mod getheader;
 mod header;
 mod verack;
 mod version;
-mod messages;
 pub(crate) mod constants;
 mod utility;
 mod getdata;
@@ -28,18 +27,6 @@ impl Services {
         Self {
             bitmap: encoded_services,
         }
-    }
-
-    pub fn from_u64(encoded_services: u64) -> Result<Self, io::Error> {
-        // if encoded_services & !1055 != 0 {
-        if false {
-            // invalid bitmap, uses bits with undefined purpose
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "Unrecognized services",
-            ));
-        }
-        Ok(Self::new(encoded_services))
     }
 
     pub fn is_unnamed(self) -> bool {
@@ -71,12 +58,10 @@ impl Services {
     }
 }
 
-impl TryFrom<[u8; 8]> for Services {
-    type Error = io::Error;
-
-    fn try_from(bytes: [u8; 8]) -> Result<Self, Self::Error> {
+impl From<[u8; 8]> for Services {
+    fn from(bytes: [u8; 8]) -> Self {
         let service_code = u64::from_le_bytes(bytes);
-        Services::from_u64(service_code)
+        Services::new(service_code)
     }
 }
 
@@ -133,19 +118,19 @@ mod tests {
 
     #[test]
     fn test_single_service_from_bytes() -> Result<(), io::Error> {
-        assert!(Services::try_from(0x00_u64.to_le_bytes())?.is_unnamed());
-        assert!(Services::try_from(0x01_u64.to_le_bytes())?.is_node_network());
-        assert!(Services::try_from(0x02_u64.to_le_bytes())?.is_node_get_utxo());
-        assert!(Services::try_from(0x04_u64.to_le_bytes())?.is_node_bloom());
-        assert!(Services::try_from(0x08_u64.to_le_bytes())?.is_node_witness());
-        assert!(Services::try_from(0x10_u64.to_le_bytes())?.is_node_xthin());
-        assert!(Services::try_from(0x0400_u64.to_le_bytes())?.is_node_network_limited());
+        assert!(Services::from(0x00_u64.to_le_bytes()).is_unnamed());
+        assert!(Services::from(0x01_u64.to_le_bytes()).is_node_network());
+        assert!(Services::from(0x02_u64.to_le_bytes()).is_node_get_utxo());
+        assert!(Services::from(0x04_u64.to_le_bytes()).is_node_bloom());
+        assert!(Services::from(0x08_u64.to_le_bytes()).is_node_witness());
+        assert!(Services::from(0x10_u64.to_le_bytes()).is_node_xthin());
+        assert!(Services::from(0x0400_u64.to_le_bytes()).is_node_network_limited());
         Ok(())
     }
 
     #[test]
     fn test_multiple_services_from_empty_bytes() -> Result<(), io::Error> {
-        let services = Services::try_from(0x00_u64.to_le_bytes())?;
+        let services = Services::from(0x00_u64.to_le_bytes());
         assert!(services.is_unnamed());
         assert!(!services.is_node_network());
         assert!(!services.is_node_get_utxo());
@@ -158,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_multiple_services_from_valid_bytes() -> Result<(), io::Error> {
-        let services = Services::try_from(0x0401_u64.to_le_bytes())?;
+        let services = Services::from(0x0401_u64.to_le_bytes());
         assert!(!services.is_unnamed());
         assert!(services.is_node_network());
         assert!(!services.is_node_get_utxo());
@@ -167,12 +152,6 @@ mod tests {
         assert!(!services.is_node_xthin());
         assert!(services.is_node_network_limited());
         Ok(())
-    }
-
-    #[test]
-    fn test_multiple_services_from_invalid_bytes() {
-        let services_result = Services::try_from(0x1201_u64.to_le_bytes());
-        assert!(matches!(services_result, Err(io::Error { .. })));
     }
 
     #[test]

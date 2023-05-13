@@ -1,7 +1,7 @@
 use crate::messages::{
     GetData, GetHeader, InvType, Inventory, Message, MessageHeader, VerAck, Version, constants::message_constants::HEADER,
 };
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::{net::{SocketAddr, TcpStream, ToSocketAddrs}, io::ErrorKind};
 use crate::block_header::{BlockHeader, Header};
 use std::io;
 use crate::config::Config;
@@ -11,33 +11,26 @@ fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     node_discovery_hostname.to_socket_addrs()
 }
 
-fn handshake_version(stream: &mut TcpStream) -> Result<bool, io::Error> {
+fn handshake_version(stream: &mut TcpStream) -> Result<(), io::Error> {
     // send message
     let msg_version = Version::default();
     msg_version.send_to(stream)?;
 
-    // TODO: we may receive verack first
-    //       if header read is of version read into version,
-    //       if verack read into verack
-    //       for now we read first into version
-
-    // first read message header
-
+    // El version SIEMPRE se envía antes que el verack según el estándar
+    // y TCP asegura que los paquetes llegan en el orden en el que se enviaron
     let message_header = MessageHeader::from_stream(stream)?;
     let payload_data = message_header.read_payload(stream)?;
     let version_message = Version::from_bytes(&payload_data)?;
 
-    Ok(msg_version.accepts(version_message))
+    if !msg_version.accepts(version_message) {
+        return Err(io::Error::new(ErrorKind::Unsupported, "Version not supported"));
+    }
+    Ok(())
 }
 
 fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     VerAck::from_stream(stream)?;
-    //println!("Read verack: {:?}\n", verack_message);
-
-    //then send message
-    //println!("\nSending self verack message...");
     VerAck::new().send_to(stream)?;
-
     Ok(())
 }
 
@@ -68,7 +61,7 @@ fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
 
 fn handle_getdata_message(stream: &mut TcpStream, header: &Header) -> Result<(), io::Error> {
     let get_data = build_getdata(&header.count, &header.block_headers);
-    println!("{:?}", &get_data);
+    //println!("{:?}", &get_data);
 
     get_data.send_to(stream)?;
 
@@ -83,39 +76,34 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     println!("Connected: {:?}", stream);
 
     // send and receive VERSION
-    if !(handshake_version(&mut stream)?) {
-        return Ok(stream);
-    }
+    // unsuported versions return error
+    handshake_version(&mut stream)?;
 
     // send and recieve VERACK
     handshake_verack(&mut stream)?;
-
-    //send getheaders receive 2000 headers
-
-    let getheader_response = handle_headers_message(&mut stream)?;
-
-    handle_getdata_message(&mut stream, &getheader_response)?;
-
     Ok(stream)
 }
 
 pub fn connect_to_network() -> Result<(), io::Error> {
     let nodes = find_nodes()?;
     for ip_addr in nodes {
-        let stream = handshake_node(ip_addr)?;
-        //break;
+        let mut stream = match handshake_node(ip_addr) {
+            Ok(stream) => stream,
+            Err(ref e) if e.kind() == io::ErrorKind::Unsupported => continue,
+            Err(e) => return Err(e)
+        };
+
+        //send getheaders receive 2000 headers
+        let getheader_response = handle_headers_message(&mut stream)?;
+        handle_getdata_message(&mut stream, &getheader_response)?;
+        break; // for now, sync against only one node
     }
-
-    // let node = nodes[-1];
-    // genesis_block = get_genesis_block(node);
-
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
 
     #[test]
     fn test_find_nodes() {
@@ -138,7 +126,7 @@ mod tests {
         response.send_to(&mut stream_peer).unwrap();
 
         let (mut rcvr_stream, _addr) = listener.accept().unwrap();
-        assert!(handshake_version(&mut rcvr_stream).unwrap());
+        handshake_version(&mut rcvr_stream).unwrap();
         Ok(())
     }
 
