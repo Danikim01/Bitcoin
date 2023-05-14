@@ -107,19 +107,19 @@ impl Version {
         let mut cursor = Cursor::new(bytes);
 
         let version = Version::new(
-            <i32 as EndianRead>::from_le_bytes(&mut cursor)?,
-            Services::new(<u64 as EndianRead>::from_le_bytes(&mut cursor)?),
-            <i64 as EndianRead>::from_le_bytes(&mut cursor)?,
-            <u64 as EndianRead>::from_le_bytes(&mut cursor)?,
-            Ipv6Addr::from(<u128 as EndianRead>::from_be_bytes(&mut cursor)?),
-            <u16 as EndianRead>::from_be_bytes(&mut cursor)?,
-            <u64 as EndianRead>::from_le_bytes(&mut cursor)?, // not used
-            Ipv6Addr::from(<u128 as EndianRead>::from_be_bytes(&mut cursor)?),
-            <u16 as EndianRead>::from_be_bytes(&mut cursor)?,
-            <u64 as EndianRead>::from_le_bytes(&mut cursor)?,
+            i32::from_le_stream(&mut cursor)?,
+            Services::new(u64::from_le_stream(&mut cursor)?),
+            i64::from_le_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?, // not used
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
             deser_user_agent(&mut cursor)?,
-            <i32 as EndianRead>::from_le_bytes(&mut cursor)?,
-            <u8 as EndianRead>::from_le_bytes(&mut cursor)? != 0 // pending: this field should be optional
+            i32::from_le_stream(&mut cursor)?,
+            u8::from_le_stream(&mut cursor)? != 0 // pending: this field should be optional
         );
 
         Ok(version)

@@ -70,12 +70,12 @@ impl GetHeader {
         println!("headers capacity: {}", headers.capacity());
 
         loop{
-            let version = <i32 as EndianRead>::from_le_bytes(&mut cursor)?;
+            let version = i32::from_le_stream(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
             let merkle_root_hash = read_hash(&mut cursor)?;
-            let timestamp = <u32 as EndianRead>::from_le_bytes(&mut cursor)?;
-            let nbits = <u32 as EndianRead>::from_le_bytes(&mut cursor)?;
-            let nonce = <u32 as EndianRead>::from_le_bytes(&mut cursor)?;
+            let timestamp = u32::from_le_stream(&mut cursor)?;
+            let nbits = u32::from_le_stream(&mut cursor)?;
+            let nonce = u32::from_le_stream(&mut cursor)?;
             cursor.read_exact(&mut empty_tx)?;
 
             let actual_header = BlockHeader::new(
