@@ -58,7 +58,7 @@ impl Headers {
         }
 
         let h = Headers::new(headers.len(), headers);
-        println!("last header hash: {:?}", h.last_header_hash());
+        //println!("last header hash: {:?}", h.last_header_hash());
         Ok(h)
     }
 }

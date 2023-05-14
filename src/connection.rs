@@ -54,6 +54,17 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     Headers::from_bytes(&data_headers)
 }
 
+fn send_headers_message(stream: &mut TcpStream, get_header:GetHeader) -> Result<Headers, io::Error> {
+    println!("El nuevo get headers es {:?}, lo envio",&get_header);
+    get_header.send_to(stream)?;
+
+    let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
+
+    println!("Peer responded with headers message of payload size: {:?}", headers_message.payload_size);
+    let data_headers = headers_message.read_payload(stream)?;
+    Headers::from_bytes(&data_headers)
+}
+
 fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
     //println!("{} - {:?}",count,block_hashes[0]);
     let mut inventory_vector: Vec<Inventory> = Vec::new();
@@ -71,15 +82,16 @@ fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<()
 
     println!("Building getdata message");
     let get_data = build_getdata(&header.count, &header.block_headers);
-    println!("Sending GetData message: {:?}", &get_data);
+    //println!("Sending GetData message: {:?}", &get_data);
     get_data.send_to(stream)?;
 
-    let headers_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
+    let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
+    println!("Peer responded with headers message of payload size: {:?}", block_message.payload_size);
+    let data_blocks = block_message.read_payload(stream)?;
+    println!("data blocks are {:?}",data_blocks);
 
-    println!("Peer responded: {:?}", headers_message);
-
-    let mut data_blocks = [0_u8; 2000 * 81 + 24];
-    stream.read(&mut data_blocks)?;
+    // let mut data_blocks = [0_u8; 2000 * 81 + 24];
+    // stream.read(&mut data_blocks)?;
 
     let block_message_data = GetData::from_bytes(&data_blocks);
 
@@ -112,7 +124,18 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         };
 
         //send getheaders receive 2000 headers
-        let headers = handle_headers_message(&mut stream)?;
+        let mut headers = handle_headers_message(&mut stream)?;
+        // let mut get_headers = GetHeader::from_last_header(headers.last_header_hash());
+        // let mut intentos = 0;
+
+        // while (headers.count == 2000) | (intentos == 200){
+        //     println!("Construyo un nuevo GetHeader message:");
+        //     get_headers = GetHeader::from_last_header(headers.last_header_hash());
+        //     headers = send_headers_message(&mut stream,get_headers)?;
+        //     println!("Recibi cantidad headers {:?}",&headers.count);
+        //     intentos = intentos + 1;
+        // }
+        
         handle_getdata_message(&mut stream, &headers)?;
         break; // for now, sync against only one node
     }
