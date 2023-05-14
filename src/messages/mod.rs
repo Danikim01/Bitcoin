@@ -8,7 +8,7 @@ mod header;
 mod verack;
 mod version;
 pub(crate) mod constants;
-mod utility;
+pub mod utility;
 mod getdata;
 
 pub use getdata::{Inventory,InvType,GetData};

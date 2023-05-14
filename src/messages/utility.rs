@@ -80,3 +80,27 @@ pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
         _ => Ok(first_byte as u64),
     }
 }
+
+pub fn read_i32(cursor: &mut Cursor<&[u8]>) -> Result<i32, io::Error> {
+    let mut buf = [0u8; 4];
+    cursor.read_exact(&mut buf)?;
+    Ok(i32::from_le_bytes(buf))
+}
+
+pub fn read_u32(cursor: &mut Cursor<&[u8]>) -> Result<u32, io::Error> {
+    let mut buf = [0u8; 4];
+    cursor.read_exact(&mut buf)?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+pub fn read_u8(cursor: &mut Cursor<&[u8]>) -> Result<u8, io::Error> {
+    let mut buf = [0u8; 1];
+    cursor.read_exact(&mut buf)?;
+    Ok(u8::from_le_bytes(buf))
+}
+
+pub fn read_i64(cursor: &mut Cursor<&[u8]>) -> Result<i64, io::Error> {
+    let mut buf = [0u8; 8];
+    cursor.read_exact(&mut buf)?;
+    Ok(i64::from_le_bytes(buf))
+}

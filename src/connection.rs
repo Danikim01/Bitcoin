@@ -5,6 +5,7 @@ use std::{net::{SocketAddr, TcpStream, ToSocketAddrs}, io::ErrorKind};
 use crate::block_header::{BlockHeader, Header};
 use std::io;
 use crate::config::Config;
+use std::io::Read;
 
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
@@ -59,11 +60,25 @@ fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
     GetData::new(*count, inventory_vector)
 }
 
-fn handle_getdata_message(stream: &mut TcpStream, header: &Header) -> Result<(), io::Error> {
-    let get_data = build_getdata(&header.count, &header.block_headers);
-    //println!("{:?}", &get_data);
-
+fn handle_getdata_message(stream:&mut TcpStream, header:&Header) -> Result<(), io::Error>{
+    
+    println!("esperando a mensaje inv");
+    let inv_message = MessageHeader::read_until_command(stream, "inv\0\0\0\0\0\0\0\0\0")?;
+    println!("Peer responded: {:?}", inv_message);
+    
+    println!("Building getdata message");
+    let get_data = build_getdata(&header.count,&header.block_headers);
+    println!("Sending GetData message: {:?}",&get_data);
     get_data.send_to(stream)?;
+    
+    let headers_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
+
+    println!("Peer responded: {:?}", headers_message);
+    
+    let mut data_blocks = [0_u8;2000*81+24];
+    stream.read(&mut data_blocks)?;
+
+    let block_message_data = GetData::from_bytes(&data_blocks);
 
     Ok(())
 }

@@ -1,7 +1,12 @@
 use crate::messages::Message;
 use std::net::TcpStream;
 use std::io::Write;
-
+use crate::messages::utility::*;
+use crate::raw_transaction::{RawTransaction,Outpoint,TxInput,TxOutput};
+use crate::io::Cursor;
+use crate::block_header::BlockHeader;
+use std::io::Read;
+use crate::serialized_blocks::SerializedBlocks;
 
 #[derive(Debug)]
 pub enum InvType{
@@ -93,17 +98,25 @@ impl GetData {
         }
     }
 
+    pub fn from_bytes(bytes: &[u8]) -> Result<(), std::io::Error> {
+        SerializedBlocks::from_bytes(bytes);
+        Ok(())
+            
+    }
+
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         let count_a_enviar = to_varint(self.count as u64);
-        println!("Sending GetData with count {:?}", &count_a_enviar);
+        println!("El count a enviar es {:?}",&count_a_enviar);
         payload.extend(&count_a_enviar);
   
+        
         for inv in &self.inventory {
-            let inv_a_enviar = &inv.to_bytes()?;
-            //println!("El inventory a enviar es {:?}", &inv_a_enviar);
-            payload.extend(inv_a_enviar);
-            
+            // let inv_a_enviar = &inv.to_bytes()?;
+            // println!("El inventory a enviar es {:?}",&inv_a_enviar);            
+            // payload.extend(inv_a_enviar);
+            payload.extend(inv.inv_type.to_u32().to_le_bytes());
+            payload.extend(inv.hash);
         }
         Ok(payload)
     }
@@ -121,3 +134,4 @@ impl Message for GetData {
         Ok(())
     }
 }
+

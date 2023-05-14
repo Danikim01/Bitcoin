@@ -1,3 +1,8 @@
+use crate::io::Cursor;
+use crate::messages::utility::*;
+use std::io::Read;
+
+
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug)]
 #[derive(PartialEq)]
@@ -46,6 +51,29 @@ impl BlockHeader{
         }
     }
 
+    pub fn from_bytes(cursor:&mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error>{
+
+        let mut empty_tx = [0_u8;1];
+        let version = read_i32(cursor)?;
+        let prev_block_hash = read_hash(cursor)?;
+        let merkle_root_hash = read_hash(cursor)?;
+        let timestamp = read_u32(cursor)?;
+        let nbits = read_u32(cursor)?;
+        let nonce = read_u32(cursor)?;
+        cursor.read_exact(&mut empty_tx)?;
+
+        let actual_header = BlockHeader::new(
+                version,
+                prev_block_hash,
+                merkle_root_hash,
+                timestamp,
+                nbits,
+                nonce,
+        );
+
+        Ok(actual_header)
+    }
+
     pub fn prev_hash(&self) -> &[u8;32]{
         &self.merkle_root_hash
     }
@@ -78,5 +106,6 @@ impl Header{
         }
     }
 }
+
 
 
