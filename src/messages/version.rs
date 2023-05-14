@@ -1,10 +1,10 @@
+use crate::config::Config;
+use crate::messages::constants::version_constants::LATEST_VERSION;
+use crate::messages::utility::{read_from_varint, EndianRead};
 use crate::messages::{Message, Services};
 use std::io::{self, Cursor, Read, Write};
 use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use crate::config::Config;
-use crate::messages::constants::version_constants::LATEST_VERSION;
-use crate::messages::utility::{read_from_varint, EndianRead};
 
 #[derive(Debug)]
 pub struct Version {
@@ -33,8 +33,8 @@ impl Default for Version {
             Ok(duration) => duration,
             Err(..) => Duration::default(),
         }
-            .as_secs() as i64;
-        let config = match Config::from_file(){
+        .as_secs() as i64;
+        let config = match Config::from_file() {
             Ok(config) => config,
             Err(..) => Config::default(),
         };
@@ -119,7 +119,7 @@ impl Version {
             u64::from_le_stream(&mut cursor)?,
             deser_user_agent(&mut cursor)?,
             i32::from_le_stream(&mut cursor)?,
-            u8::from_le_stream(&mut cursor)? != 0 // pending: this field should be optional
+            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
         );
 
         Ok(version)
@@ -196,6 +196,6 @@ fn deser_user_agent(cursor: &mut Cursor<&[u8]>) -> Result<String, io::Error> {
 
     match std::str::from_utf8(&buffer) {
         Ok(user_agent) => Ok(user_agent.to_string()),
-        Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
+        Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())),
     }
 }

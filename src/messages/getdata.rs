@@ -1,15 +1,15 @@
-use crate::messages::Message;
-use std::net::TcpStream;
-use std::io::Write;
-use crate::messages::utility::*;
-use crate::raw_transaction::{RawTransaction,Outpoint,TxInput,TxOutput};
-use crate::io::Cursor;
 use crate::block_header::BlockHeader;
-use std::io::Read;
+use crate::io::Cursor;
+use crate::messages::utility::*;
+use crate::messages::Message;
+use crate::raw_transaction::{Outpoint, RawTransaction, TxInput, TxOutput};
 use crate::serialized_blocks::SerializedBlocks;
+use std::io::Read;
+use std::io::Write;
+use std::net::TcpStream;
 
 #[derive(Debug)]
-pub enum InvType{
+pub enum InvType {
     MSGError = 0,
     MSGTx = 1,
     MSGBlock = 2,
@@ -42,12 +42,9 @@ pub struct Inventory {
     hash: [u8; 32],
 }
 
-impl Inventory{
-    pub fn new(inv_type: InvType,hash: [u8; 32]) -> Self{
-        Self{
-            inv_type,
-            hash,
-        }
+impl Inventory {
+    pub fn new(inv_type: InvType, hash: [u8; 32]) -> Self {
+        Self { inv_type, hash }
     }
 
     fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
@@ -62,7 +59,7 @@ impl Inventory{
 #[derive(Debug)]
 pub struct GetData {
     count: usize,
-    inventory: Vec<Inventory> // inv as it was received from an inv message
+    inventory: Vec<Inventory>, // inv as it was received from an inv message
 }
 
 fn to_varint(value: u64) -> Vec<u8> {
@@ -82,45 +79,36 @@ fn to_varint(value: u64) -> Vec<u8> {
         _ => {
             buf.push(0xff);
             buf.extend_from_slice(&(value as u64).to_le_bytes());
-        }        
+        }
     }
     buf
 }
 
 impl GetData {
-    pub fn new(
-        count: usize,
-        inventory: Vec<Inventory>,
-    ) -> Self {
-        Self {
-            count,
-            inventory,
-        }
+    pub fn new(count: usize, inventory: Vec<Inventory>) -> Self {
+        Self { count, inventory }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(), std::io::Error> {
         SerializedBlocks::from_bytes(bytes);
         Ok(())
-            
     }
 
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         let count_a_enviar = to_varint(self.count as u64);
-        println!("El count a enviar es {:?}",&count_a_enviar);
+        println!("El count a enviar es {:?}", &count_a_enviar);
         payload.extend(&count_a_enviar);
-  
-        
+
         for inv in &self.inventory {
             // let inv_a_enviar = &inv.to_bytes()?;
-            // println!("El inventory a enviar es {:?}",&inv_a_enviar);            
+            // println!("El inventory a enviar es {:?}",&inv_a_enviar);
             // payload.extend(inv_a_enviar);
             payload.extend(inv.inv_type.to_u32().to_le_bytes());
             payload.extend(inv.hash);
         }
         Ok(payload)
     }
-    
 
     // no need to implement from_bytes since we won't be supporting incoming getdata messages
 }
@@ -134,4 +122,3 @@ impl Message for GetData {
         Ok(())
     }
 }
-

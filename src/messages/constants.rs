@@ -1,5 +1,4 @@
-
-pub mod header_constants{
+pub mod header_constants {
     pub const HEADER_SIZE: usize = 24;
     pub const START_STRING: [u8; 4] = [0xf9, 0xbe, 0xb4, 0xd9];
     pub const START_STRING_SIZE: usize = 4;
@@ -8,13 +7,13 @@ pub mod header_constants{
     pub const CHECKSUM_SIZE: usize = 4;
 }
 
-pub mod commands{
+pub mod commands {
     pub const VERACK: &str = "verack\0\0\0\0\0\0";
     pub const HEADER: &str = "headers\0\0\0\0\0";
     pub const UNKNOWN: &str = "no_command\0\0";
 }
 
-pub mod version_constants{
+pub mod version_constants {
     pub const LATEST_VERSION: i32 = 70015;
 }
 

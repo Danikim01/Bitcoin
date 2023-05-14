@@ -3,15 +3,15 @@ use bitcoin_hashes::Hash;
 use std::io;
 use std::net::TcpStream;
 
+pub(crate) mod constants;
+mod getdata;
 mod getheader;
 mod header;
+pub mod utility;
 mod verack;
 mod version;
-pub(crate) mod constants;
-pub mod utility;
-mod getdata;
 
-pub use getdata::{Inventory,InvType,GetData};
+pub use getdata::{GetData, InvType, Inventory};
 pub use getheader::GetHeader;
 pub use header::MessageHeader;
 pub use verack::VerAck;

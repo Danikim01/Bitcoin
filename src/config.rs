@@ -1,8 +1,8 @@
+use crate::messages::constants::config::PATH;
+use crate::messages::constants::config::PORT;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
-use crate::messages::constants::config::PATH;
-use crate::messages::constants::config::PORT;
 
 pub struct Config {
     seed: String,
