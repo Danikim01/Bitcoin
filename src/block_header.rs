@@ -12,28 +12,6 @@ pub struct BlockHeader {
     nbits: u32,
     nonce: u32,
 }
-//https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
-//https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
-#[derive(Debug)]
-pub struct Header {
-    pub count: usize, //Es un Compact size uint
-    pub block_headers: Vec<BlockHeader>,
-}
-
-impl Header {
-    pub fn is_last_header(&self) -> bool {
-        self.count < 2000
-    }
-
-    fn last_header(&self) -> &BlockHeader {
-        &self.block_headers[self.block_headers.len() - 1]
-    }
-
-    pub fn last_header_hash(&self) -> &[u8; 32] {
-        println!("Amount of headers: {}\n", self.block_headers.len());
-        &self.last_header().prev_hash()
-    }
-}
 
 impl BlockHeader {
     pub fn new(
@@ -97,14 +75,5 @@ impl std::default::Default for BlockHeader {
             nbits,
             nonce,
         )
-    }
-}
-
-impl Header {
-    pub fn new(count: usize, block_headers: Vec<BlockHeader>) -> Self {
-        Self {
-            count,
-            block_headers,
-        }
     }
 }

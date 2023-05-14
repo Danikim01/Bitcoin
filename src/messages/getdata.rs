@@ -1,10 +1,5 @@
-use crate::block_header::BlockHeader;
-use crate::io::Cursor;
-use crate::messages::utility::*;
 use crate::messages::Message;
-use crate::raw_transaction::{Outpoint, RawTransaction, TxInput, TxOutput};
 use crate::serialized_blocks::SerializedBlocks;
-use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 

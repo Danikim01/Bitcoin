@@ -1,7 +1,6 @@
-use crate::block_header::{BlockHeader, Header};
-use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
+use crate::messages::utility::to_varint;
 use crate::messages::Message;
-use std::io::{self, Cursor, Read, Write};
+use std::io::Write;
 use std::net::TcpStream;
 
 #[derive(Debug)]
@@ -54,47 +53,6 @@ impl GetHeader {
         }
         payload.extend(self.stop_hash);
         Ok(payload)
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Header, io::Error> {
-        let mut cursor = Cursor::new(bytes);
-
-        //Leo el payload
-        //sabiendo que se recibe un varint
-        let value = read_from_varint(&mut cursor)?;
-        println!("the value is {:?}", &value); //El value deberia ser 2000 porque se envian 32 ceros
-        let mut empty_tx = [0_u8; 1];
-
-        let mut headers: Vec<BlockHeader> = Vec::with_capacity(value as usize);
-        println!("headers capacity: {}", headers.capacity());
-
-        loop {
-            let version = i32::from_le_stream(&mut cursor)?;
-            let prev_block_hash = read_hash(&mut cursor)?;
-            let merkle_root_hash = read_hash(&mut cursor)?;
-            let timestamp = u32::from_le_stream(&mut cursor)?;
-            let nbits = u32::from_le_stream(&mut cursor)?;
-            let nonce = u32::from_le_stream(&mut cursor)?;
-            cursor.read_exact(&mut empty_tx)?;
-
-            let actual_header = BlockHeader::new(
-                version,
-                prev_block_hash,
-                merkle_root_hash,
-                timestamp,
-                nbits,
-                nonce,
-            );
-
-            if actual_header == BlockHeader::default() {
-                break;
-            }
-
-            headers.push(actual_header);
-        }
-
-        println!("The capacity of headers is: {}", headers.len());
-        Ok(Header::new(headers.len(), headers))
     }
 
     pub fn from_last_header(last_header: &[u8; 32]) -> Self {

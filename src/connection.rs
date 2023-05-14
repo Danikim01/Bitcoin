@@ -116,7 +116,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
 
         //send getheaders receive 2000 headers
         let getheader_response = handle_headers_message(&mut stream)?;
-        handle_getdata_message(&mut stream, &getheader_response)?;
+        //handle_getdata_message(&mut stream, &getheader_response)?;
         break; // for now, sync against only one node
     }
     Ok(())
