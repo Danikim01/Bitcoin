@@ -6,6 +6,7 @@ use std::net::TcpStream;
 pub(crate) mod constants;
 mod getdata;
 mod getheader;
+mod headers;
 mod message_headers;
 pub mod utility;
 mod verack;
@@ -13,6 +14,7 @@ mod version;
 
 pub use getdata::{GetData, InvType, Inventory};
 pub use getheader::GetHeader;
+pub use headers::Headers;
 pub use message_headers::MessageHeader;
 pub use verack::VerAck;
 pub use version::Version;

@@ -52,16 +52,6 @@ impl MessageHeader {
         cursor.read_exact(&mut payload_size)?;
         cursor.read_exact(&mut checksum)?;
 
-        // Ensure that command_name is a valid UTF-8 byte sequence
-        if let Err(_) = std::str::from_utf8(&command_name) {
-            return Ok(Self::new(
-                start_string,
-                UNKNOWN.to_string(),
-                u32::from_le_bytes(payload_size),
-                checksum,
-            ));
-        }
-
         // create MessageHeader from bytes read
         Ok(Self::new(
             start_string,
@@ -87,18 +77,19 @@ impl MessageHeader {
 
         while message.command_name != cmd {
             println!(
-                "For message: {} Read content {:?}",
+                "For message: {} Skip payload of {:?} bytes",
                 message.command_name,
-                message.read_payload(stream)?
+                message.read_payload(stream)?.len()
             );
             message = MessageHeader::from_stream(stream)?;
         }
+        println!("Got command: {:?}", message.command_name);
         Ok(message)
     }
 
     pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
         let mut payload_buffer = vec![0_u8; self.payload_size as usize];
-        stream.read(&mut payload_buffer)?;
+        stream.read_exact(&mut payload_buffer)?;
         Ok(payload_buffer)
     }
 }

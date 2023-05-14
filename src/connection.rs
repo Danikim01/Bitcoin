@@ -1,8 +1,8 @@
-use crate::block_header::{BlockHeader, Header};
+use crate::block_header::BlockHeader;
 use crate::config::Config;
 use crate::messages::{
-    constants::commands::HEADER, GetData, GetHeader, InvType, Inventory, Message, MessageHeader,
-    VerAck, Version,
+    constants::commands::HEADER, GetData, GetHeader, Headers, InvType, Inventory, Message,
+    MessageHeader, VerAck, Version,
 };
 use std::io;
 use std::io::Read;
@@ -42,19 +42,16 @@ fn handshake_verack(stream: &mut TcpStream) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn handle_headers_message(stream: &mut TcpStream) -> Result<Header, io::Error> {
+fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> {
     //println!("\nSending self getBlocks (genesis) message...");
     let genesis_message = GetHeader::default();
     genesis_message.send_to(stream)?;
 
     let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
 
-    //println!("Peer responded: {:?}", headers_message);
+    println!("Peer responded with headers message of payload size: {:?}", headers_message.payload_size);
     let data_headers = headers_message.read_payload(stream)?;
-
-    let headers_message_data = GetHeader::from_bytes(&data_headers);
-    //println!("Peer responded: {:?}", headers_message_data);
-    headers_message_data
+    Headers::from_bytes(&data_headers)
 }
 
 fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
@@ -67,7 +64,7 @@ fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
     GetData::new(*count, inventory_vector)
 }
 
-fn handle_getdata_message(stream: &mut TcpStream, header: &Header) -> Result<(), io::Error> {
+fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<(), io::Error> {
     println!("esperando a mensaje inv");
     let inv_message = MessageHeader::read_until_command(stream, "inv\0\0\0\0\0\0\0\0\0")?;
     println!("Peer responded: {:?}", inv_message);
@@ -115,8 +112,8 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         };
 
         //send getheaders receive 2000 headers
-        let getheader_response = handle_headers_message(&mut stream)?;
-        //handle_getdata_message(&mut stream, &getheader_response)?;
+        let headers = handle_headers_message(&mut stream)?;
+        handle_getdata_message(&mut stream, &headers)?;
         break; // for now, sync against only one node
     }
     Ok(())

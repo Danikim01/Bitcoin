@@ -1,11 +1,8 @@
 use crate::block_header::BlockHeader;
-use crate::block_header::Header;
-use crate::io::Cursor;
+use crate::io::{self, Cursor};
 use crate::messages::utility::*;
-use crate::messages::GetHeader;
+use crate::messages::{GetHeader};
 use crate::raw_transaction::{Outpoint, RawTransaction, TxInput, TxOutput};
-use ::std::io;
-use std::io::Read;
 
 #[derive(Debug)]
 pub struct SerializedBlocks {
