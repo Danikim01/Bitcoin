@@ -5,12 +5,12 @@ use std::io::Read;
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone)]
 pub struct BlockHeader {
-    version: i32,
+    pub version: i32,
     pub prev_block_hash: [u8; 32],
-    merkle_root_hash: [u8; 32],
-    timestamp: u32,
-    nbits: u32,
-    nonce: u32,
+    pub merkle_root_hash: [u8; 32],
+    pub timestamp: u32,
+    pub nbits: u32,
+    pub nonce: u32,
 }
 
 impl BlockHeader {

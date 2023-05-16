@@ -11,7 +11,8 @@ use std::{
     io::ErrorKind,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
-
+use bitcoin_hashes::{sha256, Hash};
+use std::convert::TryInto;
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
     node_discovery_hostname.to_socket_addrs()
@@ -74,24 +75,41 @@ fn send_headers_message(
     let data_headers = headers_message.read_payload(stream)?;
     Headers::from_bytes(&data_headers)
 }
+fn hash_block_header(header: &[u8]) -> sha256::Hash {
+    let first_hash = sha256::Hash::hash(header);
+    sha256::Hash::hash(&first_hash[..])
+}
+fn hash_to_bytes(hash: &sha256::Hash) -> [u8; 32] {
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(&hash[..]);
+    bytes
+}
 
-fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
+fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData{
     let mut inventory_vector: Vec<Inventory> = Vec::new();
-    for hash in block_hashes {
-        inventory_vector.push(Inventory::new(InvType::MSGBlock, hash.prev_block_hash));
+    
+    for block_header in block_headers {
+        let mut header_bytes = vec![];
+        header_bytes.extend(&block_header.version.to_le_bytes());
+        header_bytes.extend(&block_header.prev_block_hash);
+        header_bytes.extend(&block_header.merkle_root_hash);
+        header_bytes.extend(&block_header.timestamp.to_le_bytes());
+        header_bytes.extend(&block_header.nbits.to_le_bytes());
+        header_bytes.extend(&block_header.nonce.to_le_bytes());
+        
+       
+        let header_hash = hash_block_header(&header_bytes);
+        //println!("the header hash is {:?}",&header_hash);
+        //println!("the header hash is {:?}",hash_to_bytes(&header_hash));
+        inventory_vector.push(Inventory::new(InvType::MSGBlock,hash_to_bytes(&header_hash)));
     }
-    //println!("{:?}",&inventory_vector);
+    
     GetData::new(*count, inventory_vector)
 }
 
 fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<(), io::Error> {
-    println!("esperando a mensaje inv");
-    //let inv_message = MessageHeader::read_until_command(stream, "inv\0\0\0\0\0\0\0\0\0")?;
-    //println!("Peer responded: {:?}", inv_message);
-
-    println!("Building getdata message");
     let get_data = build_getdata(&header.count, &header.block_headers);
-    //println!("Sending GetData message: {:?}", &get_data);
+    println!("Sending GetData message: {:?}", &get_data);
     get_data.send_to(stream)?;
 
     let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
@@ -101,10 +119,6 @@ fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<()
     );
     let data_blocks = block_message.read_payload(stream)?;
     println!("data blocks are {:?}", data_blocks);
-
-    // let mut data_blocks = [0_u8; 2000 * 81 + 24];
-    // stream.read(&mut data_blocks)?;
-
     let block_message_data = SerializedBlocks::from_bytes(&data_blocks);
 
     Ok(())
