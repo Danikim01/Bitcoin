@@ -4,6 +4,7 @@ use crate::messages::{
     constants::commands::HEADER, GetData, GetHeader, Headers, InvType, Inventory, Message,
     MessageHeader, VerAck, Version,
 };
+use crate::serialized_blocks::SerializedBlocks;
 use std::io;
 use std::io::Read;
 use std::{
@@ -49,24 +50,32 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
 
     let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
 
-    println!("Peer responded with headers message of payload size: {:?}", headers_message.payload_size);
+    println!(
+        "Peer responded with headers message of payload size: {:?}",
+        headers_message.payload_size
+    );
     let data_headers = headers_message.read_payload(stream)?;
     Headers::from_bytes(&data_headers)
 }
 
-fn send_headers_message(stream: &mut TcpStream, get_header:GetHeader) -> Result<Headers, io::Error> {
-    println!("El nuevo get headers es {:?}, lo envio",&get_header);
+fn send_headers_message(
+    stream: &mut TcpStream,
+    get_header: GetHeader,
+) -> Result<Headers, io::Error> {
+    println!("El nuevo get headers es {:?}, lo envio", &get_header);
     get_header.send_to(stream)?;
 
     let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
 
-    println!("Peer responded with headers message of payload size: {:?}", headers_message.payload_size);
+    println!(
+        "Peer responded with headers message of payload size: {:?}",
+        headers_message.payload_size
+    );
     let data_headers = headers_message.read_payload(stream)?;
     Headers::from_bytes(&data_headers)
 }
 
 fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
-    //println!("{} - {:?}",count,block_hashes[0]);
     let mut inventory_vector: Vec<Inventory> = Vec::new();
     for hash in block_hashes {
         inventory_vector.push(Inventory::new(InvType::MSGBlock, hash.prev_block_hash));
@@ -77,8 +86,8 @@ fn build_getdata(count: &usize, block_hashes: &Vec<BlockHeader>) -> GetData {
 
 fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<(), io::Error> {
     println!("esperando a mensaje inv");
-    let inv_message = MessageHeader::read_until_command(stream, "inv\0\0\0\0\0\0\0\0\0")?;
-    println!("Peer responded: {:?}", inv_message);
+    //let inv_message = MessageHeader::read_until_command(stream, "inv\0\0\0\0\0\0\0\0\0")?;
+    //println!("Peer responded: {:?}", inv_message);
 
     println!("Building getdata message");
     let get_data = build_getdata(&header.count, &header.block_headers);
@@ -86,14 +95,17 @@ fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<()
     get_data.send_to(stream)?;
 
     let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
-    println!("Peer responded with headers message of payload size: {:?}", block_message.payload_size);
+    println!(
+        "Peer responded with headers message of payload size: {:?}",
+        block_message.payload_size
+    );
     let data_blocks = block_message.read_payload(stream)?;
-    println!("data blocks are {:?}",data_blocks);
+    println!("data blocks are {:?}", data_blocks);
 
     // let mut data_blocks = [0_u8; 2000 * 81 + 24];
     // stream.read(&mut data_blocks)?;
 
-    let block_message_data = GetData::from_bytes(&data_blocks);
+    let block_message_data = SerializedBlocks::from_bytes(&data_blocks);
 
     Ok(())
 }
@@ -135,7 +147,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         //     println!("Recibi cantidad headers {:?}",&headers.count);
         //     intentos = intentos + 1;
         // }
-        
+
         handle_getdata_message(&mut stream, &headers)?;
         break; // for now, sync against only one node
     }

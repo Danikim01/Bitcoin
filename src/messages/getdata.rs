@@ -45,6 +45,9 @@ impl Inventory {
     fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
         bytes.extend(&self.inv_type.to_u32().to_le_bytes());
+        // let mut hash_copy = self.hash;
+        // hash_copy.reverse();
+        // bytes.extend(&hash_copy);
         bytes.extend(&self.hash);
         Ok(bytes)
     }
@@ -84,11 +87,6 @@ impl GetData {
         Self { count, inventory }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<(), std::io::Error> {
-        SerializedBlocks::from_bytes(bytes);
-        Ok(())
-    }
-
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         let count_a_enviar = to_varint(self.count as u64);
@@ -96,11 +94,13 @@ impl GetData {
         payload.extend(&count_a_enviar);
 
         for inv in &self.inventory {
-            // let inv_a_enviar = &inv.to_bytes()?;
-            // println!("El inventory a enviar es {:?}",&inv_a_enviar);
-            // payload.extend(inv_a_enviar);
-            payload.extend(inv.inv_type.to_u32().to_le_bytes());
-            payload.extend(inv.hash);
+            let inv_a_enviar = inv.to_bytes()?;
+            println!("El inventory a enviar es {:?}", &inv_a_enviar);
+            payload.extend(inv_a_enviar);
+            // let mut hash_copy = inv.hash;
+            // hash_copy.reverse();
+            // payload.extend(inv.inv_type.to_u32().to_le_bytes());
+            // payload.extend(&hash_copy);
         }
         Ok(payload)
     }

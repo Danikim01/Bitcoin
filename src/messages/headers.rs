@@ -45,7 +45,7 @@ impl Headers {
             let nbits = u32::from_le_stream(&mut cursor)?;
             let nonce = u32::from_le_stream(&mut cursor)?;
             let _empty_tx = u8::from_le_stream(&mut cursor)?;
-            
+
             let actual_header = BlockHeader::new(
                 version,
                 prev_block_hash,
