@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::block_header::BlockHeader;
-use crate::messages::utility::{read_from_varint, read_hash, EndianRead};
+use crate::messages::utility::{read_from_varint, read_hash, EndianRead, to_varint};
 use std::io::{self, Cursor, Error};
 use std::net::TcpStream;
 use crate::messages::constants::commands::HEADER;
@@ -41,7 +41,7 @@ impl Headers {
         self.last_header().hash_block_header()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Headers, io::Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Headers, Error> {
         let mut header = Headers::default();
         //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
         //hash_headers.insert([0_u8; 32], BlockHeader::default());
@@ -54,7 +54,7 @@ impl Headers {
         let mut header = Headers::default();
         //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
         //hash_headers.insert([0_u8; 32], BlockHeader::default());
-        &header.add_from_stream(stream);
+        header.add_from_stream(stream)?;
 
         Ok(header)
     }
@@ -115,9 +115,11 @@ impl Headers {
         self.add_from_bytes(&data_headers)
     }
 
-    pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), io::Error>{
+    pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), Error>{
 
         while !self.is_last_header() {
+            println!("Is last header? {:?} with header size {:?}", self.is_last_header(), self.count);
+            println!("Last header is {:?}", self.last_header());
             let getheader_message = GetHeader::from_last_header(&self.last_header_hash());
             getheader_message.send_to(stream)?;
             let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
@@ -131,5 +133,14 @@ impl Headers {
         }
 
         Ok(())
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(to_varint(self.count as u64));
+        for header in &self.block_headers {
+            bytes.extend(header.to_bytes());
+        }
+        bytes
     }
 }

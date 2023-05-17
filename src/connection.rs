@@ -5,14 +5,17 @@ use crate::messages::{
     MessageHeader, VerAck, Version,
 };
 use crate::serialized_blocks::SerializedBlocks;
-use std::io;
-use std::io::Read;
+use std::{fs, io};
+use std::io::{Read, Write};
 use std::{
     io::ErrorKind,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
 use bitcoin_hashes::{sha256, Hash};
 use std::convert::TryInto;
+use std::fs::File;
+use crate::messages::utility::read_from_varint;
+
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
     node_discovery_hostname.to_socket_addrs()
@@ -49,9 +52,21 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     let genesis_message = GetHeader::default();
     genesis_message.send_to(stream)?;
 
-    Headers::from_stream(stream)
-
+    let mut headers = Headers::from_stream(stream)?;
     //headers.read_all_headers(stream)?;
+
+    let heaaders_bytes = headers.to_bytes();
+    let mut save_stream = File::create("src/headers.dat")?;
+    save_stream.write_all(&heaaders_bytes)?;
+
+    /*
+    if heaaders_bytes == fs::read("src/headers.dat")?{
+        println!("Se guardó correctamente el archivo");
+    }
+    */
+
+    //read_from_varint(save_stream.cursor())?;
+    Ok(headers)
 }
 
 fn send_headers_message(
