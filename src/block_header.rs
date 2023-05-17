@@ -1,6 +1,7 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
 use std::io::Read;
+use bitcoin_hashes::{sha256, Hash};
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone)]
@@ -55,6 +56,26 @@ impl BlockHeader {
     pub fn prev_hash(&self) -> &[u8; 32] {
         &self.merkle_root_hash
     }
+
+    pub fn hash_block_header(&self) -> [u8; 32] {
+        let first_hash = sha256::Hash::hash(&self.to_bytes());
+        let second_hash = sha256::Hash::hash(&first_hash[..]);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&second_hash[..]);
+        bytes
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut header_bytes = vec![];
+        header_bytes.extend(&self.version.to_le_bytes());
+        header_bytes.extend(&self.prev_block_hash);
+        header_bytes.extend(&self.merkle_root_hash);
+        header_bytes.extend(&self.timestamp.to_le_bytes());
+        header_bytes.extend(&self.nbits.to_le_bytes());
+        header_bytes.extend(&self.nonce.to_le_bytes());
+        header_bytes
+    }
+
 }
 
 impl Default for BlockHeader {

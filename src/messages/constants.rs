@@ -5,6 +5,7 @@ pub mod header_constants {
     pub const COMMAND_NAME_SIZE: usize = 12;
     pub const PAYLOAD_SIZE: usize = 4;
     pub const CHECKSUM_SIZE: usize = 4;
+    pub const MAX_HEADER: usize = 2000;
 }
 
 pub mod commands {

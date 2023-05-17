@@ -49,14 +49,9 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     let genesis_message = GetHeader::default();
     genesis_message.send_to(stream)?;
 
-    let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
+    Headers::from_stream(stream)
 
-    println!(
-        "Peer responded with headers message of payload size: {:?}",
-        headers_message.payload_size
-    );
-    let data_headers = headers_message.read_payload(stream)?;
-    Headers::from_bytes(&data_headers)
+    //headers.read_all_headers(stream)?;
 }
 
 fn send_headers_message(
@@ -75,32 +70,15 @@ fn send_headers_message(
     let data_headers = headers_message.read_payload(stream)?;
     Headers::from_bytes(&data_headers)
 }
-fn hash_block_header(header: &[u8]) -> sha256::Hash {
-    let first_hash = sha256::Hash::hash(header);
-    sha256::Hash::hash(&first_hash[..])
-}
-fn hash_to_bytes(hash: &sha256::Hash) -> [u8; 32] {
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(&hash[..]);
-    bytes
-}
+
 
 fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData{
     let mut inventory_vector: Vec<Inventory> = Vec::new();
     
     for block_header in block_headers {
-        let mut header_bytes = vec![];
-        header_bytes.extend(&block_header.version.to_le_bytes());
-        header_bytes.extend(&block_header.prev_block_hash);
-        header_bytes.extend(&block_header.merkle_root_hash);
-        header_bytes.extend(&block_header.timestamp.to_le_bytes());
-        header_bytes.extend(&block_header.nbits.to_le_bytes());
-        header_bytes.extend(&block_header.nonce.to_le_bytes());
-       
-        let header_hash = hash_block_header(&header_bytes);
         //println!("the header hash is {:?}",&header_hash);
         //println!("the header hash is {:?}",hash_to_bytes(&header_hash));
-        inventory_vector.push(Inventory::new(InvType::MSGBlock,hash_to_bytes(&header_hash)));
+        inventory_vector.push(Inventory::new(InvType::MSGBlock,block_header.hash_block_header()));
     }
     
     GetData::new(*count, inventory_vector)
