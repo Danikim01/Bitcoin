@@ -15,7 +15,7 @@ impl SerializedBlocks {
     pub fn from_bytes(bytes: &[u8]) -> Result<(), io::Error> {
         let mut cursor = Cursor::new(bytes);
 
-        let mut block_header = BlockHeader::from_bytes(&mut cursor);
+        let block_header = BlockHeader::from_bytes(&mut cursor);
         println!("{:?}", block_header);
 
         //txn_count

@@ -33,14 +33,12 @@ impl BlockHeader {
     }
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
-        let mut empty_tx = [0_u8; 1];
         let version = read_i32(cursor)?;
         let prev_block_hash = read_hash(cursor)?;
         let merkle_root_hash = read_hash(cursor)?;
         let timestamp = read_u32(cursor)?;
         let nbits = read_u32(cursor)?;
         let nonce = read_u32(cursor)?;
-        cursor.read_exact(&mut empty_tx)?;
 
         let actual_header = BlockHeader::new(
             version,
@@ -59,7 +57,7 @@ impl BlockHeader {
     }
 }
 
-impl std::default::Default for BlockHeader {
+impl Default for BlockHeader {
     fn default() -> Self {
         let version = 0_i32;
         let prev_block_hash = [0_u8; 32];

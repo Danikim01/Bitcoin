@@ -90,7 +90,7 @@ impl GetData {
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         let count_a_enviar = to_varint(self.count as u64);
-        println!("El count a enviar es {:?}", &count_a_enviar);
+        println!("El count a enviar es {:?}", &self.count);
         payload.extend(&count_a_enviar);
 
         for inv in &self.inventory {

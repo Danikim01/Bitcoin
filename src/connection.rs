@@ -96,7 +96,6 @@ fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData{
         header_bytes.extend(&block_header.timestamp.to_le_bytes());
         header_bytes.extend(&block_header.nbits.to_le_bytes());
         header_bytes.extend(&block_header.nonce.to_le_bytes());
-        
        
         let header_hash = hash_block_header(&header_bytes);
         //println!("the header hash is {:?}",&header_hash);
@@ -145,7 +144,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
     for ip_addr in nodes {
         let mut stream = match handshake_node(ip_addr) {
             Ok(stream) => stream,
-            Err(ref e) if e.kind() == io::ErrorKind::Unsupported => continue,
+            Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
             Err(e) => return Err(e),
         };
 
