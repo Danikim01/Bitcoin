@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use crate::block_header::BlockHeader;
 use crate::messages::utility::{read_from_varint, read_hash, EndianRead, to_varint};
 use std::io::{self, Cursor, Error};
@@ -57,6 +58,11 @@ impl Headers {
         header.add_from_stream(stream)?;
 
         Ok(header)
+    }
+
+    pub fn from_file(file_name: &str) -> Result<Headers, Error> {
+        let headers_bytes = fs::read(file_name)?;
+        Headers::from_bytes(&headers_bytes)
     }
 
     fn add_from_bytes(&mut self, bytes: &[u8])-> Result<(), Error> {
@@ -143,4 +149,5 @@ impl Headers {
         }
         bytes
     }
+
 }

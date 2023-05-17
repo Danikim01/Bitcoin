@@ -53,19 +53,12 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     genesis_message.send_to(stream)?;
 
     let mut headers = Headers::from_stream(stream)?;
-    //headers.read_all_headers(stream)?;
+    headers.read_all_headers(stream)?;
 
     let heaaders_bytes = headers.to_bytes();
     let mut save_stream = File::create("src/headers.dat")?;
     save_stream.write_all(&heaaders_bytes)?;
 
-    /*
-    if heaaders_bytes == fs::read("src/headers.dat")?{
-        println!("Se guardó correctamente el archivo");
-    }
-    */
-
-    //read_from_varint(save_stream.cursor())?;
     Ok(headers)
 }
 
@@ -142,9 +135,12 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         };
 
         //send getheaders receive 2000 headers
-        let mut headers = handle_headers_message(&mut stream)?;
+        //let mut headers = handle_headers_message(&mut stream)?; //for first sync
         // let mut get_headers = GetHeader::from_last_header(headers.last_header_hash());
         // let mut intentos = 0;
+
+        let mut headers = Headers::from_file("src/headers_backup.dat")?;
+        println!("My headers count is {:?}", headers.block_headers.len());
 
         // while (headers.count == 2000) | (intentos == 200){
         //     println!("Construyo un nuevo GetHeader message:");
@@ -154,7 +150,7 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         //     intentos = intentos + 1;
         // }
 
-        handle_getdata_message(&mut stream, &headers)?;
+        //handle_getdata_message(&mut stream, &headers)?;
         break; // for now, sync against only one node
     }
     Ok(())
