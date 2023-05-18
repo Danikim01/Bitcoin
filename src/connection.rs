@@ -4,13 +4,12 @@ use crate::messages::{
     GetData, GetHeader, Headers, InvType, Inventory, Message, MessageHeader, VerAck, Version,
 };
 use crate::serialized_blocks::SerializedBlocks;
-use std::fs::File;
-use std::io;
-use std::io::Write;
 use std::{
+    io,
     io::ErrorKind,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
+
 
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
@@ -50,10 +49,6 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
 
     let mut headers = Headers::from_stream(stream)?;
     headers.read_all_headers(stream)?;
-
-    let headers_bytes = headers.to_bytes();
-    let mut save_stream = File::create("src/headers.dat")?;
-    save_stream.write_all(&headers_bytes)?;
 
     Ok(headers)
 }
@@ -106,24 +101,57 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     Ok(stream)
 }
 
-pub fn connect_to_network() -> Result<(), io::Error> {
-    let nodes = find_nodes()?;
-    for ip_addr in nodes {
-        let mut stream = match handshake_node(ip_addr) {
+pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
+    let ip_nodes = find_nodes()?;
+    let mut nodes = Vec::new();
+    for ip_addr in ip_nodes {
+        let stream = match handshake_node(ip_addr) {
             Ok(stream) => stream,
             Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
             Err(e) => return Err(e),
         };
 
-        //send getheaders receive 2000 headers
-        //let headers = handle_headers_message(&mut stream)?; //for first sync
-
-        let headers = Headers::from_file("src/headers_backup.dat")?;
-        println!("Block headers read from file: {:?}", headers.block_headers.len());
-
-        //handle_getdata_message(&mut stream, &headers)?;
-        break; // for now, sync against only one node
+        nodes.push(stream);
+        break;
     }
+    Ok(nodes)
+}
+
+pub fn find_best_chain(nodes: &mut Vec <TcpStream>) -> Result<Headers, io::Error>{
+
+    let sync_node = &mut nodes[0];
+    let mut headers = handle_headers_message( sync_node)?;
+
+
+    for mut node in nodes{
+        headers.read_all_headers(&mut node)?;
+    }
+
+    Ok(headers)
+}
+
+pub fn initial_sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error>{
+
+    let headers = find_best_chain(nodes)?;
+    headers.save_to_file("src/headers.dat")?;
+
+    println!("Block headers read from file: {:?}", headers.block_headers.len());
+    handle_getdata_message(&mut nodes[0], &headers)?;
+
+    ///todo this should be a parallel execution
+
+    Ok(())
+}
+
+pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error>{
+
+    let headers = Headers::from_file("src/headers_backup.dat")?;
+
+    println!("Block headers read from file: {:?}", headers.block_headers.len());
+    handle_getdata_message(&mut nodes[0], &headers)?;
+
+    ///todo this should be a parallel execution
+
     Ok(())
 }
 

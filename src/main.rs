@@ -7,6 +7,7 @@ mod raw_transaction;
 mod serialized_blocks;
 
 fn main() -> Result<(), io::Error> {
-    connection::connect_to_network()?;
+    let mut nodes= connection::connect_to_network()?;
+    connection::sync(&mut nodes)?;
     Ok(())
 }

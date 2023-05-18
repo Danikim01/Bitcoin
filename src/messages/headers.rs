@@ -4,7 +4,8 @@ use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
 use crate::messages::{GetHeader, Message, MessageHeader};
 use std::fs;
-use std::io::{self, Cursor, Error};
+use std::fs::File;
+use std::io::{self, Cursor, Error, Write};
 use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
@@ -64,7 +65,7 @@ impl Headers {
         Headers::from_bytes(&headers_bytes)
     }
 
-    fn add_from_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
+    fn add_from_bytes(&mut self, bytes: &[u8]) -> Result<u64, Error> {
         let mut cursor = Cursor::new(bytes);
 
         let count = read_from_varint(&mut cursor)?;
@@ -99,10 +100,10 @@ impl Headers {
             self.count += 1;
         }
 
-        Ok(())
+        Ok(count)
     }
 
-    fn add_from_stream(&mut self, stream: &mut TcpStream) -> Result<(), Error> {
+    fn add_from_stream(&mut self, stream: &mut TcpStream) -> Result<u64, Error> {
         let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
 
         println!(
@@ -114,7 +115,8 @@ impl Headers {
     }
 
     pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), Error> {
-        while !self.is_last_header() {
+        let mut headers_read: u64 = MAX_HEADER as u64;
+        while headers_read == MAX_HEADER as u64 {
             println!(
                 "Block headers read: {:?}, requesting more starting from hash {:?}",
                 self.count,
@@ -129,7 +131,7 @@ impl Headers {
                 headers_message.payload_size
             );
             let data_headers = headers_message.read_payload(stream)?;
-            self.add_from_bytes(&data_headers)?;
+            headers_read = self.add_from_bytes(&data_headers)?;
         }
 
         Ok(())
@@ -143,5 +145,12 @@ impl Headers {
             bytes.extend([0_u8; 1]);
         }
         bytes
+    }
+
+    pub fn save_to_file(&self, file_name: &str) -> Result<(), Error> {
+        let headers_bytes = self.to_bytes();
+        let mut save_stream = File::create("src/headers.dat")?;
+        save_stream.write_all(&headers_bytes)?;
+        Ok(())
     }
 }
