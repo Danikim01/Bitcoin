@@ -1,12 +1,11 @@
-use std::collections::HashMap;
-use std::fs;
 use crate::block_header::BlockHeader;
-use crate::messages::utility::{read_from_varint, read_hash, EndianRead, to_varint};
-use std::io::{self, Cursor, Error};
-use std::net::TcpStream;
 use crate::messages::constants::commands::HEADER;
 use crate::messages::constants::header_constants::MAX_HEADER;
+use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
 use crate::messages::{GetHeader, Message, MessageHeader};
+use std::fs;
+use std::io::{self, Cursor, Error};
+use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
@@ -46,7 +45,7 @@ impl Headers {
         let mut header = Headers::default();
         //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
         //hash_headers.insert([0_u8; 32], BlockHeader::default());
-        &header.add_from_bytes(bytes);
+        header.add_from_bytes(bytes)?;
 
         Ok(header)
     }
@@ -65,7 +64,7 @@ impl Headers {
         Headers::from_bytes(&headers_bytes)
     }
 
-    fn add_from_bytes(&mut self, bytes: &[u8])-> Result<(), Error> {
+    fn add_from_bytes(&mut self, bytes: &[u8]) -> Result<(), Error> {
         let mut cursor = Cursor::new(bytes);
 
         let count = read_from_varint(&mut cursor)?;
@@ -87,7 +86,7 @@ impl Headers {
                 0x6f, 0xe2, 0x8c, 0x0a, 0xb6, 0xf1, 0xb3, 0x72, 0xc1, 0xa6, 0xa2, 0x46, 0xae, 0x63,
                 0xf7, 0x4f, 0x93, 0x1e, 0x83, 0x65, 0xe1, 0x5a, 0x08, 0x9c, 0x68, 0xd6, 0x19, 0x00,
                 0x00, 0x00, 0x00, 0x00, ] as [u8; 32]{
-                println!("prev_block_hash: {:?}", &prev_block_hash);
+                println!("Funciona :D: {:?}", &prev_block_hash);
                 break;
             }
             */
@@ -100,7 +99,7 @@ impl Headers {
                 nonce,
             );
 
-            if actual_header == empty_header{
+            if actual_header == empty_header {
                 break;
             }
             self.block_headers.push(actual_header);
@@ -121,10 +120,13 @@ impl Headers {
         self.add_from_bytes(&data_headers)
     }
 
-    pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), Error>{
-
+    pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), Error> {
         while !self.is_last_header() {
-            println!("Is last header? {:?} with header size {:?}", self.is_last_header(), self.count);
+            println!(
+                "Is last header? {:?} with header size {:?}",
+                self.is_last_header(),
+                self.count
+            );
             println!("Last header is {:?}", self.last_header());
             let getheader_message = GetHeader::from_last_header(&self.last_header_hash());
             getheader_message.send_to(stream)?;
@@ -149,5 +151,4 @@ impl Headers {
         }
         bytes
     }
-
 }

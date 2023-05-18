@@ -1,20 +1,16 @@
 use crate::block_header::BlockHeader;
 use crate::config::Config;
 use crate::messages::{
-    constants::commands::HEADER, GetData, GetHeader, Headers, InvType, Inventory, Message,
-    MessageHeader, VerAck, Version,
+    GetData, GetHeader, Headers, InvType, Inventory, Message, MessageHeader, VerAck, Version,
 };
 use crate::serialized_blocks::SerializedBlocks;
-use std::{fs, io};
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io;
+use std::io::Write;
 use std::{
     io::ErrorKind,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
-use bitcoin_hashes::{sha256, Hash};
-use std::convert::TryInto;
-use std::fs::File;
-use crate::messages::utility::read_from_varint;
 
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
@@ -62,33 +58,18 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     Ok(headers)
 }
 
-fn send_headers_message(
-    stream: &mut TcpStream,
-    get_header: GetHeader,
-) -> Result<Headers, io::Error> {
-    println!("El nuevo get headers es {:?}, lo envio", &get_header);
-    get_header.send_to(stream)?;
-
-    let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
-
-    println!(
-        "Peer responded with headers message of payload size: {:?}",
-        headers_message.payload_size
-    );
-    let data_headers = headers_message.read_payload(stream)?;
-    Headers::from_bytes(&data_headers)
-}
-
-
-fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData{
+fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData {
     let mut inventory_vector: Vec<Inventory> = Vec::new();
-    
+
     for block_header in block_headers {
         //println!("the header hash is {:?}",&header_hash);
         //println!("the header hash is {:?}",hash_to_bytes(&header_hash));
-        inventory_vector.push(Inventory::new(InvType::MSGBlock,block_header.hash_block_header()));
+        inventory_vector.push(Inventory::new(
+            InvType::MSGBlock,
+            block_header.hash_block_header(),
+        ));
     }
-    
+
     GetData::new(*count, inventory_vector)
 }
 
@@ -135,20 +116,10 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         };
 
         //send getheaders receive 2000 headers
-        //let mut headers = handle_headers_message(&mut stream)?; //for first sync
-        // let mut get_headers = GetHeader::from_last_header(headers.last_header_hash());
-        // let mut intentos = 0;
+        let headers = handle_headers_message(&mut stream)?; //for first sync
 
-        let mut headers = Headers::from_file("src/headers_backup.dat")?;
+        let headers = Headers::from_file("src/headers_backup.dat")?;
         println!("My headers count is {:?}", headers.block_headers.len());
-
-        // while (headers.count == 2000) | (intentos == 200){
-        //     println!("Construyo un nuevo GetHeader message:");
-        //     get_headers = GetHeader::from_last_header(headers.last_header_hash());
-        //     headers = send_headers_message(&mut stream,get_headers)?;
-        //     println!("Recibi cantidad headers {:?}",&headers.count);
-        //     intentos = intentos + 1;
-        // }
 
         //handle_getdata_message(&mut stream, &headers)?;
         break; // for now, sync against only one node
