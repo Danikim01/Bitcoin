@@ -73,7 +73,6 @@ impl BlockHeader {
         header_bytes.extend(&self.timestamp.to_le_bytes());
         header_bytes.extend(&self.nbits.to_le_bytes());
         header_bytes.extend(&self.nonce.to_le_bytes());
-        header_bytes.extend([0_u8; 1]);
         header_bytes
     }
 }

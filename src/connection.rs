@@ -51,9 +51,9 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     let mut headers = Headers::from_stream(stream)?;
     headers.read_all_headers(stream)?;
 
-    let heaaders_bytes = headers.to_bytes();
+    let headers_bytes = headers.to_bytes();
     let mut save_stream = File::create("src/headers.dat")?;
-    save_stream.write_all(&heaaders_bytes)?;
+    save_stream.write_all(&headers_bytes)?;
 
     Ok(headers)
 }
@@ -116,10 +116,10 @@ pub fn connect_to_network() -> Result<(), io::Error> {
         };
 
         //send getheaders receive 2000 headers
-        let headers = handle_headers_message(&mut stream)?; //for first sync
+        //let headers = handle_headers_message(&mut stream)?; //for first sync
 
         let headers = Headers::from_file("src/headers_backup.dat")?;
-        println!("My headers count is {:?}", headers.block_headers.len());
+        println!("Block headers read from file: {:?}", headers.block_headers.len());
 
         //handle_getdata_message(&mut stream, &headers)?;
         break; // for now, sync against only one node

@@ -68,10 +68,6 @@ impl Headers {
         let mut cursor = Cursor::new(bytes);
 
         let count = read_from_varint(&mut cursor)?;
-        println!("the headers count received is {:?}", &count); //El value deberia ser 2000 porque se envian 32 ceros
-
-        let empty_header = BlockHeader::default();
-
         for _block_num in 0..count {
             let version = i32::from_le_stream(&mut cursor)?;
             let prev_block_hash = read_hash(&mut cursor)?;
@@ -99,9 +95,6 @@ impl Headers {
                 nonce,
             );
 
-            if actual_header == empty_header {
-                break;
-            }
             self.block_headers.push(actual_header);
             self.count += 1;
         }
@@ -123,11 +116,10 @@ impl Headers {
     pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), Error> {
         while !self.is_last_header() {
             println!(
-                "Is last header? {:?} with header size {:?}",
-                self.is_last_header(),
-                self.count
+                "Block headers read: {:?}, requesting more starting from hash {:?}",
+                self.count,
+                &self.last_header_hash()
             );
-            println!("Last header is {:?}", self.last_header());
             let getheader_message = GetHeader::from_last_header(&self.last_header_hash());
             getheader_message.send_to(stream)?;
             let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
@@ -148,6 +140,7 @@ impl Headers {
         bytes.extend(to_varint(self.count as u64));
         for header in &self.block_headers {
             bytes.extend(header.to_bytes());
+            bytes.extend([0_u8; 1]);
         }
         bytes
     }
