@@ -4,16 +4,6 @@ use std::io::ErrorKind;
 use std::io::Read;
 
 #[derive(Debug)]
-pub struct RawTransaction {
-    pub version: i32, //Puede ser 1 o 2
-    pub tx_in_count: usize,
-    pub tx_in: Vec<TxInput>,
-    pub tx_out_count: usize,
-    pub tx_out: Vec<TxOutput>,
-    pub lock_time: u32,
-}
-
-#[derive(Debug)]
 pub struct CoinBaseInput {
     hash: [u8; 32],
     index: u32,
@@ -71,6 +61,15 @@ pub struct Outpoint {
     pub hash: [u8; 32],
     pub index: u32,
 }
+
+impl Outpoint {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
+        let hash = read_hash(cursor)?;
+        let index = read_u32(cursor)?;
+        Ok(Outpoint { hash, index })
+    }
+}
+
 #[derive(Debug)]
 pub struct TxInput {
     pub previous_output: Outpoint,
@@ -79,11 +78,84 @@ pub struct TxInput {
     pub sequence: u32,
 }
 
+impl TxInput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
+        let previous_output = Outpoint::from_bytes(cursor)?;
+        let script_bytes = read_from_varint(cursor)?;
+        let signature_script = read_coinbase_script(cursor, script_bytes as usize)?;
+        let sequence = read_u32(cursor)?;
+        
+        Ok(TxInput {
+            previous_output,
+            script_bytes: script_bytes as usize,
+            signature_script,
+            sequence,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct TxOutput {
     pub value: i64,
     pub pk_script_bytes: usize,
     pub pk_script: Vec<u8>,
+}
+
+impl TxOutput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
+        let value = read_i64(cursor)?;
+        let pk_script_bytes = read_from_varint(cursor)?;
+        let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
+
+        Ok(TxOutput {
+            value,
+            pk_script_bytes: pk_script_bytes as usize,
+            pk_script,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct RawTransaction {
+    pub version: i32, //Puede ser 1 o 2
+    pub tx_in_count: usize,
+    pub tx_in: Vec<TxInput>,
+    pub tx_out_count: usize,
+    pub tx_out: Vec<TxOutput>,
+    pub lock_time: u32,
+}
+
+//Ver https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
+impl RawTransaction {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
+        // read version - 4 bytes
+        let version = read_i32(cursor)?;
+
+        // read tx_in_count - compactSize uint
+        let tx_in_count = read_from_varint(cursor)? as usize;
+
+        // read tx_in - vec of txIn
+        let tx_in = TxInput::from_bytes(cursor)?;
+
+        // read tx_out_count - compactSize uint
+        let tx_out_count = read_from_varint(cursor)? as usize;
+
+        // read tx_out - vec of txOut
+        let tx_out = TxOutput::from_bytes(cursor)?;
+
+        // read lock_time - 4 bytes
+        let lock_time = read_u32(cursor)?;
+
+        let raw_transaction = RawTransaction {
+            version,
+            tx_in_count,
+            tx_in, // should be a vector
+            tx_out_count,
+            tx_out, // should be a vector
+            lock_time,
+        };
+        Ok(raw_transaction) // should return self
+    }
 }
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<u8>, std::io::Error> {
@@ -110,100 +182,12 @@ fn read_height(cursor: &mut Cursor<&[u8]>) -> Result<u32, std::io::Error> {
     Ok(u32::from_le_bytes(array))
 }
 
-//Ver https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
-impl RawTransaction {
-    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<(), std::io::Error> {
-        //Read RawTransaction
-        // https://developer.bitcoin.org/reference/transactions.html#:~:text=01000000%20...................................%20Version%0A%0A01,a%20block%20height)
-        let version = read_i32(cursor)?;
-        println!("the version is {:?}", &version);
-        let tx_in_count = read_from_varint(cursor)? as usize;
-        println!("the txn in count is {:?}", &tx_in_count);
-        let coinbase_input = CoinBaseInput::from_bytes(cursor)?; // <- inside
-                                                                 // from here it doesn't print
-        println!("the coinbase input is {:?}", coinbase_input);
-        let tx_out_count = read_from_varint(cursor)? as usize;
-        println!("El tx out count es {}", &tx_out_count);
+// tests
+#[cfg(test)]
+mod tests {
 
-        let mut tx_out = Vec::with_capacity(tx_out_count);
-        for _ in 0..tx_out_count {
-            let value = read_i64(cursor)?;
-            println!("El value es {}", &value);
-            let pk_script_bytes = read_from_varint(cursor)? as usize;
-            println!("El pk_script_bytes es {}", &pk_script_bytes);
-            let mut pk_script = vec![0u8; pk_script_bytes];
-            cursor.read(&mut pk_script)?; // <- dies here
-            println!("El pk_script es {:?}", &pk_script);
-            let output = TxOutput {
-                value: value,
-                pk_script_bytes: pk_script_bytes,
-                pk_script: pk_script,
-            };
-            tx_out.push(output);
-        }
-
-        let lock_time = read_u32(cursor)?;
-        println!("El lock_time es {}", &lock_time);
-        let mut tx_in = Vec::with_capacity(tx_in_count - 1);
-
-        for _ in 0..tx_in_count {
-            //read previous_output
-            let prev_output = Outpoint {
-                hash: read_hash(cursor)?,
-                index: read_u32(cursor)?,
-            };
-            println!("El hash es {:?}", &prev_output.hash);
-            println!("El index es {}", &prev_output.index);
-            //read script bytes
-            let script_bytes = read_from_varint(cursor)? as usize;
-            println!("El script bytes es {:?}", &script_bytes);
-            let mut signature_script = vec![0u8; script_bytes];
-            cursor.read_exact(&mut signature_script)?;
-            println!("El signature script bytes es {:?}", &signature_script);
-
-            let sequence = read_u32(cursor)?;
-            println!("El sequence es {}", &sequence);
-            let input = TxInput {
-                previous_output: prev_output,
-                script_bytes: script_bytes,
-                signature_script: signature_script,
-                sequence: sequence,
-            };
-            tx_in.push(input);
-        }
-
-        let tx_out_count = read_from_varint(cursor)? as usize;
-        println!("El tx out count es {}", &tx_out_count);
-
-        let mut tx_out = Vec::with_capacity(tx_out_count);
-        for _ in 0..tx_out_count {
-            let value = read_i64(cursor)?;
-            println!("El value es {}", &value);
-            let pk_script_bytes = read_from_varint(cursor)? as usize;
-            println!("El pk_script_bytes es {}", &pk_script_bytes);
-            let mut pk_script = vec![0u8; pk_script_bytes];
-            cursor.read_exact(&mut pk_script)?;
-            println!("El pk_script es {:?}", &pk_script);
-
-            let output = TxOutput {
-                value: value,
-                pk_script_bytes: pk_script_bytes,
-                pk_script: pk_script,
-            };
-            tx_out.push(output);
-        }
-
-        let lock_time = read_u32(cursor)?;
-        println!("El lock_time es {}", &lock_time);
-
-        // let actual_raw_txn = RawTransaction {
-        //     version: version,
-        //     tx_in_count: tx_in_count,
-        //     tx_in: tx_in,
-        //     tx_out_count: tx_out_count,
-        //     tx_out: tx_out,
-        //     lock_time: lock_time,
-        // };
-        Ok(())
+    #[test]
+    fn foo_tests() {
+        assert_eq!(1, 1);
     }
 }

@@ -11,6 +11,7 @@ pub struct SerializedBlocks {
     txns: RawTransaction,
 }
 
+// https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl SerializedBlocks {
     pub fn from_bytes(bytes: &[u8]) -> Result<(), io::Error> {
         let mut cursor = Cursor::new(bytes);
@@ -38,12 +39,10 @@ impl SerializedBlocks {
         println!("{:?}", actual_header);
         // Ok(actual_header)
 
-        //txn_count
-        let value = read_from_varint(&mut cursor)?;
-        println!("the txn count is {:?}", &value);
+        let txn_count = read_from_varint(&mut cursor)?;
+        println!("the txn count is {:?}", &txn_count);
 
-        //Raw transaction
-        let raw_transaction = RawTransaction::from_bytes(&mut cursor);
+        let txns = RawTransaction::from_bytes(&mut cursor);
 
         Ok(())
     }

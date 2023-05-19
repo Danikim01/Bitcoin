@@ -102,15 +102,16 @@ pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
     let ip_nodes = find_nodes()?;
     let mut nodes = Vec::new();
     for ip_addr in ip_nodes {
-        let stream = match handshake_node(ip_addr) {
-            Ok(stream) => stream,
-            Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
-            // Err(e) => return Err(e),
-            Err(e) => continue, // handle later
-        };
+        if ip_addr.is_ipv4() {
+            let stream = match handshake_node(ip_addr) {
+                Ok(stream) => stream,
+                Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
+                Err(e) => return Err(e),
+            };
 
-        nodes.push(stream);
-        // break;
+            nodes.push(stream);
+            break;
+        }
     }
     Ok(nodes)
 }
@@ -147,12 +148,12 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
         "Block headers read from file: {:?}",
         headers.block_headers.len()
     );
-    
-    // trim header to only first 10 for testing
-    headers.block_headers.truncate(10);
+
+    // truncate headers only to first one for testing
+    headers.block_headers.truncate(1);
     headers.count = headers.block_headers.len();
 
-    handle_getdata_message(&mut nodes[1], &headers)?;
+    handle_getdata_message(&mut nodes[0], &headers)?;
 
     ///todo this should be a parallel execution
     Ok(())
