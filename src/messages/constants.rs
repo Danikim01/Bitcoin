@@ -7,6 +7,9 @@ pub mod header_constants {
     pub const CHECKSUM_SIZE: usize = 4;
     pub const MAX_HEADER: usize = 2000;
 }
+pub mod messages {
+    pub const MAX_INV_SIZE: usize = 50000;
+}
 
 pub mod commands {
     pub const VERACK: &str = "verack\0\0\0\0\0\0";

@@ -53,7 +53,7 @@ impl BlockHeader {
             nbits,
             nonce,
         );
-        
+
         Ok(actual_header)
     }
 

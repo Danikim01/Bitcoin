@@ -1,4 +1,4 @@
-use crate::block_header::{BlockHeader, self};
+use crate::block_header::{self, BlockHeader};
 use crate::io::{self, Cursor};
 use crate::messages::utility::*;
 use crate::messages::GetHeader;

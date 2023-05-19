@@ -94,14 +94,17 @@ impl TxInput {
         })
     }
 
-    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, std::io::Error> {
+    pub fn vec_from_bytes(
+        cursor: &mut Cursor<&[u8]>,
+        count: usize,
+    ) -> Result<Vec<Self>, std::io::Error> {
         let mut tx_inputs: Vec<Self> = Vec::new();
 
         for _ in 0..count {
             let tx_input = Self::from_bytes(cursor)?;
             tx_inputs.push(tx_input);
         }
-        
+
         Ok(tx_inputs)
     }
 }
@@ -126,14 +129,17 @@ impl TxOutput {
         })
     }
 
-    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, std::io::Error> {
+    pub fn vec_from_bytes(
+        cursor: &mut Cursor<&[u8]>,
+        count: usize,
+    ) -> Result<Vec<Self>, std::io::Error> {
         let mut tx_outputs: Vec<Self> = Vec::new();
 
         for _ in 0..count {
             let tx_output = Self::from_bytes(cursor)?;
             tx_outputs.push(tx_output);
         }
-        
+
         Ok(tx_outputs)
     }
 }

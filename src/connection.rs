@@ -1,9 +1,11 @@
 use crate::block_header::BlockHeader;
 use crate::config::Config;
+use crate::messages::constants;
 use crate::messages::{
     GetData, GetHeader, Headers, InvType, Inventory, Message, MessageHeader, VerAck, Version,
 };
 use crate::serialized_blocks::SerializedBlocks;
+use crate::utility::bucket_vec;
 use std::{
     io,
     io::ErrorKind,
@@ -159,7 +161,13 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
         .retain(|header| header.timestamp > init_tp_timestamp);
     headers.count = headers.block_headers.len();
     // move code above to a headers method
-    handle_getdata_message(&mut nodes[0], &headers)?;
+
+    // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
+    let headers_buckets = bucket_vec(headers.block_headers, constants::messages::MAX_INV_SIZE);
+    for bucket in headers_buckets {
+        let headers_message = Headers::new(bucket.len(), bucket);
+        handle_getdata_message(&mut nodes[0], &headers_message)?;
+    }
 
     ///todo this should be a parallel execution
     Ok(())
