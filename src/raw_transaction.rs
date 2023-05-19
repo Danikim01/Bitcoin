@@ -149,9 +149,9 @@ impl RawTransaction {
         let raw_transaction = RawTransaction {
             version,
             tx_in_count,
-            tx_in, // should be a vector
+            tx_in: vec![], // should be a vector
             tx_out_count,
-            tx_out, // should be a vector
+            tx_out: vec![], // should be a vector
             lock_time,
         };
         Ok(raw_transaction) // should return self

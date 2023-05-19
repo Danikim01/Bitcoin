@@ -37,7 +37,6 @@ impl SerializedBlocks {
             nonce,
         );
         println!("{:?}", actual_header);
-        // Ok(actual_header)
 
         let txn_count = read_from_varint(&mut cursor)?;
         println!("the txn count is {:?}", &txn_count);
@@ -45,5 +44,20 @@ impl SerializedBlocks {
         let txns = RawTransaction::from_bytes(&mut cursor);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_read_serialized_block_from_bytes() {
+        // use block_message_payload.dat as bytes
+        let bytes = fs::read("./src/block_message_payload.dat").unwrap();
+        println!("{:?}", bytes);
+
+        // let serialized_blocks = SerializedBlocks::from_bytes(&bytes);
     }
 }
