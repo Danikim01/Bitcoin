@@ -90,12 +90,12 @@ impl GetData {
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         let count_a_enviar = to_varint(self.count as u64);
-        println!("El count a enviar es {:?}", &self.count);
+        // println!("El count a enviar es {:?}", &self.count);
         payload.extend(&count_a_enviar);
 
         for inv in &self.inventory {
             let inv_a_enviar = inv.to_bytes()?;
-            println!("El inventory a enviar es {:?}", &inv_a_enviar);
+            // println!("El inventory a enviar es {:?}", &inv_a_enviar);
             payload.extend(inv_a_enviar);
             // let mut hash_copy = inv.hash;
             // hash_copy.reverse();

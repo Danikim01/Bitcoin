@@ -93,17 +93,20 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<u8>,
 }
 
 fn read_height(cursor: &mut Cursor<&[u8]>) -> Result<u32, std::io::Error> {
-    if read_u8(cursor)? != 0x03 {
+    let height_bytes = read_u8(cursor)?;
+    if height_bytes != 0x03 && height_bytes != 0x04 {
+        println!("uipsee");
         return Err(std::io::Error::new(
             ErrorKind::Unsupported,
             "Height unsupported",
         ));
     }
-    let mut array = [0u8; 4];
+
+    let mut array = [0u8; 4]; // 00[0][1][2] or [0][1][2]00?
+
     array[0] = read_u8(cursor)?;
     array[1] = read_u8(cursor)?;
     array[2] = read_u8(cursor)?;
-
     Ok(u32::from_le_bytes(array))
 }
 
@@ -111,11 +114,13 @@ fn read_height(cursor: &mut Cursor<&[u8]>) -> Result<u32, std::io::Error> {
 impl RawTransaction {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<(), std::io::Error> {
         //Read RawTransaction
+        // https://developer.bitcoin.org/reference/transactions.html#:~:text=01000000%20...................................%20Version%0A%0A01,a%20block%20height)
         let version = read_i32(cursor)?;
         println!("the version is {:?}", &version);
         let tx_in_count = read_from_varint(cursor)? as usize;
         println!("the txn in count is {:?}", &tx_in_count);
-        let coinbase_input = CoinBaseInput::from_bytes(cursor)?;
+        let coinbase_input = CoinBaseInput::from_bytes(cursor)?; // <- inside
+                                                                 // from here it doesn't print
         println!("the coinbase input is {:?}", coinbase_input);
         let tx_out_count = read_from_varint(cursor)? as usize;
         println!("El tx out count es {}", &tx_out_count);
@@ -127,9 +132,8 @@ impl RawTransaction {
             let pk_script_bytes = read_from_varint(cursor)? as usize;
             println!("El pk_script_bytes es {}", &pk_script_bytes);
             let mut pk_script = vec![0u8; pk_script_bytes];
-            cursor.read_exact(&mut pk_script)?;
+            cursor.read(&mut pk_script)?; // <- dies here
             println!("El pk_script es {:?}", &pk_script);
-
             let output = TxOutput {
                 value: value,
                 pk_script_bytes: pk_script_bytes,
@@ -140,7 +144,6 @@ impl RawTransaction {
 
         let lock_time = read_u32(cursor)?;
         println!("El lock_time es {}", &lock_time);
-
         let mut tx_in = Vec::with_capacity(tx_in_count - 1);
 
         for _ in 0..tx_in_count {
@@ -153,8 +156,7 @@ impl RawTransaction {
             println!("El index es {}", &prev_output.index);
             //read script bytes
             let script_bytes = read_from_varint(cursor)? as usize;
-            println!("El script bytes es {}", &script_bytes);
-
+            println!("El script bytes es {:?}", &script_bytes);
             let mut signature_script = vec![0u8; script_bytes];
             cursor.read_exact(&mut signature_script)?;
             println!("El signature script bytes es {:?}", &signature_script);

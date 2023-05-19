@@ -10,7 +10,6 @@ use std::{
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
 
-
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
     node_discovery_hostname.to_socket_addrs()
@@ -70,18 +69,16 @@ fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData {
 
 fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<(), io::Error> {
     let get_data = build_getdata(&header.count, &header.block_headers);
-    println!("Sending GetData message: {:?}", &get_data);
+    // println!("Sending GetData message: {:?}", &get_data);
     get_data.send_to(stream)?;
-
     let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
     println!(
         "Peer responded with headers message of payload size: {:?}",
         block_message.payload_size
     );
     let data_blocks = block_message.read_payload(stream)?;
-    println!("data blocks are {:?}", data_blocks);
+    // println!("data blocks are {:?}", data_blocks);
     let block_message_data = SerializedBlocks::from_bytes(&data_blocks);
-
     Ok(())
 }
 
@@ -108,50 +105,56 @@ pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
         let stream = match handshake_node(ip_addr) {
             Ok(stream) => stream,
             Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
-            Err(e) => return Err(e),
+            // Err(e) => return Err(e),
+            Err(e) => continue, // handle later
         };
 
         nodes.push(stream);
-        break;
+        // break;
     }
     Ok(nodes)
 }
 
-pub fn find_best_chain(nodes: &mut Vec <TcpStream>) -> Result<Headers, io::Error>{
-
+pub fn find_best_chain(nodes: &mut Vec<TcpStream>) -> Result<Headers, io::Error> {
     let sync_node = &mut nodes[0];
-    let mut headers = handle_headers_message( sync_node)?;
+    let mut headers = handle_headers_message(sync_node)?;
 
-
-    for mut node in nodes{
+    for mut node in nodes {
         headers.read_all_headers(&mut node)?;
     }
 
     Ok(headers)
 }
 
-pub fn initial_sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error>{
-
+pub fn initial_sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     let headers = find_best_chain(nodes)?;
     headers.save_to_file("src/headers.dat")?;
 
-    println!("Block headers read from file: {:?}", headers.block_headers.len());
+    println!(
+        "Block headers read from file: {:?}",
+        headers.block_headers.len()
+    );
     handle_getdata_message(&mut nodes[0], &headers)?;
 
     ///todo this should be a parallel execution
-
     Ok(())
 }
 
-pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error>{
+pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
+    let mut headers = Headers::from_file("src/headers_backup.dat")?;
 
-    let headers = Headers::from_file("src/headers_backup.dat")?;
+    println!(
+        "Block headers read from file: {:?}",
+        headers.block_headers.len()
+    );
+    
+    // trim header to only first 10 for testing
+    headers.block_headers.truncate(10);
+    headers.count = headers.block_headers.len();
 
-    println!("Block headers read from file: {:?}", headers.block_headers.len());
-    handle_getdata_message(&mut nodes[0], &headers)?;
+    handle_getdata_message(&mut nodes[1], &headers)?;
 
     ///todo this should be a parallel execution
-
     Ok(())
 }
 
