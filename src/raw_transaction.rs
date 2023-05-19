@@ -2,6 +2,7 @@ use crate::io::Cursor;
 use crate::messages::utility::*;
 use std::io::ErrorKind;
 use std::io::Read;
+use std::vec;
 
 #[derive(Debug)]
 pub struct CoinBaseInput {
@@ -84,13 +85,24 @@ impl TxInput {
         let script_bytes = read_from_varint(cursor)?;
         let signature_script = read_coinbase_script(cursor, script_bytes as usize)?;
         let sequence = read_u32(cursor)?;
-        
+
         Ok(TxInput {
             previous_output,
             script_bytes: script_bytes as usize,
             signature_script,
             sequence,
         })
+    }
+
+    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, std::io::Error> {
+        let mut tx_inputs: Vec<Self> = Vec::new();
+
+        for _ in 0..count {
+            let tx_input = Self::from_bytes(cursor)?;
+            tx_inputs.push(tx_input);
+        }
+        
+        Ok(tx_inputs)
     }
 }
 
@@ -113,6 +125,17 @@ impl TxOutput {
             pk_script,
         })
     }
+
+    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, std::io::Error> {
+        let mut tx_outputs: Vec<Self> = Vec::new();
+
+        for _ in 0..count {
+            let tx_output = Self::from_bytes(cursor)?;
+            tx_outputs.push(tx_output);
+        }
+        
+        Ok(tx_outputs)
+    }
 }
 
 #[derive(Debug)]
@@ -128,33 +151,22 @@ pub struct RawTransaction {
 //Ver https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
 impl RawTransaction {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
-        // read version - 4 bytes
         let version = read_i32(cursor)?;
-
-        // read tx_in_count - compactSize uint
         let tx_in_count = read_from_varint(cursor)? as usize;
-
-        // read tx_in - vec of txIn
-        let tx_in = TxInput::from_bytes(cursor)?;
-
-        // read tx_out_count - compactSize uint
+        let tx_in = TxInput::vec_from_bytes(cursor, tx_in_count)?;
         let tx_out_count = read_from_varint(cursor)? as usize;
-
-        // read tx_out - vec of txOut
-        let tx_out = TxOutput::from_bytes(cursor)?;
-
-        // read lock_time - 4 bytes
+        let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count)?;
         let lock_time = read_u32(cursor)?;
 
         let raw_transaction = RawTransaction {
             version,
             tx_in_count,
-            tx_in: vec![], // should be a vector
+            tx_in,
             tx_out_count,
-            tx_out: vec![], // should be a vector
+            tx_out,
             lock_time,
         };
-        Ok(raw_transaction) // should return self
+        Ok(raw_transaction)
     }
 }
 

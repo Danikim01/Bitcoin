@@ -74,17 +74,14 @@ fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<()
     // println!("Sending GetData message: {:?}", &get_data);
     get_data.send_to(stream)?;
     let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
-    println!(
-        "Peer responded with headers message of payload size: {:?}",
-        block_message.payload_size
-    );
     let data_blocks = block_message.read_payload(stream)?;
-    
+
     // save data_blicks to file
     // let mut save_stream = File::create("src/block_message_payload.dat")?;
     // save_stream.write_all(&data_blocks)?;
 
-    let block_message_data = SerializedBlocks::from_bytes(&data_blocks);
+    let block_message_data = SerializedBlocks::from_bytes(&data_blocks)?;
+    println!("Block message data: {:?}", block_message_data);
     Ok(())
 }
 
@@ -150,15 +147,18 @@ pub fn initial_sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
 pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     let mut headers = Headers::from_file("src/headers_backup.dat")?;
 
-    println!(
-        "Block headers read from file: {:?}",
-        headers.block_headers.len()
-    );
+    // println!(
+    //     "Block headers read from file: {:?}",
+    //     headers.block_headers.len()
+    // );
 
-    // truncate headers only to first one for testing
-    headers.block_headers.truncate(1);
+    // keep only headers than are more recent than specified timestamp
+    let init_tp_timestamp = 1681095600; // 2023-04-10 00:00:00 - move to config file
+    headers
+        .block_headers
+        .retain(|header| header.timestamp > init_tp_timestamp);
     headers.count = headers.block_headers.len();
-
+    // move code above to a headers method
     handle_getdata_message(&mut nodes[0], &headers)?;
 
     ///todo this should be a parallel execution

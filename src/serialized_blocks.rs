@@ -1,4 +1,4 @@
-use crate::block_header::BlockHeader;
+use crate::block_header::{BlockHeader, self};
 use crate::io::{self, Cursor};
 use crate::messages::utility::*;
 use crate::messages::GetHeader;
@@ -13,37 +13,18 @@ pub struct SerializedBlocks {
 
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl SerializedBlocks {
-    pub fn from_bytes(bytes: &[u8]) -> Result<(), io::Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
-        // let block_header = BlockHeader::from_bytes(&mut cursor);
-        // println!("{:?}", block_header);
-        let version = read_i32(&mut cursor)?;
-        let prev_block_hash = read_hash(&mut cursor)?;
-        let merkle_root_hash = read_hash(&mut cursor)?;
-        let timestamp = read_u32(&mut cursor)?;
-        let nbits = read_u32(&mut cursor)?;
-        let nonce = read_u32(&mut cursor)?;
-
-        // let mut array = [0u8; 1];
-        // cursor.read_exact(&mut array)?;
-
-        let actual_header = BlockHeader::new(
-            version,
-            prev_block_hash,
-            merkle_root_hash,
-            timestamp,
-            nbits,
-            nonce,
-        );
-        println!("{:?}", actual_header);
-
+        let block_header = BlockHeader::from_bytes(&mut cursor)?;
         let txn_count = read_from_varint(&mut cursor)?;
-        println!("the txn count is {:?}", &txn_count);
+        let txns = RawTransaction::from_bytes(&mut cursor)?;
 
-        let txns = RawTransaction::from_bytes(&mut cursor);
-
-        Ok(())
+        Ok(SerializedBlocks {
+            block_header,
+            txn_count: txn_count as usize,
+            txns,
+        })
     }
 }
 
@@ -54,10 +35,9 @@ mod tests {
 
     #[test]
     fn test_read_serialized_block_from_bytes() {
-        // use block_message_payload.dat as bytes
         let bytes = fs::read("./src/block_message_payload.dat").unwrap();
-        println!("{:?}", bytes);
 
-        // let serialized_blocks = SerializedBlocks::from_bytes(&bytes);
+        let serialized_blocks = SerializedBlocks::from_bytes(&bytes).unwrap();
+        println!("\n{:?}", serialized_blocks);
     }
 }

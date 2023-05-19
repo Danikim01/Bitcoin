@@ -35,6 +35,10 @@ impl BlockHeader {
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
         let version = read_i32(cursor)?;
+        if version > 4 {
+            println!("\x1b[93mWARNING: version: {:?} is unknown\x1b[0m", version);
+        }
+
         let prev_block_hash = read_hash(cursor)?;
         let merkle_root_hash = read_hash(cursor)?;
         let timestamp = read_u32(cursor)?;
