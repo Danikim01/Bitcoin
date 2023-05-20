@@ -13,18 +13,21 @@ pub struct SerializedBlocks {
 
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl SerializedBlocks {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<SerializedBlocks, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         let block_header = BlockHeader::from_bytes(&mut cursor)?;
         let txn_count = read_from_varint(&mut cursor)?;
         let txns = RawTransaction::from_bytes(&mut cursor)?;
 
-        Ok(SerializedBlocks {
+        let serialized_block = SerializedBlocks {
             block_header,
             txn_count: txn_count as usize,
             txns,
-        })
+        };
+
+        Ok(serialized_block)
+
     }
 }
 

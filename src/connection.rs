@@ -11,6 +11,9 @@ use std::{
     io::ErrorKind,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
+use crate::pool::ThreadPool;
+use std::thread;
+
 // use std::fs::File; // used only to store read bytes in a file
 // use std::io::Write; // used only to store read bytes in a file
 
@@ -84,6 +87,7 @@ fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<()
 
     let block_message_data = SerializedBlocks::from_bytes(&data_blocks)?;
     println!("Block message data: {:?}", block_message_data);
+
     Ok(())
 }
 
@@ -162,12 +166,50 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     headers.count = headers.block_headers.len();
     // move code above to a headers method
 
+
+    let mut discrepancy_count = 0;
+
+    for i in 1..headers.count{
+        let prev_block_hash = headers.block_headers[i].prev_block_hash;
+        let hash_block_header = headers.block_headers[i - 1].hash_block_header();
+
+        if prev_block_hash != hash_block_header {
+            discrepancy_count += 1;
+        }
+    }
+
+    if discrepancy_count == 0 {
+        println!("Todos los bloques cumplen con la igualdad.");
+    } else {
+        println!("Se encontraron {} discrepancias en la igualdad entre bloques.", discrepancy_count);
+    }
+
+    
     // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
     let headers_buckets = bucket_vec(headers.block_headers, constants::messages::MAX_INV_SIZE);
+    
     for bucket in headers_buckets {
         let headers_message = Headers::new(bucket.len(), bucket);
         handle_getdata_message(&mut nodes[0], &headers_message)?;
     }
+
+
+    // Crear un ThreadPool con el número de hilos igual a la cantidad de nodos
+    // let pool = ThreadPool::new(nodes.len());
+
+    // // Iterar sobre los nodos y ejecutar las solicitudes en paralelo
+    // for stream in nodes {
+    //     pool.execute(|| {
+    //         for bucket in headers_buckets {
+    //             let headers_message = Headers::new(bucket.len(), bucket);
+    //             handle_getdata_message(&mut stream, &headers_message).unwrap();
+    //         }
+    //     });
+    // }
+
+    // // Esperar a que todas las solicitudes se completen
+    // pool.join();
+
 
     ///todo this should be a parallel execution
     Ok(())
