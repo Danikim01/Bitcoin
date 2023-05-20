@@ -109,6 +109,7 @@ pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
     let ip_nodes = find_nodes()?;
     let mut nodes = Vec::new();
     for ip_addr in ip_nodes {
+        
         if ip_addr.is_ipv4() {
             let stream = match handshake_node(ip_addr) {
                 Ok(stream) => stream,
