@@ -1,5 +1,4 @@
 use crate::messages::Message;
-use crate::serialized_blocks::SerializedBlocks;
 use std::io::Write;
 use std::net::TcpStream;
 

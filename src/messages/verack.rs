@@ -1,7 +1,6 @@
 use crate::messages::constants::commands::VERACK;
 use crate::messages::{Message, MessageHeader};
-use std::io::Cursor;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::net::TcpStream;
 
 #[derive(Debug)]

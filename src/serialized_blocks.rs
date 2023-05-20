@@ -1,7 +1,6 @@
-use crate::block_header::{self, BlockHeader};
+use crate::block_header::BlockHeader;
 use crate::io::{self, Cursor};
 use crate::messages::utility::*;
-use crate::messages::GetHeader;
 use crate::raw_transaction::{Outpoint, RawTransaction, TxInput, TxOutput};
 
 #[derive(Debug)]

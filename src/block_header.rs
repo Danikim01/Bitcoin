@@ -1,7 +1,6 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
 use bitcoin_hashes::{sha256, Hash};
-use std::io::Read;
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone)]

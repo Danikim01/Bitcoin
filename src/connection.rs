@@ -5,17 +5,12 @@ use crate::messages::{
     GetData, GetHeader, Headers, InvType, Inventory, Message, MessageHeader, VerAck, Version,
 };
 use crate::serialized_blocks::SerializedBlocks;
-use crate::utility::bucket_vec;
+use crate::utility::to_max_len_buckets;
 use std::{
     io,
     io::ErrorKind,
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
-use crate::pool::ThreadPool;
-use std::thread;
-use std::sync::Arc;
-use std::sync::Mutex;
-
 
 // use std::fs::File; // used only to store read bytes in a file
 // use std::io::Write; // used only to store read bytes in a file
@@ -62,7 +57,7 @@ fn handle_headers_message(stream: &mut TcpStream) -> Result<Headers, io::Error> 
     Ok(headers)
 }
 
-fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData {
+fn build_getdata(count: usize, block_headers: Vec<BlockHeader>) -> GetData {
     let mut inventory_vector: Vec<Inventory> = Vec::new();
 
     for block_header in block_headers {
@@ -74,11 +69,11 @@ fn build_getdata(count: &usize, block_headers: &Vec<BlockHeader>) -> GetData {
         ));
     }
 
-    GetData::new(*count, inventory_vector)
+    GetData::new(count, inventory_vector)
 }
 
-fn handle_getdata_message(stream: &mut TcpStream, header: &Headers) -> Result<(), io::Error> {
-    let get_data = build_getdata(&header.count, &header.block_headers);
+fn handle_getdata_message(stream: &mut TcpStream, headers: Vec<BlockHeader>) -> Result<(), io::Error> {
+    let get_data = build_getdata(headers.len(), headers);
     // println!("Sending GetData message: {:?}", &get_data);
     get_data.send_to(stream)?;
     let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
@@ -110,7 +105,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     Ok(stream)
 }
 
-pub fn connect_to_network() -> Result<(), io::Error> {
+pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
     let ip_nodes = find_nodes()?;
     let mut nodes = Vec::new();
     for ip_addr in ip_nodes {
@@ -118,68 +113,12 @@ pub fn connect_to_network() -> Result<(), io::Error> {
             let stream = match handshake_node(ip_addr) {
                 Ok(stream) => stream,
                 Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
-                Err(e) => continue,
+                Err(..) => continue,
             };
-
             nodes.push(stream);
-            //break;
         }
     }
-
-
-    let mut headers = Headers::from_file("src/headers_backup.dat")?;
-    // println!(
-    //     "Block headers read from file: {:?}",
-    //     headers.block_headers.len()
-    // );
-
-    // keep only headers than are more recent than specified timestamp
-    let init_tp_timestamp = 1681095600; // 2023-04-10 00:00:00 - move to config file
-    headers
-        .block_headers
-        .retain(|header| header.timestamp > init_tp_timestamp);
-    headers.count = headers.block_headers.len();
-    // move code above to a headers method
-
-
-    let mut discrepancy_count = 0;
-
-    for i in 1..headers.count{
-        let prev_block_hash = headers.block_headers[i].prev_block_hash;
-        let hash_block_header = headers.block_headers[i - 1].hash_block_header();
-
-        if prev_block_hash != hash_block_header {
-            discrepancy_count += 1;
-        }
-    }
-
-    if discrepancy_count == 0 {
-        println!("Todos los bloques cumplen con la igualdad.");
-    } else {
-        println!("Se encontraron {} discrepancias en la igualdad entre bloques.", discrepancy_count);
-    }
-
-    
-    // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
-    //let headers_buckets = bucket_vec(headers.block_headers, constants::messages::MAX_INV_SIZE);
-    
-    //Crear un ThreadPool con el número de hilos igual a la cantidad de nodos
-    println!("La cantidad de nodos son {}",nodes.len());
-    let pool = ThreadPool::new(nodes.len());
-    let headers_clone = Arc::new(headers);
-
-    for mut stream in nodes {
-        println!("El thread se da con el stream:{:?}",&stream);
-        let h = Arc::clone(&headers_clone);
-
-        pool.execute(move || {
-            let h = Arc::clone(&h);
-            if let Err(err) = handle_getdata_message(&mut stream, &h) {
-                eprintln!("Error occurred: {:?}", err);
-            }
-        });
-    }
-    Ok(())
+    Ok(nodes)
 }
 
 pub fn find_best_chain(nodes: &mut Vec<TcpStream>) -> Result<Headers, io::Error> {
@@ -195,20 +134,20 @@ pub fn find_best_chain(nodes: &mut Vec<TcpStream>) -> Result<Headers, io::Error>
 
 pub fn initial_sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     let headers = find_best_chain(nodes)?;
-    headers.save_to_file("src/headers.dat")?;
+    headers.save_to_file("tmp/headers.dat")?;
 
     println!(
         "Block headers read from file: {:?}",
         headers.block_headers.len()
     );
-    handle_getdata_message(&mut nodes[0], &headers)?;
+    handle_getdata_message(&mut nodes[0], headers.block_headers)?;
 
     ///todo this should be a parallel execution
     Ok(())
 }
 
-pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
-    let mut headers = Headers::from_file("src/headers_backup.dat")?;
+pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<&mut Vec<TcpStream>, io::Error> {
+    let mut headers = Headers::from_file("tmp/headers_backup.dat")?;
 
     // println!(
     //     "Block headers read from file: {:?}",
@@ -223,9 +162,7 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     headers.count = headers.block_headers.len();
     // move code above to a headers method
 
-
     let mut discrepancy_count = 0;
-
     for i in 1..headers.count{
         let prev_block_hash = headers.block_headers[i].prev_block_hash;
         let hash_block_header = headers.block_headers[i - 1].hash_block_header();
@@ -240,23 +177,30 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     } else {
         println!("Se encontraron {} discrepancias en la igualdad entre bloques.", discrepancy_count);
     }
-
     
     // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
-    let headers_buckets = bucket_vec(headers.block_headers, constants::messages::MAX_INV_SIZE);
-    
-
-
-    
+    let headers_buckets = to_max_len_buckets(headers.block_headers, constants::messages::MAX_INV_SIZE);
     for bucket in headers_buckets {
-        let headers_message = Headers::new(bucket.len(), bucket);
-        handle_getdata_message(&mut nodes[0], &headers_message)?;
+        handle_getdata_message(&mut nodes[0], bucket)?;
     }
+    
+    //Crear un ThreadPool con el número de hilos igual a la cantidad de nodos
+    //println!("La cantidad de nodos son {}",nodes.len());
+    //let pool = ThreadPool::new(nodes.len());
+    //let chunks_of_headers = to_n_chunks(headers.block_headers, nodes.len());
+    //for (node_num, chunk) in chunks_of_headers.into_iter().enumerate() {
+    //    let node = &mut nodes[node_num];
+    //    pool.execute(move || {
+    //        let buckets = to_max_len_buckets(chunk, constants::messages::MAX_INV_SIZE);
+    //        for bucket in buckets {
+    //            if let Err(err) = handle_getdata_message(&mut node, bucket) {
+    //                eprintln!("Error downloading blocks with getdata: {:?}", err);
+    //            }
+    //        }
+    //    });
+    //}
 
-
-
-    ///todo this should be a parallel execution
-    Ok(())
+    Ok(nodes)
 }
 
 #[cfg(test)]

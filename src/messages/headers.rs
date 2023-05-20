@@ -5,7 +5,7 @@ use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRea
 use crate::messages::{GetHeader, Message, MessageHeader};
 use std::fs;
 use std::fs::File;
-use std::io::{self, Cursor, Error, Write};
+use std::io::{Cursor, Error, Write};
 use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
