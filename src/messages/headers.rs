@@ -10,7 +10,7 @@ use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Headers {
     pub count: usize, //Es un Compact size uint
     pub block_headers: Vec<BlockHeader>,

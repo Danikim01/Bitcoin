@@ -13,6 +13,9 @@ use std::{
 };
 use crate::pool::ThreadPool;
 use std::thread;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 
 // use std::fs::File; // used only to store read bytes in a file
 // use std::io::Write; // used only to store read bytes in a file
@@ -107,7 +110,7 @@ fn handshake_node(node_addr: SocketAddr) -> Result<TcpStream, io::Error> {
     Ok(stream)
 }
 
-pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
+pub fn connect_to_network() -> Result<(), io::Error> {
     let ip_nodes = find_nodes()?;
     let mut nodes = Vec::new();
     for ip_addr in ip_nodes {
@@ -115,14 +118,68 @@ pub fn connect_to_network() -> Result<Vec<TcpStream>, io::Error> {
             let stream = match handshake_node(ip_addr) {
                 Ok(stream) => stream,
                 Err(ref e) if e.kind() == ErrorKind::Unsupported => continue,
-                Err(e) => return Err(e),
+                Err(e) => continue,
             };
 
             nodes.push(stream);
-            break;
+            //break;
         }
     }
-    Ok(nodes)
+
+
+    let mut headers = Headers::from_file("src/headers_backup.dat")?;
+    // println!(
+    //     "Block headers read from file: {:?}",
+    //     headers.block_headers.len()
+    // );
+
+    // keep only headers than are more recent than specified timestamp
+    let init_tp_timestamp = 1681095600; // 2023-04-10 00:00:00 - move to config file
+    headers
+        .block_headers
+        .retain(|header| header.timestamp > init_tp_timestamp);
+    headers.count = headers.block_headers.len();
+    // move code above to a headers method
+
+
+    let mut discrepancy_count = 0;
+
+    for i in 1..headers.count{
+        let prev_block_hash = headers.block_headers[i].prev_block_hash;
+        let hash_block_header = headers.block_headers[i - 1].hash_block_header();
+
+        if prev_block_hash != hash_block_header {
+            discrepancy_count += 1;
+        }
+    }
+
+    if discrepancy_count == 0 {
+        println!("Todos los bloques cumplen con la igualdad.");
+    } else {
+        println!("Se encontraron {} discrepancias en la igualdad entre bloques.", discrepancy_count);
+    }
+
+    
+    // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
+    //let headers_buckets = bucket_vec(headers.block_headers, constants::messages::MAX_INV_SIZE);
+    
+    //Crear un ThreadPool con el número de hilos igual a la cantidad de nodos
+    println!("La cantidad de nodos son {}",nodes.len());
+    let pool = ThreadPool::new(nodes.len());
+    let headers_clone = Arc::new(headers);
+
+    for mut stream in nodes {
+        println!("El thread se da con el stream:{:?}",&stream);
+        let h = Arc::clone(&headers_clone);
+
+        pool.execute(move || {
+            let h = Arc::clone(&h);
+            if let Err(err) = handle_getdata_message(&mut stream, &h) {
+                eprintln!("Error occurred: {:?}", err);
+            }
+        });
+    }
+    Ok(())
 }
 
 pub fn find_best_chain(nodes: &mut Vec<TcpStream>) -> Result<Headers, io::Error> {
@@ -188,27 +245,14 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
     // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
     let headers_buckets = bucket_vec(headers.block_headers, constants::messages::MAX_INV_SIZE);
     
+
+
+    
     for bucket in headers_buckets {
         let headers_message = Headers::new(bucket.len(), bucket);
         handle_getdata_message(&mut nodes[0], &headers_message)?;
     }
 
-
-    // Crear un ThreadPool con el número de hilos igual a la cantidad de nodos
-    // let pool = ThreadPool::new(nodes.len());
-
-    // // Iterar sobre los nodos y ejecutar las solicitudes en paralelo
-    // for stream in nodes {
-    //     pool.execute(|| {
-    //         for bucket in headers_buckets {
-    //             let headers_message = Headers::new(bucket.len(), bucket);
-    //             handle_getdata_message(&mut stream, &headers_message).unwrap();
-    //         }
-    //     });
-    // }
-
-    // // Esperar a que todas las solicitudes se completen
-    // pool.join();
 
 
     ///todo this should be a parallel execution
