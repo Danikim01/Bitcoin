@@ -7,7 +7,9 @@ mod raw_transaction;
 mod serialized_blocks;
 mod utility;
 fn main() -> Result<(), io::Error> {
-    let (mut nodes, _mpsc_reader) = connection::connect_to_network()?;
-    connection::sync(&mut nodes)?;
+
+    let controller = connection::NetworkController::connect_to_network()?;
+    println!("Connected to network, starting sync");
+    controller.initial_block_download()?;
     Ok(())
 }

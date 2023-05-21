@@ -4,7 +4,7 @@ use bitcoin_hashes::{sha256, Hash};
 use std::io::ErrorKind::InvalidData;
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BlockHeader {
     pub version: i32,
     pub prev_block_hash: [u8; 32],
@@ -104,7 +104,7 @@ impl BlockHeader {
     fn nbits_to_target(nbits: u32) -> [u8; 32] {
         let exponent = (nbits >> 24) as usize;
         let significand = nbits & 0x00FFFFFF;
-        
+
         let significand_bytes = significand.to_be_bytes();
         let right_padding = vec![0u8; exponent - 3];
         let target = significand_bytes

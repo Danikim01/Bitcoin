@@ -3,21 +3,23 @@ use bitcoin_hashes::Hash;
 use std::io;
 mod block_header;
 pub(crate) mod constants;
-mod getdata;
-mod getheader;
+mod getdata_message;
+mod getheader_message;
 mod headers;
-mod message_headers;
+mod headers_message;
 pub mod utility;
-mod verack;
-mod version;
+mod verack_message;
+mod version_message;
 
 pub use block_header::BlockHeader;
-pub use getdata::{GetData, InvType, Inventory};
-pub use getheader::GetHeader;
-pub use headers::Headers;
-pub use message_headers::MessageHeader;
-pub use verack::VerAck;
-pub use version::Version;
+pub use getdata_message::{GetData, InvType, Inventory};
+pub use getheader_message::GetHeader;
+pub use headers::MessageHeader;
+pub use headers_message::Headers;
+pub use verack_message::VerAck;
+pub use version_message::Version;
+
+pub type HashId = [u8;32];
 
 #[derive(Debug, Clone, Copy)]
 pub struct Services {
@@ -81,8 +83,26 @@ fn get_command(cmd: &str) -> [u8; 12] {
     command
 }
 
-pub trait Message {
+pub enum Message {
+    GetData(GetData),
+    GetHeader(GetHeader),
+    Headers(Headers),
+    VerAck(VerAck),
+    Version(Version),
+}
+
+pub trait Serialize {
     fn serialize(&self) -> io::Result<Vec<u8>>;
+
+    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error>
+    where
+        Self: Sized,
+    {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Incoming message not supported",
+        ))
+    }
 
     /// Builds message appending header with optional payload
     /// https://developer.bitcoin.org/reference/p2p_networking.html#message-headers

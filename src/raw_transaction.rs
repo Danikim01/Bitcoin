@@ -1,8 +1,11 @@
 use crate::io::Cursor;
-use crate::messages::utility::*;
+use crate::messages::{HashId, utility::{EndianRead, read_hash, read_from_varint}};
 use std::io::{Error, Read};
 
-fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<u8>, std::io::Error> {
+fn read_coinbase_script(
+    cursor: &mut Cursor<&[u8]>,
+    count: usize,
+) -> Result<Vec<u8>, std::io::Error> {
     let mut array = vec![0_u8; count];
     cursor.read_exact(&mut array)?;
     Ok(array)
@@ -10,7 +13,7 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<
 
 #[derive(Debug)]
 pub struct CoinBaseInput {
-    hash: [u8; 32],
+    hash: HashId,
     index: u32,
     script_bytes: u64,
     height: u32,
@@ -24,7 +27,7 @@ impl CoinBaseInput {
         let index = u32::from_le_stream(cursor)?;
         let script_bytes = read_from_varint(cursor)?;
         let height = u32::from_le_stream(cursor)?;
-        let coinbase_script = read_coinbase_script(cursor, (script_bytes-4) as usize)?;
+        let coinbase_script = read_coinbase_script(cursor, (script_bytes - 4) as usize)?;
         let sequence = u32::from_le_stream(cursor)?;
 
         let coinbase_input = CoinBaseInput {

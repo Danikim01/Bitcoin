@@ -1,163 +1,132 @@
-use crate::messages::constants::commands::HEADER;
-use crate::messages::constants::header_constants::MAX_HEADER;
-use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
-use crate::messages::{BlockHeader, GetHeader, Message, MessageHeader};
-use crate::node::Node;
-use std::fs;
-use std::fs::File;
-use std::io::{Cursor, Error, Write};
+use crate::messages::constants::commands::UNKNOWN;
+use crate::messages::constants::header_constants::*;
+use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
 
-//https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
-//https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
-#[derive(Debug, Clone)]
-pub struct Headers {
-    pub count: usize, //Es un Compact size uint
-    pub block_headers: Vec<BlockHeader>,
+#[derive(Debug)]
+pub struct MessageHeader {
+    pub start_string: [u8; START_STRING_SIZE],
+    pub command_name: String,
+    pub payload_size: u32,
+    pub checksum: [u8; CHECKSUM_SIZE],
 }
 
-impl Headers {
-    pub fn new(count: usize, block_headers: Vec<BlockHeader>) -> Self {
+impl Default for MessageHeader {
+    fn default() -> Self {
+        let start_string = [0, 0, 0, 0];
+        let command_name = UNKNOWN.to_string();
+        let payload_size = 0;
+        let checksum = [0, 0, 0, 0];
+
+        MessageHeader::new(start_string, command_name, payload_size, checksum)
+    }
+}
+
+impl MessageHeader {
+    fn new(
+        start_string: [u8; START_STRING_SIZE],
+        command_name: String,
+        payload_size: u32,
+        checksum: [u8; CHECKSUM_SIZE],
+    ) -> Self {
         Self {
-            count,
-            block_headers,
+            start_string,
+            command_name,
+            payload_size,
+            checksum,
         }
     }
 
-    pub fn default() -> Self {
-        Self {
-            count: 0,
-            block_headers: Vec::new(),
-        }
-    }
-
-    pub fn trim_timestamp(&mut self, timestamp: u32) -> Result<Self, Error> {
-        self
-            .block_headers
-            .retain(|header| header.timestamp > timestamp);
-        self.count = self.block_headers.len();
-
-        Ok(self.clone())
-    }
-
-    pub fn is_last_header(&self) -> bool {
-        self.count % MAX_HEADER != 0
-    }
-
-    fn last_header(&self) -> &BlockHeader {
-        &self.block_headers[self.block_headers.len() - 1]
-    }
-
-    pub fn last_header_hash(&self) -> [u8; 32] {
-        self.last_header().hash_block_header()
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Headers, Error> {
-        let mut header = Headers::default();
-        //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
-        //hash_headers.insert([0_u8; 32], BlockHeader::default());
-        header.add_from_bytes(bytes)?;
-
-        Ok(header)
-    }
-
-    pub fn from_stream(stream: &mut TcpStream) -> Result<Headers, Error> {
-        let mut header = Headers::default();
-        //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
-        //hash_headers.insert([0_u8; 32], BlockHeader::default());
-        header.add_from_stream(stream)?;
-
-        Ok(header)
-    }
-
-    pub fn from_file(file_name: &str) -> Result<Headers, Error> {
-        let headers_bytes = fs::read(file_name)?;
-        Headers::from_bytes(&headers_bytes)
-    }
-
-    fn add_from_bytes(&mut self, bytes: &[u8]) -> Result<u64, Error> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<MessageHeader, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
-        let count = read_from_varint(&mut cursor)?;
-        for _block_num in 0..count {
-            let version = i32::from_le_stream(&mut cursor)?;
-            let prev_block_hash = read_hash(&mut cursor)?;
-            let merkle_root_hash = read_hash(&mut cursor)?;
-            let timestamp = u32::from_le_stream(&mut cursor)?;
-            let nbits = u32::from_le_stream(&mut cursor)?;
-            let nonce = u32::from_le_stream(&mut cursor)?;
-            let _empty_tx = u8::from_le_stream(&mut cursor)?;
+        // used bytes of each field
+        let mut start_string = [0_u8; START_STRING_SIZE];
+        let mut command_name = [0_u8; COMMAND_NAME_SIZE];
+        let mut payload_size = [0_u8; PAYLOAD_SIZE];
+        let mut checksum = [0_u8; CHECKSUM_SIZE];
 
-            /*
-            if prev_block_hash == [
-                0x6f, 0xe2, 0x8c, 0x0a, 0xb6, 0xf1, 0xb3, 0x72, 0xc1, 0xa6, 0xa2, 0x46, 0xae, 0x63,
-                0xf7, 0x4f, 0x93, 0x1e, 0x83, 0x65, 0xe1, 0x5a, 0x08, 0x9c, 0x68, 0xd6, 0x19, 0x00,
-                0x00, 0x00, 0x00, 0x00, ] as [u8; 32]{
-                println!("Funciona :D: {:?}", &prev_block_hash);
-                break;
-            }
-            */
-            let actual_header = BlockHeader::new(
-                version,
-                prev_block_hash,
-                merkle_root_hash,
-                timestamp,
-                nbits,
-                nonce,
+        // read all bytes
+        cursor.read_exact(&mut start_string)?;
+        cursor.read_exact(&mut command_name)?;
+        cursor.read_exact(&mut payload_size)?;
+        cursor.read_exact(&mut checksum)?;
+
+        // Ensure that command_name is a valid UTF-8 byte sequence
+        if let Err(_) = std::str::from_utf8(&command_name) {
+            return Ok(Self::default());
+        }
+
+        // create MessageHeader from bytes read
+        Ok(Self::new(
+            start_string,
+            std::str::from_utf8(&command_name)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
+                .to_string(),
+            u32::from_le_bytes(payload_size),
+            checksum,
+        ))
+    }
+
+    pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
+        let mut header_buffer = [0_u8; HEADER_SIZE];
+        stream.read(&mut header_buffer)?;
+        MessageHeader::from_bytes(&header_buffer)
+    }
+
+    pub fn read_until_command(
+        stream: &mut TcpStream,
+        cmd: &str,
+    ) -> Result<MessageHeader, io::Error> {
+        let mut message = MessageHeader::from_stream(stream)?;
+        while message.command_name != cmd {
+            println!(
+                "For message: {} Skip payload of {:?} bytes",
+                message.command_name,
+                message.read_payload(stream)?.len()
             );
-
-            self.block_headers.push(actual_header);
-            self.count += 1;
+            message = MessageHeader::from_stream(stream)?;
         }
-
-        Ok(count)
+        println!("Got command: {:?}", message.command_name);
+        Ok(message)
     }
 
-    fn add_from_stream(&mut self, stream: &mut TcpStream) -> Result<u64, Error> {
-        let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
+    pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
+        let mut payload_buffer = vec![0_u8; self.payload_size as usize];
+        stream.read_exact(&mut payload_buffer)?;
+        Ok(payload_buffer)
+    }
+}
 
-        println!(
-            "Peer responded with headers message of payload size: {:?}",
-            headers_message.payload_size
-        );
-        let data_headers = headers_message.read_payload(stream)?;
-        self.add_from_bytes(&data_headers)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default() {
+        let message_header_default = MessageHeader::default();
+
+        assert_eq!(message_header_default.start_string, [0, 0, 0, 0]);
+        assert!("no_command"
+            .to_string()
+            .eq(&message_header_default.command_name));
+        assert_eq!(message_header_default.payload_size, 0);
+        assert_eq!(message_header_default.checksum, [0, 0, 0, 0]);
     }
 
-    pub fn read_all_headers(&mut self, node: &mut Node) -> Result<(), Error> {
-        let mut headers_read = MAX_HEADER;
-        while headers_read == MAX_HEADER {
-            let getheader_message = GetHeader::from_last_header(&self.last_header_hash());
+    #[test]
+    fn test_from_bytes() {
+        let bytes: [u8; 24] = [
+            0xf9, 0xbe, 0xb4, 0xd9, 0x76, 0x65, 0x72, 0x61, 0x63, 0x6b, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5d, 0xf6, 0xe0, 0xe2,
+        ];
 
-            node.send(getheader_message.serialize()?)?;
-            let headers_message = MessageHeader::read_until_command(&mut node.stream, HEADER)?;
+        // f9beb4d9 ................... Start string: Mainnet
+        // 76657261636b000000000000 ... Command name: verack + null padding
+        // 00000000 ................... Byte count: 0
+        // 5df6e0e2 ................... Checksum: SHA256(SHA256(<empty>))
 
-            let data_headers = headers_message.read_payload(&mut node.stream)?;
-            headers_read = self.add_from_bytes(&data_headers)? as usize;
-        }
-
-        Ok(())
-    }
-
-    pub fn remove_older_than(&mut self, date: u32) {
-        self.block_headers.retain(|h| h.timestamp > date);
-        self.count = self.block_headers.len();
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(to_varint(self.count as u64));
-        for header in &self.block_headers {
-            bytes.extend(header.to_bytes());
-            bytes.extend([0_u8; 1]);
-        }
-        bytes
-    }
-
-    pub fn save_to_file(&self, file_name: &str) -> Result<(), Error> {
-        let headers_bytes = self.to_bytes();
-        let mut save_stream = File::create(file_name)?;
-        save_stream.write_all(&headers_bytes)?;
-        Ok(())
+        let message_header = MessageHeader::from_bytes(&bytes);
+        println!("{:?}", message_header);
     }
 }

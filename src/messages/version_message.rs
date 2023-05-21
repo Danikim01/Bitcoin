@@ -1,7 +1,7 @@
 use crate::config::Config;
-use crate::messages::constants::{version_constants::LATEST_VERSION, commands::VERSION};
+use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
 use crate::messages::utility::{read_from_varint, EndianRead};
-use crate::messages::{Message, Services};
+use crate::messages::{Message, Serialize, Services};
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -113,28 +113,6 @@ impl Version {
         version
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
-        let mut cursor = Cursor::new(bytes);
-
-        let version = Version::new(
-            i32::from_le_stream(&mut cursor)?,
-            Services::new(u64::from_le_stream(&mut cursor)?),
-            i64::from_le_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?,
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
-            u16::from_be_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?, // not used
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
-            u16::from_be_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?,
-            deser_user_agent(&mut cursor)?,
-            i32::from_le_stream(&mut cursor)?,
-            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
-        );
-
-        Ok(version)
-    }
-
     fn build_payload(&self) -> io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
@@ -156,11 +134,32 @@ impl Version {
     }
 }
 
-impl Message for Version {
+impl Serialize for Version {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message(VERSION, Some(payload))?;
         Ok(message)
+    }
+
+    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
+        let mut cursor = Cursor::new(bytes);
+
+        let version = Version::new(
+            i32::from_le_stream(&mut cursor)?,
+            Services::new(u64::from_le_stream(&mut cursor)?),
+            i64::from_le_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?, // not used
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            deser_user_agent(&mut cursor)?,
+            i32::from_le_stream(&mut cursor)?,
+            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
+        );
+        Ok(Message::Version(version))
     }
 }
 

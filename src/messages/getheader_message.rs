@@ -1,12 +1,11 @@
-use crate::messages::utility::to_varint;
-use crate::messages::Message;
+use crate::messages::{Serialize, HashId, utility::to_varint};
 
 #[derive(Debug)]
 pub struct GetHeader {
     version: i32,
     hash_count: u8,
-    block_header_hashes: Vec<[u8; 32]>,
-    stop_hash: [u8; 32],
+    block_header_hashes: Vec<HashId>,
+    stop_hash: HashId,
 }
 
 //default for genesis block
@@ -53,17 +52,17 @@ impl GetHeader {
         Ok(payload)
     }
 
-    pub fn from_last_header(last_header: &[u8; 32]) -> Self {
+    pub fn from_last_header(last_header: HashId) -> Self {
         Self {
             version: 70015,
             hash_count: 1,
-            block_header_hashes: vec![*last_header],
-            stop_hash: [0; 32],
+            block_header_hashes: vec![last_header],
+            stop_hash: [0u8; 32],
         }
     }
 }
 
-impl Message for GetHeader {
+impl Serialize for GetHeader {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message("getheaders", Some(payload))?;

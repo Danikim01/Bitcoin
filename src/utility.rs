@@ -1,3 +1,6 @@
+use std::fmt::Display;
+use std::io;
+
 pub fn to_max_len_buckets<T>(initial_vector: Vec<T>, max_bucket_size: usize) -> Vec<Vec<T>> {
     let mut buckets: Vec<Vec<T>> = vec![];
     if initial_vector.len() < 1 || max_bucket_size < 1 {
@@ -27,7 +30,9 @@ pub fn to_max_len_buckets<T>(initial_vector: Vec<T>, max_bucket_size: usize) -> 
 /// let chunks = to_n_chunks(initial_vec, 3);
 /// assert_eq!(chunks, vec![vec![1,4,7], vec![2,5], vec![3,6]]);
 /// ```
-pub fn to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<Vec<T>> {
+// impl<'a, T> Iterator for Iter<'a, T>
+pub fn to_n_chunks<I, T>(initial_vector: I, amount_of_chunks: usize) -> Vec<Vec<T>> where I: std::iter::Iterator<Item = T> + ExactSizeIterator, T: Copy {
+// pub fn to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<Vec<T>> {
     let mut chunks: Vec<Vec<T>> = vec![];
     for _ in 0..amount_of_chunks {
         let chunk: Vec<T> = vec![];
@@ -45,4 +50,8 @@ pub fn to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<Ve
         chunks[chunk_idx].push(element)
     }
     chunks
+}
+
+pub fn to_io_err<E>(error: E) -> io::Error where E: Display {
+    io::Error::new(io::ErrorKind::Other, error.to_string())
 }

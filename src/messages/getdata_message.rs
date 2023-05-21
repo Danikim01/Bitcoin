@@ -1,4 +1,4 @@
-use crate::messages::{BlockHeader, Message};
+use crate::messages::{BlockHeader, Serialize};
 
 #[derive(Debug)]
 pub enum InvType {
@@ -114,7 +114,7 @@ impl GetData {
     }
 }
 
-impl Message for GetData {
+impl Serialize for GetData {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message("getdata", Some(payload))?;
