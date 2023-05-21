@@ -4,7 +4,7 @@ use crate::messages::constants;
 use crate::messages::{
     GetData, GetHeader, Headers, InvType, Inventory, Message, MessageHeader, VerAck, Version,
 };
-use crate::serialized_blocks::SerializedBlocks;
+use crate::serialized_blocks::SerializedBlock;
 use crate::utility::to_max_len_buckets;
 use std::{
     io,
@@ -83,7 +83,7 @@ fn handle_getdata_message(stream: &mut TcpStream, headers: Vec<BlockHeader>) -> 
     // let mut save_stream = File::create("tmp/block_message_payload.dat")?;
     // save_stream.write_all(&data_blocks)?;
 
-    let block_message_data = SerializedBlocks::from_bytes(&data_blocks)?;
+    let block_message_data = SerializedBlock::from_bytes(&data_blocks)?;
     println!("Block message data: {:?}", block_message_data);
 
     Ok(())

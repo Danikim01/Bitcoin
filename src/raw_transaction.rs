@@ -24,7 +24,7 @@ impl CoinBaseInput {
         let index = read_u32(cursor)?;
         let script_bytes = read_from_varint(cursor)?;
         let height = read_u32(cursor)?;
-        let coinbase_script = read_coinbase_script(cursor, script_bytes as usize)?;
+        let coinbase_script = read_coinbase_script(cursor, (script_bytes-4) as usize)?;
         let sequence = read_u32(cursor)?;
 
         let coinbase_input = CoinBaseInput {
@@ -157,15 +157,12 @@ impl RawTransaction {
 
         for _ in 1..count {
             let version = read_u32(cursor)?;
-            println!("version: {}", version);
 
             let tx_in_count = read_from_varint(cursor)?;
-            println!("tx_in_count: {}", tx_in_count);
             let tx_in =
                 TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
 
             let tx_out_count = read_from_varint(cursor)?;
-            println!("tx_out_count: {}", tx_out_count);
             let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
 
             let lock_time = read_u32(cursor)?;

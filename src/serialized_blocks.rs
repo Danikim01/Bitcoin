@@ -4,15 +4,15 @@ use crate::messages::utility::*;
 use crate::raw_transaction::{CoinBaseInput, Outpoint, RawTransaction, TxInput, TxOutput};
 
 #[derive(Debug)]
-pub struct SerializedBlocks {
+pub struct SerializedBlock {
     pub block_header: BlockHeader,
     pub txn_count: usize,
     pub txns: Vec<RawTransaction>,
 }
 
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
-impl SerializedBlocks {
-    pub fn from_bytes(bytes: &[u8]) -> Result<SerializedBlocks, io::Error> {
+impl SerializedBlock {
+    pub fn from_bytes(bytes: &[u8]) -> Result<SerializedBlock, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         let block_header = BlockHeader::from_bytes(&mut cursor)?;
@@ -21,13 +21,12 @@ impl SerializedBlocks {
         let mut txns = vec![];
 
         let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
-        // println!("coinbase:\n{:?}", coinbase_transaction);
         txns.push(coinbase_transaction);
 
         let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
         txns.extend(other_txns);
 
-        let serialized_block = SerializedBlocks {
+        let serialized_block = SerializedBlock {
             block_header,
             txn_count: txn_count as usize,
             txns,
@@ -45,13 +44,8 @@ mod tests {
     #[test]
     fn test_read_serialized_block_from_bytes() {
         let bytes = fs::read("./tmp/block_message_payload.dat").unwrap();
-        println!("bytes: {:?}", bytes);
-        let serialized_blocks = SerializedBlocks::from_bytes(&bytes).unwrap();
+        SerializedBlock::from_bytes(&bytes).unwrap();
 
-        println!(
-            "\n\nRead: {:?} transactions, expected: {:?}\n\n",
-            serialized_blocks.txns.len(),
-            serialized_blocks.txn_count
-        );
+
     }
 }
