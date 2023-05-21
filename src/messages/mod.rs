@@ -1,8 +1,7 @@
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
-use std::net::TcpStream;
-
+mod block_header;
 pub(crate) mod constants;
 mod getdata;
 mod getheader;
@@ -12,6 +11,7 @@ pub mod utility;
 mod verack;
 mod version;
 
+pub use block_header::BlockHeader;
 pub use getdata::{GetData, InvType, Inventory};
 pub use getheader::GetHeader;
 pub use headers::Headers;
@@ -82,7 +82,7 @@ fn get_command(cmd: &str) -> [u8; 12] {
 }
 
 pub trait Message {
-    fn send_to(&self, stream: &mut TcpStream) -> io::Result<()>;
+    fn serialize(&self) -> io::Result<Vec<u8>>;
 
     /// Builds message appending header with optional payload
     /// https://developer.bitcoin.org/reference/p2p_networking.html#message-headers

@@ -1,7 +1,5 @@
 use crate::messages::utility::to_varint;
 use crate::messages::Message;
-use std::io::Write;
-use std::net::TcpStream;
 
 #[derive(Debug)]
 pub struct GetHeader {
@@ -66,12 +64,9 @@ impl GetHeader {
 }
 
 impl Message for GetHeader {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+    fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message("getheaders", Some(payload))?;
-
-        stream.write_all(&message)?;
-        stream.flush()?;
-        Ok(())
+        Ok(message)
     }
 }

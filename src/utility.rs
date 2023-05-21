@@ -19,7 +19,7 @@ pub fn to_max_len_buckets<T>(initial_vector: Vec<T>, max_bucket_size: usize) -> 
 /// Splits a vector evenly among a fixed number of vectors or "chunks".
 /// The first chunk would have all elements with index `0 + n*amount_of_chunks``
 /// and so on.
-/// 
+///
 /// # Example
 ///
 /// ```
@@ -30,7 +30,7 @@ pub fn to_max_len_buckets<T>(initial_vector: Vec<T>, max_bucket_size: usize) -> 
 pub fn to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<Vec<T>> {
     let mut chunks: Vec<Vec<T>> = vec![];
     for _ in 0..amount_of_chunks {
-        let mut chunk: Vec<T> = vec![];
+        let chunk: Vec<T> = vec![];
         chunks.push(chunk);
     }
     if initial_vector.len() < 1 || amount_of_chunks < 1 {

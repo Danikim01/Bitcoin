@@ -1,8 +1,8 @@
-use crate::block_header::BlockHeader;
 use crate::messages::constants::commands::HEADER;
 use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
-use crate::messages::{GetHeader, Message, MessageHeader};
+use crate::messages::{BlockHeader, GetHeader, Message, MessageHeader};
+use crate::node::Node;
 use std::fs;
 use std::fs::File;
 use std::io::{Cursor, Error, Write};
@@ -10,7 +10,7 @@ use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Headers {
     pub count: usize, //Es un Compact size uint
     pub block_headers: Vec<BlockHeader>,
@@ -114,27 +114,24 @@ impl Headers {
         self.add_from_bytes(&data_headers)
     }
 
-    pub fn read_all_headers(&mut self, stream: &mut TcpStream) -> Result<(), Error> {
-        let mut headers_read: u64 = MAX_HEADER as u64;
-        while headers_read == MAX_HEADER as u64 {
-            println!(
-                "Block headers read: {:?}, requesting more starting from hash {:?}",
-                self.count,
-                &self.last_header_hash()
-            );
+    pub fn read_all_headers(&mut self, node: &mut Node) -> Result<(), Error> {
+        let mut headers_read = MAX_HEADER;
+        while headers_read == MAX_HEADER {
             let getheader_message = GetHeader::from_last_header(&self.last_header_hash());
-            getheader_message.send_to(stream)?;
-            let headers_message = MessageHeader::read_until_command(stream, HEADER)?;
 
-            println!(
-                "Peer responded with headers message of payload size: {:?}",
-                headers_message.payload_size
-            );
-            let data_headers = headers_message.read_payload(stream)?;
-            headers_read = self.add_from_bytes(&data_headers)?;
+            node.send(getheader_message.serialize()?)?;
+            let headers_message = MessageHeader::read_until_command(&mut node.stream, HEADER)?;
+
+            let data_headers = headers_message.read_payload(&mut node.stream)?;
+            headers_read = self.add_from_bytes(&data_headers)? as usize;
         }
 
         Ok(())
+    }
+
+    pub fn remove_older_than(&mut self, date: u32) {
+        self.block_headers.retain(|h| h.timestamp > date);
+        self.count = self.block_headers.len();
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

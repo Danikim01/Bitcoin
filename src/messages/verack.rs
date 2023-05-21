@@ -1,6 +1,6 @@
 use crate::messages::constants::commands::VERACK;
 use crate::messages::{Message, MessageHeader};
-use std::io::{self, Write};
+use std::io;
 use std::net::TcpStream;
 
 #[derive(Debug)]
@@ -22,9 +22,8 @@ impl VerAck {
 }
 
 impl Message for VerAck {
-    fn send_to(&self, stream: &mut TcpStream) -> io::Result<()> {
+    fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let message = self.build_message(VERACK, None)?;
-        stream.write_all(&message)?;
-        stream.flush()
+        Ok(message)
     }
 }

@@ -1,7 +1,6 @@
-use crate::block_header::BlockHeader;
 use crate::io::{self, Cursor};
-use crate::messages::utility::*;
-use crate::raw_transaction::{Outpoint, RawTransaction, TxInput, TxOutput};
+use crate::messages::{utility::*, BlockHeader};
+use crate::raw_transaction::RawTransaction;
 
 #[derive(Debug)]
 pub struct SerializedBlocks {
@@ -26,7 +25,6 @@ impl SerializedBlocks {
         };
 
         Ok(serialized_block)
-
     }
 }
 

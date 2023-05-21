@@ -1,6 +1,4 @@
-use crate::messages::Message;
-use std::io::Write;
-use std::net::TcpStream;
+use crate::messages::{BlockHeader, Message};
 
 #[derive(Debug)]
 pub enum InvType {
@@ -104,15 +102,22 @@ impl GetData {
         Ok(payload)
     }
 
-    // no need to implement from_bytes since we won't be supporting incoming getdata messages
+    pub fn from_inv(count: usize, block_headers: Vec<BlockHeader>) -> Self {
+        let mut inventory_vector: Vec<Inventory> = Vec::new();
+        for block_header in block_headers {
+            inventory_vector.push(Inventory::new(
+                InvType::MSGBlock,
+                block_header.hash_block_header(),
+            ));
+        }
+        Self::new(count, inventory_vector)
+    }
 }
 
 impl Message for GetData {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+    fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message("getdata", Some(payload))?;
-        stream.write_all(&message)?;
-        stream.flush()?;
-        Ok(())
+        Ok(message)
     }
 }

@@ -36,7 +36,7 @@ impl CoinBaseInput {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<CoinBaseInput, std::io::Error> {
         let hash = read_hash(cursor)?;
         println!("the hash is {:?}", &hash);
-        let index = read_u32(cursor)?;
+        let index = u32::from_le_stream(cursor)?;
         println!("the index is {}", &index);
         let script_bytes = read_from_varint(cursor)?;
         println!("the script bytes are {}", &script_bytes);
@@ -44,7 +44,7 @@ impl CoinBaseInput {
         println!("the height is {:?}", &height);
         let coinbase_script = read_coinbase_script(cursor, script_bytes as usize)?;
         println!("the coinbase script is {:?}", &coinbase_script);
-        let sequence = read_u32(cursor)?;
+        let sequence = u32::from_le_stream(cursor)?;
         println!("the sequence is {}", &sequence);
         Ok(CoinBaseInput::new(
             hash,
@@ -66,7 +66,7 @@ pub struct Outpoint {
 impl Outpoint {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
         let hash = read_hash(cursor)?;
-        let index = read_u32(cursor)?;
+        let index = u32::from_le_stream(cursor)?;
         Ok(Outpoint { hash, index })
     }
 }
@@ -84,7 +84,7 @@ impl TxInput {
         let previous_output = Outpoint::from_bytes(cursor)?;
         let script_bytes = read_from_varint(cursor)?;
         let signature_script = read_coinbase_script(cursor, script_bytes as usize)?;
-        let sequence = read_u32(cursor)?;
+        let sequence = u32::from_le_stream(cursor)?;
 
         Ok(TxInput {
             previous_output,
@@ -118,7 +118,7 @@ pub struct TxOutput {
 
 impl TxOutput {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
-        let value = read_i64(cursor)?;
+        let value = i64::from_le_stream(cursor)?;
         let pk_script_bytes = read_from_varint(cursor)?;
         let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
 
@@ -157,12 +157,12 @@ pub struct RawTransaction {
 //Ver https://developer.bitcoin.org/reference/transactions.html#raw-transaction-format
 impl RawTransaction {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, std::io::Error> {
-        let version = read_i32(cursor)?;
+        let version = i32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)? as usize;
         let tx_in = TxInput::vec_from_bytes(cursor, tx_in_count)?;
         let tx_out_count = read_from_varint(cursor)? as usize;
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count)?;
-        let lock_time = read_u32(cursor)?;
+        let lock_time = u32::from_le_stream(cursor)?;
 
         let raw_transaction = RawTransaction {
             version,
@@ -178,12 +178,12 @@ impl RawTransaction {
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<u8>, std::io::Error> {
     let mut array = vec![0_u8; n];
-    cursor.read_exact(&mut array);
+    cursor.read_exact(&mut array)?;
     Ok(array)
 }
 
 fn read_height(cursor: &mut Cursor<&[u8]>) -> Result<u32, std::io::Error> {
-    let height_bytes = read_u8(cursor)?;
+    let height_bytes = u8::from_le_stream(cursor)?;
     if height_bytes != 0x03 && height_bytes != 0x04 {
         println!("uipsee");
         return Err(std::io::Error::new(
@@ -194,9 +194,9 @@ fn read_height(cursor: &mut Cursor<&[u8]>) -> Result<u32, std::io::Error> {
 
     let mut array = [0u8; 4]; // 00[0][1][2] or [0][1][2]00?
 
-    array[0] = read_u8(cursor)?;
-    array[1] = read_u8(cursor)?;
-    array[2] = read_u8(cursor)?;
+    array[0] = u8::from_le_stream(cursor)?;
+    array[1] = u8::from_le_stream(cursor)?;
+    array[2] = u8::from_le_stream(cursor)?;
     Ok(u32::from_le_bytes(array))
 }
 
