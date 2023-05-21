@@ -34,12 +34,12 @@ impl BlockHeader {
     }
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
-        let version = read_i32(cursor)?;
+        let version = i32::from_le_stream(cursor)?;
         let prev_block_hash = read_hash(cursor)?;
         let merkle_root_hash = read_hash(cursor)?;
-        let timestamp = read_u32(cursor)?;
-        let nbits = read_u32(cursor)?;
-        let nonce = read_u32(cursor)?;
+        let timestamp = u32::from_le_stream(cursor)?;
+        let nbits = u32::from_le_stream(cursor)?;
+        let nonce = u32::from_le_stream(cursor)?;
 
         let actual_header = BlockHeader::new(
             version,
@@ -53,7 +53,7 @@ impl BlockHeader {
         Ok(actual_header)
     }
 
-    pub fn prev_hash(&self) -> &[u8; 32] {
+    pub fn _prev_hash(&self) -> &[u8; 32] {
         &self.merkle_root_hash
     }
 
@@ -77,7 +77,7 @@ impl BlockHeader {
     }
 
     fn compare_target_threshold_and_hash(target: &[u8; 32], hash: &[u8; 32]) -> std::cmp::Ordering {
-        target.cmp(&hash)
+        target.cmp(hash)
     }
 
     pub fn validate_proof_of_work(&self) -> Result<(), std::io::Error> {
@@ -102,20 +102,18 @@ impl BlockHeader {
     }
 
     fn nbits_to_target(nbits: u32) -> [u8; 32] {
-        let exponent = (nbits >> 24) as u8;
+        let exponent = (nbits >> 24) as usize;
         let significand = nbits & 0x00FFFFFF;
+        
         let significand_bytes = significand.to_be_bytes();
-
+        let right_padding = vec![0u8; exponent - 3];
         let target = significand_bytes
-            .iter()
-            .chain(std::iter::repeat(&0))
-            .take(32)
-            .copied()
+            .into_iter()
+            .chain(right_padding.into_iter())
             .collect::<Vec<u8>>();
 
         let mut target_arr = [0u8; 32];
-        target_arr.copy_from_slice(&target);
-
+        target_arr[31-exponent..].copy_from_slice(&target);
         target_arr
     }
 }

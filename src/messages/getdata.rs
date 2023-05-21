@@ -1,30 +1,28 @@
-use crate::messages::Message;
-use std::io::Write;
-use std::net::TcpStream;
+use crate::messages::{BlockHeader, Message};
 
 #[derive(Debug)]
 pub enum InvType {
-    MSGError = 0,
-    MSGTx = 1,
+    _MSGError = 0,
+    _MSGTx = 1,
     MSGBlock = 2,
-    MSGFilteredBlock = 3,
-    MSGCompactBlock = 4,
-    MSGWitnessTx = 0x40000001,
-    MSGWitnessBlock = 0x40000002,
-    MSGFilteredWitnessBlock = 0x40000003,
+    _MSGFilteredBlock = 3,
+    _MSGCompactBlock = 4,
+    _MSGWitnessTx = 0x40000001,
+    _MSGWitnessBlock = 0x40000002,
+    _MSGFilteredWitnessBlock = 0x40000003,
 }
 
 impl InvType {
     pub fn to_u32(&self) -> u32 {
         match self {
-            InvType::MSGError => 0,
-            InvType::MSGTx => 1,
+            InvType::_MSGError => 0,
+            InvType::_MSGTx => 1,
             InvType::MSGBlock => 2,
-            InvType::MSGFilteredBlock => 3,
-            InvType::MSGCompactBlock => 4,
-            InvType::MSGWitnessTx => 0x40000001,
-            InvType::MSGWitnessBlock => 0x40000002,
-            InvType::MSGFilteredWitnessBlock => 0x40000003,
+            InvType::_MSGFilteredBlock => 3,
+            InvType::_MSGCompactBlock => 4,
+            InvType::_MSGWitnessTx => 0x40000001,
+            InvType::_MSGWitnessBlock => 0x40000002,
+            InvType::_MSGFilteredWitnessBlock => 0x40000003,
         }
     }
 }
@@ -75,7 +73,7 @@ fn to_varint(value: u64) -> Vec<u8> {
         }
         _ => {
             buf.push(0xff);
-            buf.extend_from_slice(&(value as u64).to_le_bytes());
+            buf.extend_from_slice(&value.to_le_bytes());
         }
     }
     buf
@@ -104,15 +102,22 @@ impl GetData {
         Ok(payload)
     }
 
-    // no need to implement from_bytes since we won't be supporting incoming getdata messages
+    pub fn from_inv(count: usize, block_headers: Vec<BlockHeader>) -> Self {
+        let mut inventory_vector: Vec<Inventory> = Vec::new();
+        for block_header in block_headers {
+            inventory_vector.push(Inventory::new(
+                InvType::MSGBlock,
+                block_header.hash_block_header(),
+            ));
+        }
+        Self::new(count, inventory_vector)
+    }
 }
 
 impl Message for GetData {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+    fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message("getdata", Some(payload))?;
-        stream.write_all(&message)?;
-        stream.flush()?;
-        Ok(())
+        Ok(message)
     }
 }

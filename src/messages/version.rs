@@ -1,9 +1,9 @@
 use crate::config::Config;
-use crate::messages::constants::version_constants::LATEST_VERSION;
+use crate::messages::constants::{version_constants::LATEST_VERSION, commands::VERSION};
 use crate::messages::utility::{read_from_varint, EndianRead};
 use crate::messages::{Message, Services};
-use std::io::{self, Cursor, Read, Write};
-use std::net::{IpAddr, Ipv6Addr, TcpStream};
+use std::io::{self, Cursor, Read};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -15,13 +15,13 @@ pub struct Version {
     addr_recv_services: u64,
     addr_recv_ip: Ipv6Addr,
     addr_recv_port: u16,
-    addr_trans_services: u64,
+    _addr_trans_services: u64,
     addr_trans_ip: Ipv6Addr,
     addr_trans_port: u16,
     nonce: u64,
-    user_agent: String,
-    start_height: i32,
-    relay: bool,
+    _user_agent: String,
+    _start_height: i32,
+    _relay: bool,
 }
 
 impl Default for Version {
@@ -42,13 +42,13 @@ impl Default for Version {
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
         let addr_recv_port = *config.get_port();
-        let addr_trans_services = 0;
-        let addr_trans_ip = Ipv6Addr::UNSPECIFIED;
+        let _addr_trans_services = 0;
+        let addr_trans_ip = Ipv6Addr::LOCALHOST;
         let addr_trans_port = *config.get_port();
         let nonce = 0;
-        let user_agent = "".to_string();
-        let start_height = 0;
-        let relay = false;
+        let _user_agent = "".to_string();
+        let _start_height = 0;
+        let _relay = false;
         Version::new(
             // message_header,
             version,
@@ -57,13 +57,13 @@ impl Default for Version {
             addr_recv_services,
             addr_recv_ip,
             addr_recv_port,
-            addr_trans_services,
+            _addr_trans_services,
             addr_trans_ip,
             addr_trans_port,
             nonce,
-            user_agent,
-            start_height,
-            relay,
+            _user_agent,
+            _start_height,
+            _relay,
         )
     }
 }
@@ -77,13 +77,13 @@ impl Version {
         addr_recv_services: u64,
         addr_recv_ip: Ipv6Addr,
         addr_recv_port: u16,
-        addr_trans_services: u64,
+        _addr_trans_services: u64,
         addr_trans_ip: Ipv6Addr,
         addr_trans_port: u16,
         nonce: u64,
-        user_agent: String,
-        start_height: i32,
-        relay: bool,
+        _user_agent: String,
+        _start_height: i32,
+        _relay: bool,
     ) -> Self {
         Self {
             // message_header,
@@ -93,14 +93,24 @@ impl Version {
             addr_recv_services,
             addr_recv_ip,
             addr_recv_port,
-            addr_trans_services,
+            _addr_trans_services,
             addr_trans_ip,
             addr_trans_port,
             nonce,
-            user_agent,
-            start_height,
-            relay,
+            _user_agent,
+            _start_height,
+            _relay,
         }
+    }
+
+    pub fn default_for_trans_addr(address: SocketAddr) -> Self {
+        let mut version = Self::default();
+        version.addr_trans_ip = match address.ip() {
+            IpAddr::V4(ip4) => ip4.to_ipv6_compatible(),
+            IpAddr::V6(ip6) => ip6,
+        };
+        version.addr_trans_port = address.port();
+        version
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
@@ -125,51 +135,19 @@ impl Version {
         Ok(version)
     }
 
-    fn build_payload(&self, stream: &mut TcpStream) -> io::Result<Vec<u8>> {
-        // Get the transmitting node's IP address
-        // por qué lo estamos pasando a string para después pasarlo a IP????
-        let addr_trans = stream.peer_addr()?.to_string();
-
-        // y esto???
-        // Parse the IP address
-        let adr_trans_ip_addr = addr_trans
-            .split(":")
-            .next()
-            .unwrap()
-            .parse::<IpAddr>()
-            .unwrap();
-
-        // Convert IPv4 addresses to IPv6 if needed
-        let ip_v6 = match adr_trans_ip_addr {
-            IpAddr::V4(ip_v4) => {
-                let ipv4_bytes = ip_v4.octets();
-                let mut ipv6_bytes = [0; 16];
-                ipv6_bytes[10] = 0xff;
-                ipv6_bytes[11] = 0xff;
-                ipv6_bytes[12..].copy_from_slice(&ipv4_bytes);
-                Ipv6Addr::from(ipv6_bytes)
-            }
-            IpAddr::V6(ip_v6) => ip_v6,
-        };
-        // fin y esto ???
-
-        // Convert the IPv6 address to a byte array
-        let ip_bytes: [u8; 16] = ip_v6.octets();
-
-        // Build payload
-        // https://developer.bitcoin.org/reference/p2p_networking.html#version
+    fn build_payload(&self) -> io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
         payload.extend::<[u8; 8]>(self.services.into());
 
         payload.extend(&self.timestamp.to_le_bytes());
         payload.extend(&self.addr_recv_services.to_le_bytes());
-        payload.extend(&self.addr_recv_ip.octets()); // should change to be?
+        payload.extend(&self.addr_recv_ip.octets());
         payload.extend(&self.addr_recv_port.to_be_bytes());
-        payload.extend(&ip_bytes);
+        payload.extend(&self.addr_recv_services.to_le_bytes());
+        payload.extend(&self.addr_trans_ip.octets());
         payload.extend(&self.addr_trans_port.to_be_bytes());
-        // Add the IPv6 address to the payload
-        payload.extend(&ip_bytes);
+        payload.extend(&self.nonce.to_le_bytes());
         Ok(payload)
     }
 
@@ -179,13 +157,10 @@ impl Version {
 }
 
 impl Message for Version {
-    fn send_to(&self, stream: &mut TcpStream) -> io::Result<()> {
-        let payload = self.build_payload(stream)?;
-        let message = self.build_message("version", Some(payload))?;
-
-        stream.write_all(&message)?;
-        stream.flush()?;
-        Ok(())
+    fn serialize(&self) -> std::io::Result<Vec<u8>> {
+        let payload = self.build_payload()?;
+        let message = self.build_message(VERSION, Some(payload))?;
+        Ok(message)
     }
 }
 

@@ -11,7 +11,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(seed: String, port: u16, start_timestamp: u32) -> Config {
+    pub fn _new(seed: String, port: u16, start_timestamp: u32) -> Config {
         Config {
             seed,
             port,
@@ -27,7 +27,7 @@ impl Config {
         }
     }
 
-    pub fn get_seed(&self) -> &String {
+    pub fn _get_seed(&self) -> &String {
         &self.seed
     }
 

@@ -2,7 +2,10 @@ use crate::io::Cursor;
 use crate::messages::utility::*;
 use std::io::{Error, Read};
 
-fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<u8>, std::io::Error> {
+fn read_coinbase_script(
+    cursor: &mut Cursor<&[u8]>,
+    count: usize,
+) -> Result<Vec<u8>, std::io::Error> {
     let mut array = vec![0_u8; count];
     cursor.read_exact(&mut array)?;
     Ok(array)
@@ -10,47 +13,58 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<
 
 #[derive(Debug)]
 pub struct CoinBaseInput {
-    hash: [u8; 32],
-    index: u32,
-    script_bytes: u64,
-    height: u32,
-    coinbase_script: Vec<u8>,
-    sequence: u32,
+    _hash: [u8; 32],
+    _index: u32,
+    _script_bytes: u64,
+    _height: u32,
+    _coinbase_script: Vec<u8>,
+    _sequence: u32,
 }
 
 impl CoinBaseInput {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let hash = read_hash(cursor)?;
-        let index = read_u32(cursor)?;
-        let script_bytes = read_from_varint(cursor)?;
-        let height = read_u32(cursor)?;
-        let coinbase_script = read_coinbase_script(cursor, (script_bytes-4) as usize)?;
-        let sequence = read_u32(cursor)?;
+        let _hash = read_hash(cursor)?;
+        let _index = u32::from_le_stream(cursor)?;
+        let _script_bytes = read_from_varint(cursor)?;
+        let _height = u32::from_le_stream(cursor)?;
+        let _coinbase_script = read_coinbase_script(cursor, (_script_bytes - 4) as usize)?;
+        let _sequence = u32::from_le_stream(cursor)?;
 
         let coinbase_input = CoinBaseInput {
-            hash,
-            index,
-            script_bytes,
-            height,
-            coinbase_script,
-            sequence,
+            _hash,
+            _index,
+            _script_bytes,
+            _height,
+            _coinbase_script,
+            _sequence,
         };
 
         Ok(coinbase_input)
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self._hash);
+        bytes.extend_from_slice(&self._index.to_le_bytes());
+        bytes.extend_from_slice(&self._script_bytes.to_le_bytes());
+        bytes.extend_from_slice(&self._height.to_le_bytes());
+        bytes.extend_from_slice(&self._coinbase_script);
+        bytes.extend_from_slice(&self._sequence.to_le_bytes());
+        bytes
     }
 }
 
 #[derive(Debug)]
 pub struct Outpoint {
-    hash: [u8; 32],
-    index: u32,
+    _hash: [u8; 32],
+    _index: u32,
 }
 
 impl Outpoint {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let hash = read_hash(cursor)?;
-        let index = read_u32(cursor)?;
-        let outpoint = Outpoint { hash, index };
+        let _hash = read_hash(cursor)?;
+        let _index = u32::from_le_stream(cursor)?;
+        let outpoint = Outpoint { _hash, _index };
         Ok(outpoint)
     }
 }
@@ -71,7 +85,7 @@ impl TxInput {
             let previous_output = Outpoint::from_bytes(cursor)?;
             let script_bytes = read_from_varint(cursor)?;
             let script_sig = read_coinbase_script(cursor, script_bytes as usize)?;
-            let sequence = read_u32(cursor)?;
+            let sequence = u32::from_le_stream(cursor)?;
 
             let tx_input = TxInput {
                 previous_output,
@@ -83,6 +97,18 @@ impl TxInput {
             tx_inputs.push(tx_input);
         }
         Ok(tx_inputs)
+    }
+
+    pub fn serialize_vec(tx_inputs: &Vec<Self>) -> Vec<u8> {
+        let mut bytes = vec![];
+        for tx_input in tx_inputs {
+            bytes.extend_from_slice(&tx_input.previous_output._hash);
+            bytes.extend_from_slice(&tx_input.previous_output._index.to_le_bytes());
+            bytes.extend_from_slice(&tx_input.script_bytes.to_le_bytes());
+            bytes.extend_from_slice(&tx_input.script_sig);
+            bytes.extend_from_slice(&tx_input.sequence.to_le_bytes());
+        }
+        bytes
     }
 }
 
@@ -98,7 +124,7 @@ impl TxOutput {
         let mut tx_outputs = vec![];
 
         for _ in 0..n {
-            let value = read_i64(cursor)?;
+            let value = i64::from_le_stream(cursor)?;
             let pk_script_bytes = read_from_varint(cursor)?;
             let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
 
@@ -113,12 +139,31 @@ impl TxOutput {
 
         Ok(tx_outputs)
     }
+
+    pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
+        let mut bytes = vec![];
+        for tx_output in tx_outputs {
+            bytes.extend_from_slice(&tx_output.value.to_le_bytes());
+            bytes.extend_from_slice(&tx_output.pk_script_bytes.to_le_bytes());
+            bytes.extend_from_slice(&tx_output.pk_script);
+        }
+        bytes
+    }
 }
 
 #[derive(Debug)]
 enum TxInputType {
     CoinBaseInput(CoinBaseInput),
     TxInput(Vec<TxInput>),
+}
+
+impl TxInputType {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            TxInputType::CoinBaseInput(coinbase_input) => coinbase_input.serialize(),
+            TxInputType::TxInput(tx_inputs) => TxInput::serialize_vec(tx_inputs),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -133,12 +178,12 @@ pub struct RawTransaction {
 
 impl RawTransaction {
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let version = read_u32(cursor)?;
+        let version = u32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;
         let tx_in = TxInputType::CoinBaseInput(CoinBaseInput::from_bytes(cursor)?);
         let tx_out_count = read_from_varint(cursor)?;
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
-        let lock_time = read_u32(cursor)?;
+        let lock_time = u32::from_le_stream(cursor)?;
 
         let raw_transaction = RawTransaction {
             version,
@@ -156,7 +201,7 @@ impl RawTransaction {
         let mut raw_transactions = vec![];
 
         for _ in 1..count {
-            let version = read_u32(cursor)?;
+            let version = u32::from_le_stream(cursor)?;
 
             let tx_in_count = read_from_varint(cursor)?;
             let tx_in =
@@ -165,7 +210,7 @@ impl RawTransaction {
             let tx_out_count = read_from_varint(cursor)?;
             let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
 
-            let lock_time = read_u32(cursor)?;
+            let lock_time = u32::from_le_stream(cursor)?;
 
             let raw_transaction = RawTransaction {
                 version,
@@ -180,5 +225,16 @@ impl RawTransaction {
         }
 
         Ok(raw_transactions)
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut transaction_bytes = vec![];
+        transaction_bytes.extend(self.version.to_le_bytes());
+        transaction_bytes.extend(self.tx_in_count.to_le_bytes());
+        transaction_bytes.extend(self.tx_in.to_bytes());
+        transaction_bytes.extend(self.tx_out_count.to_le_bytes());
+        transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
+        transaction_bytes.extend(self.lock_time.to_le_bytes());
+        transaction_bytes
     }
 }

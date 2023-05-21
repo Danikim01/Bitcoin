@@ -53,7 +53,7 @@ impl MessageHeader {
         cursor.read_exact(&mut checksum)?;
 
         // Ensure that command_name is a valid UTF-8 byte sequence
-        if let Err(_) = std::str::from_utf8(&command_name) {
+        if std::str::from_utf8(&command_name).is_err() {
             return Ok(Self::default());
         }
 
@@ -70,7 +70,7 @@ impl MessageHeader {
 
     pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
         let mut header_buffer = [0_u8; HEADER_SIZE];
-        stream.read(&mut header_buffer)?;
+        let _read = stream.read(&mut header_buffer)?;
         MessageHeader::from_bytes(&header_buffer)
     }
 
