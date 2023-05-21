@@ -1,5 +1,8 @@
 use crate::io::Cursor;
-use crate::messages::{HashId, utility::{EndianRead, read_hash, read_from_varint}};
+use crate::messages::{
+    utility::{read_from_varint, read_hash, StreamRead},
+    HashId,
+};
 use std::io::{Error, Read};
 
 fn read_coinbase_script(

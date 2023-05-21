@@ -1,4 +1,4 @@
-use crate::messages::{BlockHeader, Serialize};
+use crate::messages::{BlockHeader, Hashable, Serialize};
 
 #[derive(Debug)]
 pub enum InvType {
@@ -105,10 +105,7 @@ impl GetData {
     pub fn from_inv(count: usize, block_headers: Vec<BlockHeader>) -> Self {
         let mut inventory_vector: Vec<Inventory> = Vec::new();
         for block_header in block_headers {
-            inventory_vector.push(Inventory::new(
-                InvType::MSGBlock,
-                block_header.hash_block_header(),
-            ));
+            inventory_vector.push(Inventory::new(InvType::MSGBlock, block_header.hash()));
         }
         Self::new(count, inventory_vector)
     }

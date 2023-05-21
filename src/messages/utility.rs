@@ -24,7 +24,7 @@ pub fn to_varint(value: u64) -> Vec<u8> {
     buf
 }
 
-pub trait EndianRead {
+pub trait StreamRead {
     fn from_le_stream(cursor: &mut Cursor<&[u8]>) -> Result<Self, io::Error>
     where
         Self: Sized;
@@ -34,9 +34,9 @@ pub trait EndianRead {
 }
 
 // source: https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_trait_for_from_le_bytes_from_be_bytes/
-macro_rules! impl_EndianRead_for_ints (( $($int:ident),* ) => {
+macro_rules! impl_StreamRead_for_ints (( $($int:ident),* ) => {
     $(
-        impl EndianRead for $int {
+        impl StreamRead for $int {
             fn from_le_stream(cursor: &mut Cursor<&[u8]>) -> Result<Self, io::Error> {
                 let mut buf = [0u8; std::mem::size_of::<Self>()];
                 cursor.read_exact(&mut buf)?;
@@ -51,7 +51,7 @@ macro_rules! impl_EndianRead_for_ints (( $($int:ident),* ) => {
     )*
 });
 
-impl_EndianRead_for_ints!(u8, u16, u32, u64, i32, i64, u128);
+impl_StreamRead_for_ints!(u8, u16, u32, u64, i32, i64, u128);
 
 pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
     let mut hash = [0u8; 32];

@@ -1,11 +1,12 @@
 use crate::messages::constants::commands::HEADERS;
 use crate::messages::constants::header_constants::MAX_HEADER;
-use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
-use crate::messages::{BlockHeader, GetHeader, Message, MessageHeader, Serialize, HashId};
+use crate::messages::utility::{read_from_varint, read_hash, to_varint, StreamRead};
+use crate::messages::{
+    BlockHeader, GetHeader, HashId, Hashable, Message, MessageHeader, Serialize,
+};
 use crate::node::Node;
 use std::fs;
 use std::fs::File;
-use std::collections::HashMap;
 use std::io::{self, Cursor, Error, Write};
 use std::net::TcpStream;
 
@@ -49,15 +50,7 @@ impl Headers {
     }
 
     pub fn last_header_hash(&self) -> HashId {
-        self.last_header().hash_block_header()
-    }
-
-    pub fn into_hashmap(&self) -> HashMap<HashId, BlockHeader> {
-        let mut blocks: HashMap<HashId, BlockHeader> = HashMap::new();
-        for block_hdr in self.block_headers {
-            blocks.insert(block_hdr.hash_block_header(), block_hdr);
-        }
-        blocks
+        self.last_header().hash()
     }
 
     pub fn from_bytes(bytes: &[u8]) -> io::Result<Headers> {

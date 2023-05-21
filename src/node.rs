@@ -1,4 +1,7 @@
-use crate::messages::{Headers, Message, MessageHeader, Serialize, VerAck, Version, constants::commands};
+use crate::messages::Block;
+use crate::messages::{
+    constants::commands, Headers, Message, MessageHeader, Serialize, VerAck, Version,
+};
 use crate::utility::to_io_err;
 use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -23,12 +26,11 @@ impl Listener {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             let payload = message_header.read_payload(&mut self.stream)?;
             let dyn_message: Message = match message_header.command_name.as_str() {
-                commands::HEADERS => <Headers as Serialize>::deserialize(&payload)?,
+                commands::HEADERS => Headers::deserialize(&payload)?,
+                commands::BLOCK => Block::deserialize(&payload)?,
                 _ => continue,
             };
-            self.writer_channel
-                .send(dyn_message)
-                .map_err(to_io_err)?;
+            self.writer_channel.send(dyn_message).map_err(to_io_err)?;
         }
         Ok(())
     }

@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
-use crate::messages::utility::{read_from_varint, EndianRead};
+use crate::messages::utility::{read_from_varint, StreamRead};
 use crate::messages::{Message, Serialize, Services};
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};

@@ -2,6 +2,7 @@ use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
 mod block_header;
+mod block_message;
 pub(crate) mod constants;
 mod getdata_message;
 mod getheader_message;
@@ -12,6 +13,7 @@ mod verack_message;
 mod version_message;
 
 pub use block_header::BlockHeader;
+pub use block_message::Block;
 pub use getdata_message::{GetData, InvType, Inventory};
 pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
@@ -19,7 +21,7 @@ pub use headers_message::Headers;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
-pub type HashId = [u8;32];
+pub type HashId = [u8; 32];
 
 #[derive(Debug, Clone, Copy)]
 pub struct Services {
@@ -84,11 +86,16 @@ fn get_command(cmd: &str) -> [u8; 12] {
 }
 
 pub enum Message {
+    Block(Block),
     GetData(GetData),
     GetHeader(GetHeader),
     Headers(Headers),
     VerAck(VerAck),
     Version(Version),
+}
+
+pub trait Hashable {
+    fn hash(&self) -> HashId;
 }
 
 pub trait Serialize {
