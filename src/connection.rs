@@ -1,8 +1,10 @@
 use crate::config::Config;
 use crate::messages::constants;
-use crate::messages::{BlockHeader, GetData, GetHeader, Headers, Message, MessageHeader};
+use crate::messages::{
+    BlockHeader, GetData, GetHeader, Headers, Message, MessageHeader,
+};
 use crate::node::Node;
-use crate::serialized_blocks::SerializedBlocks;
+use crate::serialized_blocks::SerializedBlock;
 use crate::utility::to_max_len_buckets;
 use std::sync::mpsc;
 use std::{
@@ -36,8 +38,7 @@ fn handle_getdata_message(node: &mut Node, headers: Vec<BlockHeader>) -> Result<
     // let mut save_stream = File::create("src/block_message_payload.dat")?;
     // save_stream.write_all(&data_blocks)?;
 
-    let block_message_data = SerializedBlocks::from_bytes(&data_blocks)?;
-    println!("Block message data: {:?}", block_message_data);
+    let _block_message_data = SerializedBlock::from_bytes(&data_blocks)?;
 
     Ok(())
 }
@@ -79,7 +80,8 @@ pub fn sync(nodes: &mut Vec<Node>) -> Result<(), io::Error> {
     };
 
     // keep only headers that are more recent than specified timestamp
-    headers.remove_older_than(1681095600); // project start date 2023-04-10
+    let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+    headers.trim_timestamp(init_tp_timestamp)?;
 
     // send getdata messages with max 50k headers each (this should be changed to use a threadpool with a node per thread)
     let headers_buckets =

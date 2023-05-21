@@ -23,11 +23,21 @@ impl Headers {
             block_headers,
         }
     }
+
     pub fn default() -> Self {
         Self {
             count: 0,
             block_headers: Vec::new(),
         }
+    }
+
+    pub fn trim_timestamp(&mut self, timestamp: u32) -> Result<Self, Error> {
+        self
+            .block_headers
+            .retain(|header| header.timestamp > timestamp);
+        self.count = self.block_headers.len();
+
+        Ok(self.clone())
     }
 
     pub fn is_last_header(&self) -> bool {
@@ -146,7 +156,7 @@ impl Headers {
 
     pub fn save_to_file(&self, file_name: &str) -> Result<(), Error> {
         let headers_bytes = self.to_bytes();
-        let mut save_stream = File::create("src/headers.dat")?;
+        let mut save_stream = File::create(file_name)?;
         save_stream.write_all(&headers_bytes)?;
         Ok(())
     }
