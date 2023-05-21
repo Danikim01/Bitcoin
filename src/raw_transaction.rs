@@ -1,6 +1,7 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
 use std::io::{Error, Read};
+use crate::raw_transaction::TxInputType::TxInput as OtherTxInput;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<u8>, std::io::Error> {
     let mut array = vec![0_u8; count];
@@ -38,6 +39,18 @@ impl CoinBaseInput {
 
         Ok(coinbase_input)
     }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self.hash);
+        bytes.extend_from_slice(&self.index.to_le_bytes());
+        bytes.extend_from_slice(&self.script_bytes.to_le_bytes());
+        bytes.extend_from_slice(&self.height.to_le_bytes());
+        bytes.extend_from_slice(&self.coinbase_script);
+        bytes.extend_from_slice(&self.sequence.to_le_bytes());
+        bytes
+    }
+
 }
 
 #[derive(Debug)]
@@ -84,6 +97,19 @@ impl TxInput {
         }
         Ok(tx_inputs)
     }
+
+
+    pub fn serialize_vec(tx_inputs: &Vec<Self>) -> Vec<u8> {
+        let mut bytes = vec![];
+        for tx_input in tx_inputs {
+            bytes.extend_from_slice(&tx_input.previous_output.hash);
+            bytes.extend_from_slice(&tx_input.previous_output.index.to_le_bytes());
+            bytes.extend_from_slice(&tx_input.script_bytes.to_le_bytes());
+            bytes.extend_from_slice(&tx_input.script_sig);
+            bytes.extend_from_slice(&tx_input.sequence.to_le_bytes());
+        }
+        bytes
+    }
 }
 
 #[derive(Debug)]
@@ -113,12 +139,31 @@ impl TxOutput {
 
         Ok(tx_outputs)
     }
+
+    pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
+        let mut bytes = vec![];
+        for tx_output in tx_outputs {
+            bytes.extend_from_slice(&tx_output.value.to_le_bytes());
+            bytes.extend_from_slice(&tx_output.pk_script_bytes.to_le_bytes());
+            bytes.extend_from_slice(&tx_output.pk_script);
+        }
+        bytes
+    }
 }
 
 #[derive(Debug)]
 enum TxInputType {
     CoinBaseInput(CoinBaseInput),
     TxInput(Vec<TxInput>),
+}
+
+impl TxInputType {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            TxInputType::CoinBaseInput(coinbase_input) => coinbase_input.serialize(),
+            TxInputType::TxInput(tx_inputs) => TxInput::serialize_vec(&tx_inputs),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -180,5 +225,16 @@ impl RawTransaction {
         }
 
         Ok(raw_transactions)
+    }
+
+    pub fn serialize(transaction:&RawTransaction) -> Vec<u8> {
+        let mut transaction_bytes = vec![];
+        transaction_bytes.extend(&transaction.version.to_le_bytes());
+        transaction_bytes.extend(&transaction.tx_in_count.to_le_bytes());
+        transaction_bytes.extend(&transaction.tx_in.to_bytes());
+        transaction_bytes.extend(&transaction.tx_out_count.to_le_bytes());
+        transaction_bytes.extend(TxOutput::serialize_vec(&transaction.tx_out));
+        transaction_bytes.extend(&transaction.lock_time.to_le_bytes());
+        transaction_bytes
     }
 }
