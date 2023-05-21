@@ -1,9 +1,9 @@
 use crate::config::Config;
-use crate::messages::constants::version_constants::LATEST_VERSION;
+use crate::messages::constants::{version_constants::LATEST_VERSION, commands::VERSION};
 use crate::messages::utility::{read_from_varint, EndianRead};
 use crate::messages::{Message, Services};
 use std::io::{self, Cursor, Read};
-use std::net::Ipv6Addr;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -103,6 +103,16 @@ impl Version {
         }
     }
 
+    pub fn default_for_trans_addr(address: SocketAddr) -> Self {
+        let mut version = Self::default();
+        version.addr_trans_ip = match address.ip() {
+            IpAddr::V4(ip4) => ip4.to_ipv6_compatible(),
+            IpAddr::V6(ip6) => ip6,
+        };
+        version.addr_trans_port = address.port();
+        version
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
@@ -137,6 +147,7 @@ impl Version {
         payload.extend(&self.addr_recv_services.to_le_bytes());
         payload.extend(&self.addr_trans_ip.octets());
         payload.extend(&self.addr_trans_port.to_be_bytes());
+        payload.extend(&self.nonce.to_le_bytes());
         Ok(payload)
     }
 
@@ -148,7 +159,7 @@ impl Version {
 impl Message for Version {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
-        let message = self.build_message("version", Some(payload))?;
+        let message = self.build_message(VERSION, Some(payload))?;
         Ok(message)
     }
 }

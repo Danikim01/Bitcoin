@@ -12,6 +12,7 @@ pub mod messages {
 }
 
 pub mod commands {
+    pub const VERSION: &str = "version\0\0\0\0\0";
     pub const VERACK: &str = "verack\0\0\0\0\0\0";
     pub const HEADER: &str = "headers\0\0\0\0\0";
     pub const UNKNOWN: &str = "no_command\0\0";

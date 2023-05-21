@@ -1,6 +1,6 @@
 use crate::messages::{Message, MessageHeader, VerAck, Version};
 use std::io::{self, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpStream, SocketAddrV6};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 
@@ -11,7 +11,7 @@ pub struct Node {
 
 struct Listener {
     stream: TcpStream,
-    writer_channel: mpsc::Sender<u8>,
+    writer_channel: mpsc::Sender<u8>
 }
 
 impl Listener {
@@ -27,6 +27,7 @@ impl Listener {
 
 impl Node {
     fn new(stream: TcpStream, listener: JoinHandle<()>) -> Self {
+        println!("Established connection with node: {:?}", stream);
         Self { stream, listener }
     }
 
@@ -47,21 +48,21 @@ impl Node {
             ));
         }
         let mut stream = TcpStream::connect(node_addr)?;
-        Node::handshake(&mut stream)?;
+        Node::handshake(&mut stream).unwrap();
         Node::spawn(stream, writer_channel)
     }
 
     fn handshake(stream: &mut TcpStream) -> io::Result<()> {
         // send message
-        let msg_version = Version::default();
+        let msg_version = Version::default_for_trans_addr(stream.peer_addr()?);
         let payload = msg_version.serialize()?;
         stream.write_all(&payload)?;
         stream.flush()?;
-
+        
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
         let version_message = Version::from_bytes(&payload_data)?;
-
+        
         if !msg_version.accepts(version_message) {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,

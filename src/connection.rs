@@ -99,7 +99,7 @@ mod tests {
         let nodes_it = find_nodes().unwrap();
         let mut nodes_vec: Vec<SocketAddr> = Vec::new();
         for node in nodes_it {
-            println!("node: {}", node);
+            println!("Established connection with node: {:?}", node);
             nodes_vec.push(node);
         }
         assert!(!nodes_vec.is_empty());
