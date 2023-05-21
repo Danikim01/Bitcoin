@@ -15,13 +15,13 @@ pub struct Version {
     addr_recv_services: u64,
     addr_recv_ip: Ipv6Addr,
     addr_recv_port: u16,
-    addr_trans_services: u64,
+    _addr_trans_services: u64,
     addr_trans_ip: Ipv6Addr,
     addr_trans_port: u16,
     nonce: u64,
-    user_agent: String,
-    start_height: i32,
-    relay: bool,
+    _user_agent: String,
+    _start_height: i32,
+    _relay: bool,
 }
 
 impl Default for Version {
@@ -42,13 +42,13 @@ impl Default for Version {
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
         let addr_recv_port = *config.get_port();
-        let addr_trans_services = 0;
+        let _addr_trans_services = 0;
         let addr_trans_ip = Ipv6Addr::LOCALHOST;
         let addr_trans_port = *config.get_port();
         let nonce = 0;
-        let user_agent = "".to_string();
-        let start_height = 0;
-        let relay = false;
+        let _user_agent = "".to_string();
+        let _start_height = 0;
+        let _relay = false;
         Version::new(
             // message_header,
             version,
@@ -57,13 +57,13 @@ impl Default for Version {
             addr_recv_services,
             addr_recv_ip,
             addr_recv_port,
-            addr_trans_services,
+            _addr_trans_services,
             addr_trans_ip,
             addr_trans_port,
             nonce,
-            user_agent,
-            start_height,
-            relay,
+            _user_agent,
+            _start_height,
+            _relay,
         )
     }
 }
@@ -77,13 +77,13 @@ impl Version {
         addr_recv_services: u64,
         addr_recv_ip: Ipv6Addr,
         addr_recv_port: u16,
-        addr_trans_services: u64,
+        _addr_trans_services: u64,
         addr_trans_ip: Ipv6Addr,
         addr_trans_port: u16,
         nonce: u64,
-        user_agent: String,
-        start_height: i32,
-        relay: bool,
+        _user_agent: String,
+        _start_height: i32,
+        _relay: bool,
     ) -> Self {
         Self {
             // message_header,
@@ -93,13 +93,13 @@ impl Version {
             addr_recv_services,
             addr_recv_ip,
             addr_recv_port,
-            addr_trans_services,
+            _addr_trans_services,
             addr_trans_ip,
             addr_trans_port,
             nonce,
-            user_agent,
-            start_height,
-            relay,
+            _user_agent,
+            _start_height,
+            _relay,
         }
     }
 

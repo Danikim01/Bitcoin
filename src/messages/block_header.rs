@@ -53,7 +53,7 @@ impl BlockHeader {
         Ok(actual_header)
     }
 
-    pub fn prev_hash(&self) -> &[u8; 32] {
+    pub fn _prev_hash(&self) -> &[u8; 32] {
         &self.merkle_root_hash
     }
 

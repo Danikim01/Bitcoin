@@ -1,9 +1,7 @@
-use std::borrow::Borrow;
-
 use crate::io::{self, Cursor};
+use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader};
 use crate::raw_transaction::RawTransaction;
-use crate::merkle_tree::{MerkleTree, self};
 use bitcoin_hashes::{sha256, Hash};
 
 #[derive(Debug)]
@@ -37,24 +35,17 @@ impl SerializedBlock {
 
         serialized_block.block_header.validate_proof_of_work()?;
 
-        // let mut merkle_tree = MerkleTree::new();
-        // for transaction in &serialized_block.txns{
-        //     // Serialize the transaction
-        //     let serialized_transaction = transaction.serialize();
+        // hash all transactions
+        let mut txn_hashes: Vec<sha256::Hash> = vec![];
+        serialized_block.txns.iter().for_each(|txn| {
+            let txn_serial = txn.serialize();
+            let mut txn_hash = sha256::Hash::hash(&txn_serial);
+            txn_hash = sha256::Hash::hash(&txn_hash[..]);
+            txn_hashes.push(txn_hash);
+        });
 
-        //     // Hash the serialized transaction
-        //     let mut transaction_hash = sha256::Hash::hash(&serialized_transaction);
-        //     transaction_hash = sha256::Hash::hash(&transaction_hash[..]);
-
-        //     // Add the transaction hash to the merkle tree
-        //     merkle_tree.append_txid_hash(transaction_hash);
-
-        //     // Generate the merkle root hash
-        //     merkle_tree.find_merkle_root()?;
-
-        //     // Compare the merkle root hash to the one in the block header
-        //     // TODO
-        // }
+        // build merkle tree from transaction hashes
+        let mut _merkle_tree = MerkleTree::from_hashes(txn_hashes);
 
         Ok(serialized_block)
     }

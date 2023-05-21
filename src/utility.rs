@@ -27,7 +27,7 @@ pub fn to_max_len_buckets<T>(initial_vector: Vec<T>, max_bucket_size: usize) -> 
 /// let chunks = to_n_chunks(initial_vec, 3);
 /// assert_eq!(chunks, vec![vec![1,4,7], vec![2,5], vec![3,6]]);
 /// ```
-pub fn to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<Vec<T>> {
+pub fn _to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<Vec<T>> {
     let mut chunks: Vec<Vec<T>> = vec![];
     for _ in 0..amount_of_chunks {
         let chunk: Vec<T> = vec![];

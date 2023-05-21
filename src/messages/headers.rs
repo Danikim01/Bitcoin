@@ -17,7 +17,7 @@ pub struct Headers {
 }
 
 impl Headers {
-    pub fn new(count: usize, block_headers: Vec<BlockHeader>) -> Self {
+    pub fn _new(count: usize, block_headers: Vec<BlockHeader>) -> Self {
         Self {
             count,
             block_headers,
@@ -40,7 +40,7 @@ impl Headers {
         Ok(self.clone())
     }
 
-    pub fn is_last_header(&self) -> bool {
+    pub fn _is_last_header(&self) -> bool {
         self.count % MAX_HEADER != 0
     }
 
@@ -137,11 +137,6 @@ impl Headers {
         }
 
         Ok(())
-    }
-
-    pub fn remove_older_than(&mut self, date: u32) {
-        self.block_headers.retain(|h| h.timestamp > date);
-        self.count = self.block_headers.len();
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

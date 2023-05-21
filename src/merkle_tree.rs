@@ -3,8 +3,8 @@ use bitcoin_hashes::{sha256, Hash};
 #[derive(Debug, Clone)]
 pub struct MerkleNode {
     pub hash: sha256::Hash,
-    left: Option<Box<MerkleNode>>,
-    right: Option<Box<MerkleNode>>,
+    _left: Option<Box<MerkleNode>>,
+    _right: Option<Box<MerkleNode>>,
 }
 
 #[derive(Debug)]
@@ -22,8 +22,8 @@ impl MerkleTree {
             .map(|hash| {
                 Box::new(MerkleNode {
                     hash,
-                    left: None,
-                    right: None,
+                    _left: None,
+                    _right: None,
                 })
             })
             .collect::<Vec<_>>();
@@ -41,8 +41,8 @@ impl MerkleTree {
                     hash = sha256::Hash::hash(&hash[..]);
                     parents.push(Box::new(MerkleNode {
                         hash: hash,
-                        left: Some(pair[0].clone()),
-                        right: None,
+                        _left: Some(pair[0].clone()),
+                        _right: None,
                     }));
                 } else {
                     let mut hash =
@@ -50,8 +50,8 @@ impl MerkleTree {
                     hash = sha256::Hash::hash(&hash[..]);
                     parents.push(Box::new(MerkleNode {
                         hash: hash,
-                        left: Some(pair[0].clone()),
-                        right: Some(pair[1].clone()),
+                        _left: Some(pair[0].clone()),
+                        _right: Some(pair[1].clone()),
                     }));
                 }
             }
@@ -66,33 +66,33 @@ impl MerkleTree {
         Self { root: None } // something wrong happened
     }
 
-    pub fn get_root_hash(&self) -> Option<sha256::Hash> {
+    pub fn _get_root_hash(&self) -> Option<sha256::Hash> {
         if let Some(root) = &self.root {
             return Some(root.hash);
         }
         None
     }
 
-    pub fn validate_inclusion_recursive(node: &MerkleNode, hash: sha256::Hash) -> bool {
+    pub fn _validate_inclusion_recursive(node: &MerkleNode, hash: sha256::Hash) -> bool {
         if node.hash == hash {
             return true;
         }
-        if let Some(left) = &node.left {
-            if Self::validate_inclusion_recursive(left, hash) {
+        if let Some(left) = &node._left {
+            if Self::_validate_inclusion_recursive(left, hash) {
                 return true;
             }
         }
-        if let Some(right) = &node.right {
-            if Self::validate_inclusion_recursive(right, hash) {
+        if let Some(right) = &node._right {
+            if Self::_validate_inclusion_recursive(right, hash) {
                 return true;
             }
         }
         false
     }
 
-    pub fn validate_inclusion(&self, hash: sha256::Hash) -> bool {
+    pub fn _validate_inclusion(&self, hash: sha256::Hash) -> bool {
         if let Some(root) = self.root.as_ref() {
-            return Self::validate_inclusion_recursive(&root, hash);
+            return Self::_validate_inclusion_recursive(&root, hash);
         }
         false
     }
@@ -124,7 +124,7 @@ mod tests {
         let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Actual merkle root hash
-        let actual_hash = merkle_tree.get_root_hash().unwrap();
+        let actual_hash = merkle_tree._get_root_hash().unwrap();
         println!("\nExpected: {:?}\n\n Actual: {:?}\n", a_hash, actual_hash);
         assert_eq!(actual_hash, a_hash);
     }
@@ -149,7 +149,7 @@ mod tests {
         ab_hash = sha256::Hash::hash(&ab_hash[..]);
 
         // Actual merkle root
-        let actual_hash = merkle_tree.get_root_hash().unwrap();
+        let actual_hash = merkle_tree._get_root_hash().unwrap();
         println!("\nExpected: {:?}\n\n Actual: {:?}\n", ab_hash, actual_hash);
         assert_eq!(actual_hash, ab_hash);
     }
@@ -183,7 +183,7 @@ mod tests {
         abcc_hash = sha256::Hash::hash(&abcc_hash[..]);
 
         // Actual merkle root
-        let actual_hash = merkle_tree.get_root_hash().unwrap();
+        let actual_hash = merkle_tree._get_root_hash().unwrap();
         assert_eq!(actual_hash, abcc_hash);
     }
 
@@ -219,7 +219,7 @@ mod tests {
         abcd_hash = sha256::Hash::hash(&abcd_hash[..]);
 
         // Actual merkle root
-        let actual_hash = merkle_tree.get_root_hash().unwrap();
+        let actual_hash = merkle_tree._get_root_hash().unwrap();
         assert_eq!(actual_hash, abcd_hash);
     }
 
@@ -292,7 +292,7 @@ mod tests {
         abcdefghii_hash = sha256::Hash::hash(&abcdefghii_hash[..]);
 
         // Actual merkle root
-        let actual_hash = merkle_tree.get_root_hash().unwrap();
+        let actual_hash = merkle_tree._get_root_hash().unwrap();
         assert_eq!(actual_hash, abcdefghii_hash);
     }
 
@@ -336,13 +336,13 @@ mod tests {
         // Merkle tree
         let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
-        assert!(merkle_tree.validate_inclusion(a_hash));
+        assert!(merkle_tree._validate_inclusion(a_hash));
 
         // Not included in the tree
         let j = b"j";
         let j_hash = sha256::Hash::hash(j);
 
-        assert!(!merkle_tree.validate_inclusion(j_hash));
+        assert!(!merkle_tree._validate_inclusion(j_hash));
 
     }
 }

@@ -1,25 +1,25 @@
 use crate::messages::{Message, MessageHeader, VerAck, Version};
 use std::io::{self, Write};
-use std::net::{SocketAddr, TcpStream, SocketAddrV6};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 pub struct Node {
     pub stream: TcpStream,
-    listener: thread::JoinHandle<()>,
+    _listener: thread::JoinHandle<()>,
 }
 
 struct Listener {
-    stream: TcpStream,
-    writer_channel: mpsc::Sender<u8>
+    _stream: TcpStream,
+    _writer_channel: mpsc::Sender<u8>
 }
 
 impl Listener {
     fn new(stream: TcpStream, writer_channel: mpsc::Sender<u8>) -> Self {
         Self {
-            stream,
-            writer_channel,
+            _stream: stream,
+            _writer_channel: writer_channel,
         }
     }
 
@@ -29,7 +29,7 @@ impl Listener {
 impl Node {
     fn new(stream: TcpStream, listener: JoinHandle<()>) -> Self {
         println!("Established connection with node: {:?}", stream);
-        Self { stream, listener }
+        Self { stream, _listener: listener }
     }
 
     fn spawn(stream: TcpStream, writer_channel: mpsc::Sender<u8>) -> Result<Self, io::Error> {
