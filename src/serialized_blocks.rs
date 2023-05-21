@@ -1,7 +1,10 @@
+use std::borrow::Borrow;
+
 use crate::io::{self, Cursor};
 use crate::messages::{utility::*, BlockHeader};
-use crate::raw_transaction::{CoinBaseInput, Outpoint, RawTransaction, TxInput, TxOutput};
-use bitcoin_hashes::{sha256,Hash};
+use crate::raw_transaction::RawTransaction;
+use crate::merkle_tree::{MerkleTree, self};
+use bitcoin_hashes::{sha256, Hash};
 
 #[derive(Debug)]
 pub struct SerializedBlock {
@@ -34,46 +37,28 @@ impl SerializedBlock {
 
         serialized_block.block_header.validate_proof_of_work()?;
 
-        let mut txid_list = Vec::new();
-        for transaction in &serialized_block.txns{
-            txid_list.push(MerkleTree::hash_transaction(&transaction));
-        }
-        println!("La lista de hashes son {:?}",txid_list);
+        // let mut merkle_tree = MerkleTree::new();
+        // for transaction in &serialized_block.txns{
+        //     // Serialize the transaction
+        //     let serialized_transaction = transaction.serialize();
+
+        //     // Hash the serialized transaction
+        //     let mut transaction_hash = sha256::Hash::hash(&serialized_transaction);
+        //     transaction_hash = sha256::Hash::hash(&transaction_hash[..]);
+
+        //     // Add the transaction hash to the merkle tree
+        //     merkle_tree.append_txid_hash(transaction_hash);
+
+        //     // Generate the merkle root hash
+        //     merkle_tree.find_merkle_root()?;
+
+        //     // Compare the merkle root hash to the one in the block header
+        //     // TODO
+        // }
 
         Ok(serialized_block)
     }
 }
-
-#[derive(Debug)]
-pub struct MerkleTree{
-    merkle_root:sha256::Hash,
-    txid_hashes:Vec<sha256::Hash>,
-}
-
-impl MerkleTree{
-    pub fn new(merkle_root:sha256::Hash,txid_hashes:Vec<sha256::Hash>) -> Self{
-        Self{
-            merkle_root,
-            txid_hashes,
-        }
-    }
-
-    pub fn hash_transaction(transaction:&RawTransaction) -> sha256::Hash {
-        let first_hash = sha256::Hash::hash(&RawTransaction::serialize(&transaction));
-        let second_hash = sha256::Hash::hash(&first_hash[..]);
-        second_hash
-    }
-
-    pub fn find_merkle_root(transactions:Vec<RawTransaction>)-> Result<(),std::io::Error>{
-        let mut txid_list = Vec::new();
-        for transaction in transactions{
-            txid_list.push(Self::hash_transaction(&transaction));
-        }
-        println!("La lista de hashes son {:?}",txid_list);
-        Ok(())
-    }
-}
-
 
 #[cfg(test)]
 mod tests {

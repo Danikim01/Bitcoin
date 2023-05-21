@@ -228,14 +228,14 @@ impl RawTransaction {
         Ok(raw_transactions)
     }
 
-    pub fn serialize(transaction:&RawTransaction) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut transaction_bytes = vec![];
-        transaction_bytes.extend(&transaction.version.to_le_bytes());
-        transaction_bytes.extend(&transaction.tx_in_count.to_le_bytes());
-        transaction_bytes.extend(&transaction.tx_in.to_bytes());
-        transaction_bytes.extend(&transaction.tx_out_count.to_le_bytes());
-        transaction_bytes.extend(TxOutput::serialize_vec(&transaction.tx_out));
-        transaction_bytes.extend(&transaction.lock_time.to_le_bytes());
+        transaction_bytes.extend(self.version.to_le_bytes());
+        transaction_bytes.extend(self.tx_in_count.to_le_bytes());
+        transaction_bytes.extend(self.tx_in.to_bytes());
+        transaction_bytes.extend(self.tx_out_count.to_le_bytes());
+        transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
+        transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
     }
 }
