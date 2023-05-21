@@ -19,6 +19,7 @@ pub mod messages {
 }
 
 pub mod commands {
+    pub const GETHEADERS: &str = "getheaders\0\0";
     pub const BLOCK: &str = "block\0\0\0\0\0\0\0";
     pub const VERSION: &str = "version\0\0\0\0\0";
     pub const VERACK: &str = "verack\0\0\0\0\0\0";

@@ -4,7 +4,7 @@ use crate::raw_transaction::RawTransaction;
 
 use super::Message;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub block_header: BlockHeader,
     pub txn_count: usize,

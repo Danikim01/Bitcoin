@@ -1,6 +1,6 @@
-use crate::messages::{utility::to_varint, HashId, Serialize};
+use crate::messages::{utility::to_varint, HashId, Serialize, constants::commands::GETHEADERS};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetHeader {
     version: i32,
     hash_count: u8,
@@ -65,7 +65,7 @@ impl GetHeader {
 impl Serialize for GetHeader {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
-        let message = self.build_message("getheaders", Some(payload))?;
+        let message = self.build_message(GETHEADERS, Some(payload))?;
         Ok(message)
     }
 }

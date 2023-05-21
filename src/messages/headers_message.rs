@@ -41,8 +41,8 @@ impl Headers {
         Ok(self.clone())
     }
 
-    pub fn is_last_header(&self) -> bool {
-        self.count % MAX_HEADER != 0
+    pub fn is_paginated(&self) -> bool {
+        self.count % MAX_HEADER == 0
     }
 
     fn last_header(&self) -> &BlockHeader {
@@ -53,63 +53,19 @@ impl Headers {
         self.last_header().hash()
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> io::Result<Headers> {
-        let mut header = Headers::default();
-        //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
-        //hash_headers.insert([0_u8; 32], BlockHeader::default());
-        header.add_from_bytes(bytes)?;
-
-        Ok(header)
-    }
-
-    pub fn from_stream(stream: &mut TcpStream) -> Result<Headers, Error> {
-        let mut header = Headers::default();
-        //let mut hash_headers: HashMap::<[u8; 32], BlockHeader> = HashMap::new();
-        //hash_headers.insert([0_u8; 32], BlockHeader::default());
-        header.add_from_stream(stream)?;
-
-        Ok(header)
-    }
-
-    pub fn from_file(file_name: &str) -> Result<Headers, Error> {
+    pub fn from_file(file_name: &str) -> io::Result<Headers> {
         let headers_bytes = fs::read(file_name)?;
-        Headers::from_bytes(&headers_bytes)
-    }
-
-    fn add_from_bytes(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let mut temp_headers = Self::from_bytes(bytes)?;
-        self.block_headers.append(&mut temp_headers.block_headers);
-        self.count += temp_headers.count;
-        Ok(temp_headers.count)
-    }
-
-    fn add_from_stream(&mut self, stream: &mut TcpStream) -> Result<usize, Error> {
-        let headers_message = MessageHeader::read_until_command(stream, HEADERS)?;
-
-        println!(
-            "Peer responded with headers message of payload size: {:?}",
-            headers_message.payload_size
-        );
-        let data_headers = headers_message.read_payload(stream)?;
-        self.add_from_bytes(&data_headers)
-    }
-
-    pub fn read_all_headers(&mut self, node: &mut Node) -> Result<(), Error> {
-        let mut headers_read = MAX_HEADER;
-        while headers_read == MAX_HEADER {
-            let getheader_message = GetHeader::from_last_header(self.last_header_hash());
-
-            node.send(getheader_message.serialize()?)?;
-            let headers_message = MessageHeader::read_until_command(&mut node.stream, HEADERS)?;
-
-            let data_headers = headers_message.read_payload(&mut node.stream)?;
-            headers_read = self.add_from_bytes(&data_headers)? as usize;
+        match Headers::deserialize(&headers_bytes)? {
+            Message::Headers(headers) => {
+                Ok(headers)
+            },
+            _ => {
+                Err(io::Error::new(io::ErrorKind::InvalidInput, "Found invalid headers message while reading from file"))
+            }
         }
-
-        Ok(())
     }
 
-    pub fn save_to_file(&self, file_name: &str) -> Result<(), Error> {
+    pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
         let headers_bytes = self.serialize()?;
         let mut save_stream = File::create(file_name)?;
         save_stream.write_all(&headers_bytes)?;

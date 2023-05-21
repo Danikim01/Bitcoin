@@ -6,7 +6,7 @@ use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Version {
     // message_header: MessageHeader,
     version: i32,

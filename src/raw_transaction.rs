@@ -14,7 +14,7 @@ fn read_coinbase_script(
     Ok(array)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CoinBaseInput {
     hash: HashId,
     index: u32,
@@ -46,7 +46,7 @@ impl CoinBaseInput {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Outpoint {
     hash: [u8; 32],
     index: u32,
@@ -61,7 +61,7 @@ impl Outpoint {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TxInput {
     previous_output: Outpoint,
     script_bytes: u64,
@@ -92,7 +92,7 @@ impl TxInput {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TxOutput {
     value: i64,
     pk_script_bytes: u64,
@@ -121,13 +121,13 @@ impl TxOutput {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TxInputType {
     CoinBaseInput(CoinBaseInput),
     TxInput(Vec<TxInput>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RawTransaction {
     version: u32,
     tx_in_count: u64,

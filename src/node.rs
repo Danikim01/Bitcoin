@@ -30,6 +30,7 @@ impl Listener {
                 commands::BLOCK => Block::deserialize(&payload)?,
                 _ => continue,
             };
+            println!("LISTENER: Writing message to channel");
             self.writer_channel.send(dyn_message).map_err(to_io_err)?;
         }
         Ok(())
@@ -43,7 +44,7 @@ pub struct Node {
 
 impl Node {
     fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>) -> Self {
-        println!("Established connection with node: {:?}", stream);
+        println!("MAIN: Established connection with node: {:?}", stream);
         Self { stream, listener }
     }
 

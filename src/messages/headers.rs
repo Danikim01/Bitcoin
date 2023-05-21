@@ -3,7 +3,7 @@ use crate::messages::constants::header_constants::*;
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MessageHeader {
     pub start_string: [u8; START_STRING_SIZE],
     pub command_name: String,

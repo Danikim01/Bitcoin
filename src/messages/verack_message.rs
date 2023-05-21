@@ -3,7 +3,7 @@ use crate::messages::{MessageHeader, Serialize};
 use std::io;
 use std::net::TcpStream;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VerAck {
     message_header: MessageHeader,
 }

@@ -1,6 +1,6 @@
 use crate::messages::{BlockHeader, Hashable, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InvType {
     MSGError = 0,
     MSGTx = 1,
@@ -28,7 +28,7 @@ impl InvType {
 }
 
 //ver https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Inventory {
     inv_type: InvType,
     hash: [u8; 32],
@@ -51,7 +51,7 @@ impl Inventory {
 }
 
 // https://developer.bitcoin.org/reference/p2p_networking.html#getdata
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetData {
     count: usize,
     inventory: Vec<Inventory>, // inv as it was received from an inv message

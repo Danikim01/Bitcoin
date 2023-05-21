@@ -7,7 +7,7 @@ use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node::Node;
-use crate::utility::{into_hashmap, to_io_err, to_buckets};
+use crate::utility::{into_hashmap, to_buckets, to_io_err};
 use std::collections::HashMap;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -36,6 +36,7 @@ impl NetworkController {
                 Ok(node) => nodes.push(node),
                 Err(..) => continue,
             }
+            break;
         }
         Ok(Self {
             headers: HashMap::new(),
@@ -48,6 +49,7 @@ impl NetworkController {
 
     fn recv_messages(&mut self) -> io::Result<()> {
         while true {
+            println!("MAIN: Listening for incoming messages");
             match self.reader.recv().map_err(to_io_err)? {
                 Message::Headers(headers) => self.read_headers(headers),
                 Message::Block(block) => self.read_block(block),
@@ -63,29 +65,48 @@ impl NetworkController {
     }
 
     pub fn read_block(&mut self, block: Block) -> io::Result<()> {
+        println!("MAIN: Adding block to blocks hashmap");
         self.blocks.insert(block.hash(), block);
-        println!("Got block message. Current blocks len: {:?}", self.blocks.len());
+        println!(
+            "MAIN: Got block message. Current blocks len: {:?}",
+            self.blocks.len()
+        );
         Ok(())
     }
 
+    fn log_headers(&mut self, headers: Headers) {
+        println!("LOG: old best hash:          {:?}", self.tallest_header);
+        println!("LOG: first header prev hash: {:?}", headers.block_headers[0].prev_hash());
+        println!("LOG: first header:           {:?}", headers.block_headers[0].hash());
+        println!("LOG: last header:            {:?}", headers.block_headers[headers.count - 1].hash());
+    }
+
     fn read_headers(&mut self, mut headers: Headers) -> io::Result<()> {
-        self.headers
-        .extend(into_hashmap(headers.clone().block_headers));
-        println!("Got headers message. Current headers len: {:?}", self.headers.len());
-        if headers.count == MAX_HEADER {
-            let getheader_message = GetHeader::from_last_header(headers.last_header_hash());
-            let sync_node = &mut self.nodes[0];
-            sync_node.send(getheader_message.serialize()?)?;
+        self.log_headers(headers.clone());
+        // request more headers
+        self.tallest_header = headers.last_header_hash();
+        if headers.is_paginated() {
+            self.request_headers(self.tallest_header)?;
         }
 
+        // store headers in hashmap
+        self.headers.extend(into_hashmap(headers.block_headers.clone()));
+        println!(
+            "MAIN: Got headers message. New headers len: {:?}. Incoming headers len: {:?}",
+            self.headers.len(),
+            headers.count
+        );
+        
+        // request blocks for headers after given date
         let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
         headers.trim_timestamp(init_tp_timestamp)?;
-
+        println!("MAIN: headers message count after trim: {:?}", headers.count);
         self.request_blocks(headers)?;
         Ok(())
     }
 
     fn request_headers(&mut self, header_hash: HashId) -> Result<(), io::Error> {
+        println!("MAIN: Requesting headers");
         let sync_node = &mut self.nodes[0];
         let getheader_message = GetHeader::from_last_header(header_hash);
         sync_node.send(getheader_message.serialize()?)?;
@@ -93,6 +114,9 @@ impl NetworkController {
     }
 
     fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
+        if headers.count == 0 {
+            return Ok (())
+        }
         let headers_buckets = to_buckets(headers.block_headers, self.nodes.len());
         for (node_number, bucket) in headers_buckets.into_iter().enumerate() {
             let chunks = bucket.chunks(MAX_INV_SIZE);
