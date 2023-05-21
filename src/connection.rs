@@ -39,7 +39,7 @@ fn handle_getdata_message(node: &mut Node, headers: Vec<BlockHeader>) -> Result<
     // save_stream.write_all(&data_blocks)?;
 
     let _block_message_data = SerializedBlock::from_bytes(&data_blocks)?;
-
+    println!("{:?}",_block_message_data);
     Ok(())
 }
 
@@ -52,6 +52,7 @@ pub fn connect_to_network() -> Result<(Vec<Node>, mpsc::Receiver<u8>), io::Error
             Ok(node) => nodes.push(node),
             Err(..) => continue,
         }
+        break;
     }
     Ok((nodes, reader_end))
 }

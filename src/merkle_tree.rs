@@ -73,6 +73,7 @@ impl MerkleTree {
         }
         None
     }
+    
 
     pub fn _validate_inclusion_recursive(node: &MerkleNode, hash: sha256::Hash) -> bool {
         if node.hash == hash {
