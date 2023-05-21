@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream, SocketAddrV6};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 pub struct Node {
     pub stream: TcpStream,
@@ -47,8 +48,8 @@ impl Node {
                 "Ipv6 is not supported",
             ));
         }
-        let mut stream = TcpStream::connect(node_addr)?;
-        Node::handshake(&mut stream).unwrap();
+        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
+        Node::handshake(&mut stream)?;
         Node::spawn(stream, writer_channel)
     }
 
@@ -58,7 +59,6 @@ impl Node {
         let payload = msg_version.serialize()?;
         stream.write_all(&payload)?;
         stream.flush()?;
-        
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
         let version_message = Version::from_bytes(&payload_data)?;
@@ -69,7 +69,7 @@ impl Node {
                 "Version not supported",
             ));
         }
-
+        
         VerAck::from_stream(stream)?; // receive verack
         let payload = VerAck::new().serialize()?;
         stream.write_all(&payload)?; // send verack
