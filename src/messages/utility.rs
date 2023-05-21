@@ -18,7 +18,7 @@ pub fn to_varint(value: u64) -> Vec<u8> {
         }
         _ => {
             buf.push(0xff);
-            buf.extend_from_slice(&(value as u64).to_le_bytes());
+            buf.extend_from_slice(&value.to_le_bytes());
         }
     }
     buf

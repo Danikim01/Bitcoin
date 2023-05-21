@@ -161,7 +161,7 @@ impl TxInputType {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             TxInputType::CoinBaseInput(coinbase_input) => coinbase_input.serialize(),
-            TxInputType::TxInput(tx_inputs) => TxInput::serialize_vec(&tx_inputs),
+            TxInputType::TxInput(tx_inputs) => TxInput::serialize_vec(tx_inputs),
         }
     }
 }

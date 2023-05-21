@@ -23,7 +23,7 @@ impl Listener {
         }
     }
 
-    fn listen(self) -> () {}
+    fn listen(self) {}
 }
 
 impl Node {

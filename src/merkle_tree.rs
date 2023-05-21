@@ -33,14 +33,15 @@ impl MerkleTree {
             let mut parents: Vec<Box<MerkleNode>> = Vec::new();
             // iterate in pairs
             let mut childs_iter = children.chunks(2);
-            while let Some(pair) = childs_iter.next() {
+            for pair in childs_iter {
+            // while let Some(pair) = childs_iter.next() {
                 // Case only one child in the pair
                 if pair.len() == 1 {
                     let mut hash =
                         sha256::Hash::hash(&[&pair[0].hash[..], &pair[0].hash[..]].concat());
                     hash = sha256::Hash::hash(&hash[..]);
                     parents.push(Box::new(MerkleNode {
-                        hash: hash,
+                        hash,
                         _left: Some(pair[0].clone()),
                         _right: None,
                     }));
@@ -49,7 +50,7 @@ impl MerkleTree {
                         sha256::Hash::hash(&[&pair[0].hash[..], &pair[1].hash[..]].concat());
                     hash = sha256::Hash::hash(&hash[..]);
                     parents.push(Box::new(MerkleNode {
-                        hash: hash,
+                        hash,
                         _left: Some(pair[0].clone()),
                         _right: Some(pair[1].clone()),
                     }));
@@ -92,7 +93,7 @@ impl MerkleTree {
 
     pub fn _validate_inclusion(&self, hash: sha256::Hash) -> bool {
         if let Some(root) = self.root.as_ref() {
-            return Self::_validate_inclusion_recursive(&root, hash);
+            return Self::_validate_inclusion_recursive(root, hash);
         }
         false
     }

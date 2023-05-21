@@ -96,7 +96,7 @@ pub trait Message {
 
         if let Some(payload) = payload.as_ref() {
             payload_size = (payload.len() as u32).to_le_bytes();
-            checksum = sha256::Hash::hash(&payload).to_byte_array(); // first hash
+            checksum = sha256::Hash::hash(payload).to_byte_array(); // first hash
             checksum = sha256::Hash::hash(&checksum).to_byte_array(); // second hash
         }
 

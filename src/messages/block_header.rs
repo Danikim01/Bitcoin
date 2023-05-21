@@ -77,7 +77,7 @@ impl BlockHeader {
     }
 
     fn compare_target_threshold_and_hash(target: &[u8; 32], hash: &[u8; 32]) -> std::cmp::Ordering {
-        target.cmp(&hash)
+        target.cmp(hash)
     }
 
     pub fn validate_proof_of_work(&self) -> Result<(), std::io::Error> {
