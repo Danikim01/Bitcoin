@@ -101,14 +101,8 @@ impl MerkleTree {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
-
-    // #[test]
-    // fn test_merklee_tree_no_elements() {
-    //     assert!(false);
-    // }
 
     #[test]
     fn test_merkle_tree_one_element() {

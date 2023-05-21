@@ -7,6 +7,7 @@ mod raw_transaction;
 mod serialized_blocks;
 mod utility;
 mod merkle_tree;
+mod utxoset;
 fn main() -> Result<(), io::Error> {
     let (mut nodes, _mpsc_reader) = connection::connect_to_network()?;
     connection::sync(&mut nodes)?;

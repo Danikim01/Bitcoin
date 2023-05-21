@@ -114,7 +114,7 @@ impl TxInput {
 
 #[derive(Debug)]
 pub struct TxOutput {
-    value: i64,
+    pub value: i64,
     pk_script_bytes: u64,
     pk_script: Vec<u8>,
 }
@@ -172,7 +172,7 @@ pub struct RawTransaction {
     tx_in_count: u64,
     tx_in: TxInputType,
     tx_out_count: u64,
-    tx_out: Vec<TxOutput>,
+    pub tx_out: Vec<TxOutput>,
     lock_time: u32,
 }
 

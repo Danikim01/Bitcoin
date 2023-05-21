@@ -74,7 +74,7 @@ mod tests {
         }
         
         let merkle_tree = MerkleTree::from_hashes(txid_hashes_vector);
-        let merkle_tree_root_hash = merkle_tree.get_root_hash();
+        let merkle_tree_root_hash = merkle_tree._get_root_hash();
         println!("root:{:?}",merkle_tree_root_hash);
         match merkle_tree_root_hash{
             Some(root_hash)=>{
