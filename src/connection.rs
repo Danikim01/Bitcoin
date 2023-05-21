@@ -12,8 +12,8 @@ use std::{
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
 
-// use std::fs::File; // used only to store read bytes in a file
-// use std::io::Write; // used only to store read bytes in a file
+use std::fs::File; // used only to store read bytes in a file
+use std::io::Write; // used only to store read bytes in a file
 
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
@@ -80,7 +80,7 @@ fn handle_getdata_message(stream: &mut TcpStream, headers: Vec<BlockHeader>) -> 
     let data_blocks = block_message.read_payload(stream)?;
 
     // save data_blicks to file
-    // let mut save_stream = File::create("src/block_message_payload.dat")?;
+    // let mut save_stream = File::create("tmp/block_message_payload.dat")?;
     // save_stream.write_all(&data_blocks)?;
 
     let block_message_data = SerializedBlocks::from_bytes(&data_blocks)?;
