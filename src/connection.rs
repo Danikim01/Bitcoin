@@ -12,9 +12,6 @@ use std::{
     net::{SocketAddr, TcpStream, ToSocketAddrs},
 };
 
-use std::fs::File; // used only to store read bytes in a file
-use std::io::Write; // used only to store read bytes in a file
-
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
     let node_discovery_hostname = Config::from_file()?.get_hostname();
     node_discovery_hostname.to_socket_addrs()
@@ -74,17 +71,11 @@ fn build_getdata(count: usize, block_headers: Vec<BlockHeader>) -> GetData {
 
 fn handle_getdata_message(stream: &mut TcpStream, headers: Vec<BlockHeader>) -> Result<(), io::Error> {
     let get_data = build_getdata(headers.len(), headers);
-    // println!("Sending GetData message: {:?}", &get_data);
     get_data.send_to(stream)?;
     let block_message = MessageHeader::read_until_command(stream, "block\0\0\0\0\0\0\0")?;
     let data_blocks = block_message.read_payload(stream)?;
 
-    // save data_blicks to file
-    // let mut save_stream = File::create("tmp/block_message_payload.dat")?;
-    // save_stream.write_all(&data_blocks)?;
-
     let block_message_data = SerializedBlock::from_bytes(&data_blocks)?;
-    println!("Block message data: {:?}", block_message_data);
 
     Ok(())
 }
@@ -149,18 +140,9 @@ pub fn initial_sync(nodes: &mut Vec<TcpStream>) -> Result<(), io::Error> {
 pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<&mut Vec<TcpStream>, io::Error> {
     let mut headers = Headers::from_file("tmp/headers_backup.dat")?;
 
-    // println!(
-    //     "Block headers read from file: {:?}",
-    //     headers.block_headers.len()
-    // );
-
     // keep only headers than are more recent than specified timestamp
-    let init_tp_timestamp = 1681095600; // 2023-04-10 00:00:00 - move to config file
-    headers
-        .block_headers
-        .retain(|header| header.timestamp > init_tp_timestamp);
-    headers.count = headers.block_headers.len();
-    // move code above to a headers method
+    let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+    headers.trim_timestamp(init_tp_timestamp)?;
 
     let mut discrepancy_count = 0;
     for i in 1..headers.count{
@@ -184,22 +166,6 @@ pub fn sync(nodes: &mut Vec<TcpStream>) -> Result<&mut Vec<TcpStream>, io::Error
         handle_getdata_message(&mut nodes[0], bucket)?;
     }
     
-    //Crear un ThreadPool con el número de hilos igual a la cantidad de nodos
-    //println!("La cantidad de nodos son {}",nodes.len());
-    //let pool = ThreadPool::new(nodes.len());
-    //let chunks_of_headers = to_n_chunks(headers.block_headers, nodes.len());
-    //for (node_num, chunk) in chunks_of_headers.into_iter().enumerate() {
-    //    let node = &mut nodes[node_num];
-    //    pool.execute(move || {
-    //        let buckets = to_max_len_buckets(chunk, constants::messages::MAX_INV_SIZE);
-    //        for bucket in buckets {
-    //            if let Err(err) = handle_getdata_message(&mut node, bucket) {
-    //                eprintln!("Error downloading blocks with getdata: {:?}", err);
-    //            }
-    //        }
-    //    });
-    //}
-
     Ok(nodes)
 }
 

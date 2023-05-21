@@ -3,6 +3,7 @@ use crate::messages::constants::commands::HEADER;
 use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, read_hash, to_varint, EndianRead};
 use crate::messages::{GetHeader, Message, MessageHeader};
+use core::time;
 use std::fs;
 use std::fs::File;
 use std::io::{Cursor, Error, Write};
@@ -10,7 +11,7 @@ use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct Headers {
     pub count: usize, //Es un Compact size uint
     pub block_headers: Vec<BlockHeader>,
@@ -23,11 +24,21 @@ impl Headers {
             block_headers,
         }
     }
+
     pub fn default() -> Self {
         Self {
             count: 0,
             block_headers: Vec::new(),
         }
+    }
+
+    pub fn trim_timestamp(&mut self, timestamp: u32) -> Result<Self, Error> {
+        self
+            .block_headers
+            .retain(|header| header.timestamp > timestamp);
+        self.count = self.block_headers.len();
+
+        Ok(self.clone())
     }
 
     pub fn is_last_header(&self) -> bool {

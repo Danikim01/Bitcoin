@@ -32,6 +32,7 @@ impl SerializedBlock {
             txns,
         };
 
+        serialized_block.block_header.validate_proof_of_work()?;
         Ok(serialized_block)
     }
 }
@@ -45,7 +46,5 @@ mod tests {
     fn test_read_serialized_block_from_bytes() {
         let bytes = fs::read("./tmp/block_message_payload.dat").unwrap();
         SerializedBlock::from_bytes(&bytes).unwrap();
-
-
     }
 }
