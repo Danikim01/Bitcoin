@@ -1,11 +1,14 @@
-use crate::messages::{Message, MessageHeader, Services};
+use crate::config::Config;
+use crate::messages::constants::version_constants::LATEST_VERSION;
+use crate::messages::utility::{read_from_varint, EndianRead};
+use crate::messages::{Message, Services};
 use std::io::{self, Cursor, Read, Write};
 use std::net::{IpAddr, Ipv6Addr, TcpStream};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 pub struct Version {
-    message_header: MessageHeader,
+    // message_header: MessageHeader,
     version: i32,
     services: Services,
     timestamp: i64,
@@ -21,28 +24,33 @@ pub struct Version {
     relay: bool,
 }
 
-impl std::default::Default for Version {
+impl Default for Version {
     fn default() -> Self {
-        let message_header = MessageHeader::default();
-        let version = 70015;
+        // let message_header = MessageHeader::default();
+        let version = LATEST_VERSION;
         let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => duration,
             Err(..) => Duration::default(),
         }
         .as_secs() as i64;
+        let config = match Config::from_file() {
+            Ok(config) => config,
+            Err(..) => Config::default(),
+        };
+
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
-        let addr_recv_port = 18333;
+        let addr_recv_port = *config.get_port();
         let addr_trans_services = 0;
         let addr_trans_ip = Ipv6Addr::UNSPECIFIED;
-        let addr_trans_port = 18333;
+        let addr_trans_port = *config.get_port();
         let nonce = 0;
         let user_agent = "".to_string();
         let start_height = 0;
         let relay = false;
         Version::new(
-            message_header,
+            // message_header,
             version,
             services,
             timestamp,
@@ -62,7 +70,7 @@ impl std::default::Default for Version {
 
 impl Version {
     fn new(
-        message_header: MessageHeader,
+        // message_header: MessageHeader,
         version: i32,
         services: Services,
         timestamp: i64,
@@ -78,7 +86,7 @@ impl Version {
         relay: bool,
     ) -> Self {
         Self {
-            message_header,
+            // message_header,
             version,
             services,
             timestamp,
@@ -98,80 +106,26 @@ impl Version {
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
-        // header
-        let mut message_header_bytes = [0_u8; 24];
-        cursor.read_exact(&mut message_header_bytes)?;
-        let message_header = MessageHeader::from_bytes(&message_header_bytes)?;
+        let version = Version::new(
+            i32::from_le_stream(&mut cursor)?,
+            Services::new(u64::from_le_stream(&mut cursor)?),
+            i64::from_le_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?, // not used
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            deser_user_agent(&mut cursor)?,
+            i32::from_le_stream(&mut cursor)?,
+            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
+        );
 
-        // payload
-        let mut version = [0_u8; 4];
-        let mut services = [0_u8; 8];
-        let mut timestamp = [0_u8; 8];
-        let mut addr_recv_services = [0_u8; 8];
-        let mut addr_recv_ip = [0_u8; 16];
-        let mut addr_recv_port = [0_u8; 2];
-        let mut addr_trans_services = [0_u8; 8]; // not used
-        let mut addr_trans_ip = [0_u8; 16]; // not used
-        let mut addr_trans_port = [0_u8; 2];
-        let mut nonce = [0_u8; 8];
-        let user_agent_size: u64;
-        let mut start_height = [0_u8; 4];
-        let mut relay = [0_u8; 1];
-
-        // read payload
-        cursor.read_exact(&mut version)?;
-        cursor.read_exact(&mut services)?;
-        cursor.read_exact(&mut timestamp)?;
-        cursor.read_exact(&mut addr_recv_services)?;
-        cursor.read_exact(&mut addr_recv_ip)?;
-        cursor.read_exact(&mut addr_recv_port)?;
-        cursor.read_exact(&mut addr_trans_services)?;
-        cursor.read_exact(&mut addr_trans_ip)?;
-        cursor.read_exact(&mut addr_trans_port)?;
-        cursor.read_exact(&mut nonce)?;
-
-        let mut byte = [0_u8; 1];
-        cursor.read_exact(&mut byte)?;
-        if byte[0] < 0xFD {
-            user_agent_size = byte[0] as u64;
-        } else {
-            let mut buffer_size = 0;
-            match byte[0] {
-                0xFF => buffer_size = 8,
-                0xFE => buffer_size = 4,
-                0xFD => buffer_size = 2,
-                _ => {}
-            };
-            let mut user_agent_bytes = vec![0_u8; buffer_size];
-            cursor.read_exact(&mut user_agent_bytes)?;
-            user_agent_size = u64::from_be_bytes(vec_to_arr(user_agent_bytes));
-        }
-        let mut user_agent = vec![0_u8; user_agent_size as usize];
-        cursor.read_exact(&mut user_agent)?;
-        cursor.read_exact(&mut start_height)?;
-        cursor.read_exact(&mut relay)?; // pending: this field should be optional
-
-        Ok(Version::new(
-            message_header,
-            i32::from_le_bytes(version),
-            Services::try_from(services)?,
-            i64::from_le_bytes(timestamp),
-            u64::from_le_bytes(addr_recv_services),
-            Ipv6Addr::from(addr_recv_ip),
-            u16::from_be_bytes(addr_recv_port),
-            u64::from_le_bytes(addr_trans_services),
-            Ipv6Addr::from(addr_trans_ip),
-            u16::from_be_bytes(addr_trans_port),
-            u64::from_le_bytes(nonce),
-            std::str::from_utf8(&user_agent)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
-                .to_string(),
-            i32::from_le_bytes(start_height),
-            relay[0] != 0,
-        ))
+        Ok(version)
     }
 
-    fn build_payload(&self, stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
+    fn build_payload(&self, stream: &mut TcpStream) -> io::Result<Vec<u8>> {
         // Get the transmitting node's IP address
         // por qué lo estamos pasando a string para después pasarlo a IP????
         let addr_trans = stream.peer_addr()?.to_string();
@@ -214,16 +168,18 @@ impl Version {
         payload.extend(&self.addr_recv_port.to_be_bytes());
         payload.extend(&ip_bytes);
         payload.extend(&self.addr_trans_port.to_be_bytes());
-        payload.extend::<[u8; 8]>(self.services.into());
-
         // Add the IPv6 address to the payload
         payload.extend(&ip_bytes);
         Ok(payload)
     }
+
+    pub fn accepts(&self, another_version: Version) -> bool {
+        self.version <= another_version.version
+    }
 }
 
 impl Message for Version {
-    fn send_to(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+    fn send_to(&self, stream: &mut TcpStream) -> io::Result<()> {
         let payload = self.build_payload(stream)?;
         let message = self.build_message("version", Some(payload))?;
 
@@ -233,7 +189,13 @@ impl Message for Version {
     }
 }
 
-fn vec_to_arr<T, const N: usize>(v: Vec<T>) -> [T; N] {
-    v.try_into()
-        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
+fn deser_user_agent(cursor: &mut Cursor<&[u8]>) -> Result<String, io::Error> {
+    let user_agent_size = read_from_varint(cursor)? as usize;
+    let mut buffer = vec![0_u8; user_agent_size];
+    cursor.read_exact(&mut buffer)?;
+
+    match std::str::from_utf8(&buffer) {
+        Ok(user_agent) => Ok(user_agent.to_string()),
+        Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())),
+    }
 }
