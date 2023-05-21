@@ -1,7 +1,7 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
 use std::io::{Error, Read};
-use crate::raw_transaction::TxInputType::TxInput as OtherTxInput;
+
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<u8>, std::io::Error> {
     let mut array = vec![0_u8; count];
@@ -22,11 +22,11 @@ pub struct CoinBaseInput {
 impl CoinBaseInput {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let hash = read_hash(cursor)?;
-        let index = u32::from_le_stream(cursor)?;
+        let index = read_u32(cursor)?;
         let script_bytes = read_from_varint(cursor)?;
-        let height = u32::from_le_stream(cursor)?;
+        let height = read_u32(cursor)?;
         let coinbase_script = read_coinbase_script(cursor, (script_bytes-4) as usize)?;
-        let sequence = u32::from_le_stream(cursor)?;
+        let sequence = read_u32(cursor)?;
 
         let coinbase_input = CoinBaseInput {
             hash,
@@ -62,7 +62,7 @@ pub struct Outpoint {
 impl Outpoint {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let hash = read_hash(cursor)?;
-        let index = u32::from_le_stream(cursor)?;
+        let index = read_u32(cursor)?;
         let outpoint = Outpoint { hash, index };
         Ok(outpoint)
     }
@@ -84,7 +84,7 @@ impl TxInput {
             let previous_output = Outpoint::from_bytes(cursor)?;
             let script_bytes = read_from_varint(cursor)?;
             let script_sig = read_coinbase_script(cursor, script_bytes as usize)?;
-            let sequence = u32::from_le_stream(cursor)?;
+            let sequence = read_u32(cursor)?;
 
             let tx_input = TxInput {
                 previous_output,
@@ -124,7 +124,7 @@ impl TxOutput {
         let mut tx_outputs = vec![];
 
         for _ in 0..n {
-            let value = i64::from_le_stream(cursor)?;
+            let value = read_i64(cursor)?;
             let pk_script_bytes = read_from_varint(cursor)?;
             let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
 
@@ -178,12 +178,12 @@ pub struct RawTransaction {
 
 impl RawTransaction {
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let version = u32::from_le_stream(cursor)?;
+        let version = read_u32(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;
         let tx_in = TxInputType::CoinBaseInput(CoinBaseInput::from_bytes(cursor)?);
         let tx_out_count = read_from_varint(cursor)?;
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
-        let lock_time = u32::from_le_stream(cursor)?;
+        let lock_time = read_u32(cursor)?;
 
         let raw_transaction = RawTransaction {
             version,
@@ -201,7 +201,7 @@ impl RawTransaction {
         let mut raw_transactions = vec![];
 
         for _ in 1..count {
-            let version = u32::from_le_stream(cursor)?;
+            let version = read_u32(cursor)?;
 
             let tx_in_count = read_from_varint(cursor)?;
             let tx_in =
@@ -210,7 +210,7 @@ impl RawTransaction {
             let tx_out_count = read_from_varint(cursor)?;
             let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
 
-            let lock_time = u32::from_le_stream(cursor)?;
+            let lock_time = read_u32(cursor)?;
 
             let raw_transaction = RawTransaction {
                 version,
