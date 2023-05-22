@@ -15,15 +15,13 @@ pub struct MerkleTree {
 // Doc: https://developer.bitcoin.org/reference/block_chain.html#merkle-trees
 // Guide: https://www.derpturkey.com/merkle-tree-construction-and-proof-of-inclusion/
 impl MerkleTree {
-    fn map_hashes_to_nodes(hashes: Vec<sha256::Hash>) -> Vec<Box<MerkleNode>> {
+    fn map_hashes_to_nodes(hashes: Vec<sha256::Hash>) -> Vec<MerkleNode> {
         hashes
             .into_iter()
-            .map(|hash| {
-                Box::new(MerkleNode {
-                    hash,
-                    _left: None,
-                    _right: None,
-                })
+            .map(|hash| MerkleNode {
+                hash,
+                _left: None,
+                _right: None,
             })
             .collect::<Vec<_>>()
     }
@@ -43,22 +41,24 @@ impl MerkleTree {
                 if pair.len() == 1 {
                     parents.push(Box::new(MerkleNode {
                         hash: Self::get_hash(&[&pair[0].hash[..], &pair[0].hash[..]].concat()),
-                        _left: Some(pair[0].clone()),
+                        _left: Some(Box::new(pair[0].clone())),
                         _right: None,
                     }));
                 } else {
                     parents.push(Box::new(MerkleNode {
                         hash: Self::get_hash(&[&pair[0].hash[..], &pair[1].hash[..]].concat()),
-                        _left: Some(pair[0].clone()),
-                        _right: Some(pair[1].clone()),
+                        _left: Some(Box::new(pair[0].clone())),
+                        _right: Some(Box::new(pair[1].clone())),
                     }));
                 }
             }
-            children = parents.clone();
+            children = parents.into_iter().map(|boxed_node| *boxed_node).collect();
         }
 
         if let Some(root) = children.pop() {
-            return Self { root: Some(root) };
+            return Self {
+                root: Some(Box::new(root)),
+            };
         }
 
         Self { root: None } // something wrong happened
