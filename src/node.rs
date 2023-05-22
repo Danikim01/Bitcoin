@@ -23,6 +23,7 @@ impl Listener {
     }
 
     fn log_listen(mut self) -> io::Result<()> {
+        // this should be later replaced by a logger
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
@@ -49,7 +50,7 @@ impl Listener {
 
 pub struct Node {
     pub stream: TcpStream,
-    _listener: thread::JoinHandle<io::Result<()>>,
+    listener: thread::JoinHandle<io::Result<()>>,
 }
 
 impl Node {
@@ -57,7 +58,7 @@ impl Node {
         println!("MAIN: Established connection with node: {:?}", stream);
         Self {
             stream,
-            _listener: listener,
+            listener,
         }
     }
 

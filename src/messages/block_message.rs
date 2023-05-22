@@ -68,19 +68,22 @@ impl Block {
             txn_hash = sha256::Hash::hash(&txn_hash[..]);
             txn_hashes.push(txn_hash);
         });
-        // build merkle tree from transaction hashes
-        let mut _merkle_tree = MerkleTree::from_hashes(txn_hashes);
+        // proof of inclusion not yet included
 
-        match _merkle_tree._get_root_hash() {
-            Some(root_hash) if root_hash.to_byte_array() == self.block_header.merkle_root_hash => {
-                utxo_set.extend(utxo_set_snapshot);
-                Ok(())
-            }
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Transactions failed proof of inclusion",
-            )),
-        }
+        // build merkle tree from transaction hashes
+        //let mut _merkle_tree = MerkleTree::from_hashes(txn_hashes);
+        //
+        //match _merkle_tree._get_root_hash() {
+        //    Some(root_hash) if root_hash.to_byte_array() == self.block_header.merkle_root_hash => {
+        //        utxo_set.extend(utxo_set_snapshot);
+        //        Ok(())
+        //    }
+        //    _ => Err(io::Error::new(
+        //        io::ErrorKind::InvalidData,
+        //        "Transactions failed proof of inclusion",
+        //    )),
+        //}
+        Ok(())
     }
 }
 

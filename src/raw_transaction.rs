@@ -145,8 +145,7 @@ impl TxOutput {
             let pk_script_bytes = read_from_varint(cursor)?;
             let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
 
-            let pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
-            println!("pk_script_data: {:?}\n\n", pk_script_data);
+            let _pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
 
             let tx_output = TxOutput {
                 value,
