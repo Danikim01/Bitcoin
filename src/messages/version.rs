@@ -5,7 +5,6 @@ use crate::messages::{Message, Services};
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use crate::messages::MessageHeader;
 
 #[derive(Debug)]
 pub struct Version {
@@ -115,7 +114,6 @@ impl Version {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
-        println!("{:?}",bytes);
         let mut cursor = Cursor::new(bytes);
 
         let version = Version::new(
@@ -133,8 +131,6 @@ impl Version {
             i32::from_le_stream(&mut cursor)?,
             u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
         );
-
-        println!("version:{:?}",&version);
 
         Ok(version)
     }
@@ -183,7 +179,7 @@ fn deser_user_agent(cursor: &mut Cursor<&[u8]>) -> Result<String, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use crate::messages::MessageHeader;
     #[test]
     fn test_version_header(){
         let header = [0xF9, 0xBE, 0xB4, 0xD9, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x00, 0x00, 0x00, 0x00, 0x00,

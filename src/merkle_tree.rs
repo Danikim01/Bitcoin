@@ -117,7 +117,7 @@ mod tests {
         let txid_hashes = vec![a_hash];
 
         // Merkle tree
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Actual merkle root hash
         let actual_hash = merkle_tree._get_root_hash().unwrap();
@@ -138,7 +138,7 @@ mod tests {
         b_hash = sha256::Hash::hash(&b_hash[..]);
 
         let txid_hashes = vec![a_hash, b_hash];
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Expected merkle root
         let mut ab_hash = sha256::Hash::hash(&[&a_hash[..], &b_hash[..]].concat());
@@ -168,7 +168,7 @@ mod tests {
         let txid_hashes = vec![a_hash, b_hash, c_hash];
 
         // Merkle tree
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Expected merkle root
         let mut ab_hash = sha256::Hash::hash(&[&a_hash[..], &b_hash[..]].concat());
@@ -257,7 +257,7 @@ mod tests {
         ];
 
         // Merkle tree
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Expected merkle root
         let mut ab_hash = sha256::Hash::hash(&[&a_hash[..], &b_hash[..]].concat());

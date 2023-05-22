@@ -4,16 +4,16 @@ use std::io::Error;
 
 pub struct _Utxo {
     pub id: [u8; 20],
-    pk_address: String,
-    satoshi_value: i64,
+    _pk_address: String,
+    _satoshi_value: i64,
 }
 
 impl _Utxo {
     pub fn _new(id: [u8; 20], pk_address: String, satoshi_value: i64) -> Self {
         Self {
             id,
-            pk_address,
-            satoshi_value,
+            _pk_address:pk_address,
+            _satoshi_value:satoshi_value,
         }
     }
 
@@ -22,8 +22,8 @@ impl _Utxo {
 
         Ok(Self {
             id: pk_script_data.pk_hash,
-            pk_address: "addr".to_string(),
-            satoshi_value: tx_output.value,
+            _pk_address: "addr".to_string(),
+            _satoshi_value: tx_output.value,
         })
     }
 

@@ -74,6 +74,6 @@ mod tests {
         let serialized_block = SerializedBlock::from_bytes(&bytes).unwrap();
 
         assert_eq!(serialized_block.txn_count,serialized_block.txns.len());
-
     }
+
 }
