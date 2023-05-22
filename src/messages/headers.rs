@@ -90,7 +90,9 @@ mod tests {
         let message_header_default = MessageHeader::default();
 
         assert_eq!(message_header_default.start_string, [0, 0, 0, 0]);
-        assert!("no_command\0\0".to_string().eq(&message_header_default.command_name));
+        assert!("no_command\0\0"
+            .to_string()
+            .eq(&message_header_default.command_name));
         assert_eq!(message_header_default.payload_size, 0);
         assert_eq!(message_header_default.checksum, [0, 0, 0, 0]);
     }

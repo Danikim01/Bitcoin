@@ -1,14 +1,9 @@
-use crate::messages::constants::commands::HEADERS;
 use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, read_hash, to_varint, StreamRead};
-use crate::messages::{
-    BlockHeader, GetHeader, HashId, Hashable, Message, MessageHeader, Serialize,
-};
-use crate::node::Node;
+use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use std::fs;
 use std::fs::File;
 use std::io::{self, Cursor, Error, Write};
-use std::net::TcpStream;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
@@ -26,7 +21,7 @@ impl Headers {
         }
     }
 
-    pub fn default() -> Self {
+    pub fn _default() -> Self {
         Self {
             count: 0,
             block_headers: Vec::new(),
@@ -56,16 +51,15 @@ impl Headers {
     pub fn from_file(file_name: &str) -> io::Result<Headers> {
         let headers_bytes = fs::read(file_name)?;
         match Headers::deserialize(&headers_bytes)? {
-            Message::Headers(headers) => {
-                Ok(headers)
-            },
-            _ => {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, "Found invalid headers message while reading from file"))
-            }
+            Message::Headers(headers) => Ok(headers),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Found invalid headers message while reading from file",
+            )),
         }
     }
 
-    pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
+    pub fn _save_to_file(&self, file_name: &str) -> io::Result<()> {
         let headers_bytes = self.serialize()?;
         let mut save_stream = File::create(file_name)?;
         save_stream.write_all(&headers_bytes)?;
@@ -78,7 +72,7 @@ impl Serialize for Headers {
         let mut bytes = Vec::new();
         bytes.extend(to_varint(self.count as u64));
         for header in &self.block_headers {
-            bytes.extend(header.to_bytes());
+            bytes.extend(header.serialize());
             bytes.extend([0_u8; 1]);
         }
         Ok(bytes)

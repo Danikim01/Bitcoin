@@ -23,7 +23,7 @@ pub use version_message::Version;
 
 pub type HashId = [u8; 32];
 
-#[derive(Debug, Clone, Copy,PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Services {
     bitmap: u64,
 }
@@ -80,10 +80,10 @@ impl From<Services> for [u8; 8] {
 #[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
-    GetData(GetData),
-    GetHeader(GetHeader),
+    _GetData(GetData),
+    _GetHeader(GetHeader),
     Headers(Headers),
-    VerAck(VerAck),
+    _VerAck(VerAck),
     Version(Version),
 }
 
@@ -94,7 +94,7 @@ pub trait Hashable {
 pub trait Serialize {
     fn serialize(&self) -> io::Result<Vec<u8>>;
 
-    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error>
+    fn deserialize(_bytes: &[u8]) -> Result<Message, io::Error>
     where
         Self: Sized,
     {

@@ -1,13 +1,13 @@
-use std::io;
-use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::mpsc;
 use crate::config::Config;
 use crate::messages::Message;
 use crate::node::Node;
 use rand::random;
+use std::io;
+use std::net::{SocketAddr, ToSocketAddrs};
+use std::sync::mpsc;
 
 pub struct NodeController {
-    nodes: Vec<Node>
+    nodes: Vec<Node>,
 }
 
 fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
@@ -25,9 +25,7 @@ impl NodeController {
                 Err(..) => continue,
             }
         }
-        Ok(Self {
-            nodes: nodes
-        })
+        Ok(Self { nodes })
     }
 
     pub fn send_to_any(&mut self, payload: &Vec<u8>) -> io::Result<()> {
@@ -38,12 +36,14 @@ impl NodeController {
             Err(e) => {
                 println!("Error writing to TCPStream: {:?}. Trying a dif node", e);
                 self.nodes.swap_remove(node_number);
-                if self.nodes.len() == 0 {
-                    return Err(io::Error::new(io::ErrorKind::NotConnected, "All connections were closed"));
+                if self.nodes.is_empty() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::NotConnected,
+                        "All connections were closed",
+                    ));
                 }
                 self.send_to_any(payload)
             }
         }
     }
-
 }

@@ -1,4 +1,4 @@
-use crate::messages::{utility::to_varint, HashId, Serialize, constants::commands::GETHEADERS};
+use crate::messages::{constants::commands::GETHEADERS, utility::to_varint, HashId, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct GetHeader {

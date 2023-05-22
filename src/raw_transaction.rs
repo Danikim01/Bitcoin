@@ -1,12 +1,10 @@
-use crate::io::Cursor;
-use crate::messages::{
-    utility::{read_from_varint, read_hash, StreamRead},
-    HashId,
-};
+use crate::io::{self, Cursor};
+use crate::messages::utility::{read_from_varint, read_hash, StreamRead};
 
+use crate::utxo::{Utxo, UtxoId};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
+use std::collections::HashMap;
 use std::io::{Error, Read};
-use crate::utxoset::{UTXOset, Utxo};
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -139,7 +137,7 @@ pub struct TxOutput {
 }
 
 impl TxOutput {
-    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize, utxo_set: &mut UTXOset) -> Result<Vec<Self>, Error> {
+    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<Self>, Error> {
         let mut tx_outputs = vec![];
 
         for _ in 0..n {
@@ -155,10 +153,6 @@ impl TxOutput {
                 pk_script_bytes,
                 pk_script,
             };
-
-            // Append to utxo set
-            let utxo = Utxo::from_txoutput(&tx_output)?;
-            utxo_set.append(utxo)?;
 
             tx_outputs.push(tx_output);
         }
@@ -207,12 +201,12 @@ pub struct RawTransaction {
 }
 
 impl RawTransaction {
-    pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>, utxo_set: &mut UTXOset) -> Result<Self, Error> {
+    pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;
         let tx_in = TxInputType::CoinBaseInput(CoinBaseInput::from_bytes(cursor)?);
         let tx_out_count = read_from_varint(cursor)?;
-        let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize, utxo_set)?;
+        let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
         let lock_time = u32::from_le_stream(cursor)?;
 
         let raw_transaction = RawTransaction {
@@ -227,7 +221,16 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize, utxo_set: &mut UTXOset) -> Result<Vec<Self>, Error> {
+    pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+        // this should also check the inputs and mark them as spent
+        for txo in self.tx_out.iter() {
+            let utxo = Utxo::from_txoutput(txo)?;
+            utxo_set.insert(utxo.id, utxo);
+        }
+        Ok(())
+    }
+
+    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
         let mut raw_transactions = vec![];
 
         for _ in 1..count {
@@ -238,7 +241,7 @@ impl RawTransaction {
                 TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
 
             let tx_out_count = read_from_varint(cursor)?;
-            let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize, utxo_set)?;
+            let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
 
             let lock_time = u32::from_le_stream(cursor)?;
 

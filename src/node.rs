@@ -17,20 +17,24 @@ pub struct Listener {
 impl Listener {
     fn new(stream: TcpStream, writer_channel: mpsc::Sender<Message>) -> Self {
         Self {
-            stream: stream,
-            writer_channel: writer_channel,
+            stream,
+            writer_channel,
         }
     }
-    
+
     fn log_listen(mut self) -> io::Result<()> {
         match self.listen() {
             Ok(..) => Ok(()),
-            Err(e) => {println!("{:?}", e); println!("connection: {:?}", self.stream); Err(e)}
+            Err(e) => {
+                println!("{:?}", e);
+                println!("connection: {:?}", self.stream);
+                Err(e)
+            }
         }
     }
 
     fn listen(&mut self) -> io::Result<()> {
-        while true {
+        loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             let payload = message_header.read_payload(&mut self.stream)?;
             let dyn_message: Message = match message_header.command_name.as_str() {
@@ -40,19 +44,21 @@ impl Listener {
             };
             self.writer_channel.send(dyn_message).map_err(to_io_err)?;
         }
-        Ok(())
     }
 }
 
 pub struct Node {
     pub stream: TcpStream,
-    listener: thread::JoinHandle<io::Result<()>>,
+    _listener: thread::JoinHandle<io::Result<()>>,
 }
 
 impl Node {
     fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>) -> Self {
         println!("MAIN: Established connection with node: {:?}", stream);
-        Self { stream, listener }
+        Self {
+            stream,
+            _listener: listener,
+        }
     }
 
     fn spawn(stream: TcpStream, writer_channel: mpsc::Sender<Message>) -> io::Result<Self> {
@@ -61,14 +67,14 @@ impl Node {
         Ok(Self::new(stream, handle))
     }
 
-    fn is_alive(&mut self) -> bool {
+    fn _is_alive(&mut self) -> bool {
         let mut buf = [0u8; 1];
         println!("is_alive: peeking");
         let bytes_read = self.stream.peek(&mut buf);
         println!("is_alive: done peeking");
         match bytes_read {
             Ok(_) => true,
-            Err(..) => false
+            Err(..) => false,
         }
     }
 
@@ -118,7 +124,7 @@ impl Node {
         Ok(())
     }
 
-    pub fn send(&mut self, payload: &Vec<u8>) -> Result<(), io::Error> {
+    pub fn send(&mut self, payload: &[u8]) -> io::Result<()> {
         self.stream.write_all(payload)?;
         self.stream.flush()?;
         Ok(())
