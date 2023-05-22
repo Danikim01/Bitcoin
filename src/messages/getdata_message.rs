@@ -1,5 +1,7 @@
 use crate::messages::{BlockHeader, Hashable, Serialize};
 
+use super::constants;
+
 #[derive(Debug, Clone)]
 pub enum InvType {
     MSGError = 0,
@@ -114,7 +116,7 @@ impl GetData {
 impl Serialize for GetData {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
-        let message = self.build_message("getdata", Some(payload))?;
+        let message = self.build_message(constants::commands::GETDATA, Some(payload))?;
         Ok(message)
     }
 }

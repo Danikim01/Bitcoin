@@ -105,7 +105,7 @@ impl BlockHeader {
             .collect::<Vec<u8>>();
 
         let mut target_arr = [0u8; 32];
-        target_arr.copy_from_slice(&target);
+        target_arr[31-exponent..].copy_from_slice(&target);
         target_arr
     }
 }
