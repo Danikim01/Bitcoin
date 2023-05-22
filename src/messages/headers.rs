@@ -53,7 +53,7 @@ impl MessageHeader {
         cursor.read_exact(&mut checksum)?;
 
         // Ensure that command_name is a valid UTF-8 byte sequence
-        if let Err(_) = std::str::from_utf8(&command_name) {
+        if std::str::from_utf8(&command_name).is_err() {
             return Ok(Self::default());
         }
 
@@ -70,25 +70,8 @@ impl MessageHeader {
 
     pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
         let mut header_buffer = [0_u8; HEADER_SIZE];
-        stream.read(&mut header_buffer)?;
+        let _read = stream.read(&mut header_buffer)?;
         MessageHeader::from_bytes(&header_buffer)
-    }
-
-    pub fn read_until_command(
-        stream: &mut TcpStream,
-        cmd: &str,
-    ) -> Result<MessageHeader, io::Error> {
-        let mut message = MessageHeader::from_stream(stream)?;
-        while message.command_name != cmd {
-            println!(
-                "For message: {} Skip payload of {:?} bytes",
-                message.command_name,
-                message.read_payload(stream)?.len()
-            );
-            message = MessageHeader::from_stream(stream)?;
-        }
-        println!("Got command: {:?}", message.command_name);
-        Ok(message)
     }
 
     pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
@@ -107,9 +90,7 @@ mod tests {
         let message_header_default = MessageHeader::default();
 
         assert_eq!(message_header_default.start_string, [0, 0, 0, 0]);
-        assert!("no_command"
-            .to_string()
-            .eq(&message_header_default.command_name));
+        assert!("no_command\0\0".to_string().eq(&message_header_default.command_name));
         assert_eq!(message_header_default.payload_size, 0);
         assert_eq!(message_header_default.checksum, [0, 0, 0, 0]);
     }

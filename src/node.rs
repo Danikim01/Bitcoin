@@ -7,6 +7,7 @@ use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 pub struct Listener {
     stream: TcpStream,
@@ -16,8 +17,8 @@ pub struct Listener {
 impl Listener {
     fn new(stream: TcpStream, writer_channel: mpsc::Sender<Message>) -> Self {
         Self {
-            stream,
-            writer_channel,
+            stream: stream,
+            writer_channel: writer_channel,
         }
     }
     
@@ -81,8 +82,8 @@ impl Node {
                 "Ipv6 is not supported",
             ));
         }
-        let mut stream = TcpStream::connect(node_addr)?;
-        Node::handshake(&mut stream).unwrap();
+        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
+        Node::handshake(&mut stream)?;
         Node::spawn(stream, writer_channel)
     }
 
@@ -92,7 +93,6 @@ impl Node {
         let payload = msg_version.serialize()?;
         stream.write_all(&payload)?;
         stream.flush()?;
-
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
         let version_message = match Version::deserialize(&payload_data)? {
