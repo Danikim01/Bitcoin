@@ -1,3 +1,3 @@
-seed.testnet.bitcoin.sprovoost.nl
+testnet-seed.bitcoin.jonasschnelli.ch
 18333
 1681095600

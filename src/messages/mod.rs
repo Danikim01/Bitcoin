@@ -2,24 +2,28 @@ use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
 mod block_header;
+mod block_message;
 pub(crate) mod constants;
-mod getdata;
-mod getheader;
+mod getdata_message;
+mod getheader_message;
 mod headers;
-mod message_headers;
+mod headers_message;
 pub mod utility;
-mod verack;
-mod version;
+mod verack_message;
+mod version_message;
 
 pub use block_header::BlockHeader;
-pub use getdata::{GetData, InvType, Inventory};
-pub use getheader::GetHeader;
-pub use headers::Headers;
-pub use message_headers::MessageHeader;
-pub use verack::VerAck;
-pub use version::Version;
+pub use block_message::Block;
+pub use getdata_message::{GetData, InvType, Inventory};
+pub use getheader_message::GetHeader;
+pub use headers::MessageHeader;
+pub use headers_message::Headers;
+pub use verack_message::VerAck;
+pub use version_message::Version;
 
-#[derive(Debug, Clone, Copy,PartialEq)]
+pub type HashId = [u8; 32];
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Services {
     bitmap: u64,
 }
@@ -73,22 +77,37 @@ impl From<Services> for [u8; 8] {
     }
 }
 
-/// Returns command with zeros padded to it's right
-fn get_command(cmd: &str) -> [u8; 12] {
-    let mut command: [u8; 12] = [0; 12];
-    let bytes = cmd.as_bytes();
-    command[..bytes.len()].copy_from_slice(bytes);
-    command
+#[derive(Debug, Clone)]
+pub enum Message {
+    Block(Block),
+    _GetData(GetData),
+    _GetHeader(GetHeader),
+    Headers(Headers),
+    _VerAck(VerAck),
+    Version(Version),
 }
 
-pub trait Message {
+pub trait Hashable {
+    fn hash(&self) -> HashId;
+}
+
+pub trait Serialize {
     fn serialize(&self) -> io::Result<Vec<u8>>;
+
+    fn deserialize(_bytes: &[u8]) -> Result<Message, io::Error>
+    where
+        Self: Sized,
+    {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Incoming message not supported",
+        ))
+    }
 
     /// Builds message appending header with optional payload
     /// https://developer.bitcoin.org/reference/p2p_networking.html#message-headers
-    fn build_message(&self, cmd: &str, payload: Option<Vec<u8>>) -> io::Result<Vec<u8>> {
+    fn build_message(&self, command: &str, payload: Option<Vec<u8>>) -> io::Result<Vec<u8>> {
         let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes(); // SET TO ENV
-        let command: [u8; 12] = get_command(cmd);
         let mut payload_size: [u8; 4] = 0_i32.to_le_bytes();
 
         let mut checksum: [u8; 32] = [0; 32];
@@ -102,7 +121,7 @@ pub trait Message {
 
         let mut message = vec![];
         message.extend(magic_value.to_vec());
-        message.extend(command.to_vec());
+        message.extend(command.bytes());
         message.extend(payload_size.to_vec());
         message.extend(checksum[0..4].to_vec());
         if let Some(payload) = payload {

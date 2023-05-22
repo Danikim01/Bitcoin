@@ -1,6 +1,8 @@
-use crate::messages::{BlockHeader, Message};
+use crate::messages::{BlockHeader, Hashable, Serialize};
 
-#[derive(Debug)]
+use super::constants;
+
+#[derive(Debug, Clone)]
 pub enum InvType {
     _MSGError = 0,
     _MSGTx = 1,
@@ -28,7 +30,7 @@ impl InvType {
 }
 
 //ver https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Inventory {
     inv_type: InvType,
     hash: [u8; 32],
@@ -51,7 +53,7 @@ impl Inventory {
 }
 
 // https://developer.bitcoin.org/reference/p2p_networking.html#getdata
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetData {
     count: usize,
     inventory: Vec<Inventory>, // inv as it was received from an inv message
@@ -105,19 +107,16 @@ impl GetData {
     pub fn from_inv(count: usize, block_headers: Vec<BlockHeader>) -> Self {
         let mut inventory_vector: Vec<Inventory> = Vec::new();
         for block_header in block_headers {
-            inventory_vector.push(Inventory::new(
-                InvType::MSGBlock,
-                block_header.hash_block_header(),
-            ));
+            inventory_vector.push(Inventory::new(InvType::MSGBlock, block_header.hash()));
         }
         Self::new(count, inventory_vector)
     }
 }
 
-impl Message for GetData {
+impl Serialize for GetData {
     fn serialize(&self) -> std::io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
-        let message = self.build_message("getdata", Some(payload))?;
+        let message = self.build_message(constants::commands::GETDATA, Some(payload))?;
         Ok(message)
     }
 }

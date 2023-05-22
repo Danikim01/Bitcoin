@@ -1,17 +1,18 @@
 use std::io;
 mod config;
-mod connection;
-mod messages;
-mod node;
-mod raw_transaction;
-mod serialized_blocks;
-mod utility;
 mod merkle_tree;
-mod utxoset;
+mod messages;
+mod network_controller;
+mod node;
+mod node_controller;
+mod raw_transaction;
+mod utility;
+mod utxo;
+
 fn main() -> Result<(), io::Error> {
-    let (mut nodes, _mpsc_reader) = connection::connect_to_network()?;
-    let mut utxo_set = utxoset::UTXOset::new();
-    connection::sync(&mut nodes, &mut utxo_set)?;
-    println!("UTXOset has {} transactions", utxo_set.utxo_vector.len());
+    let mut controller = network_controller::NetworkController::new()?;
+    println!("Connected to network, starting sync");
+    // move this to another thread before adding gtk
+    controller.start_sync()?;
     Ok(())
 }

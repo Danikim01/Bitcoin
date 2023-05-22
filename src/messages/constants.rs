@@ -7,14 +7,24 @@ pub mod header_constants {
     pub const CHECKSUM_SIZE: usize = 4;
     pub const MAX_HEADER: usize = 2000;
 }
+
 pub mod messages {
-    pub const MAX_INV_SIZE: usize = 50000;
+    use super::super::HashId;
+    pub const _MAX_INV_SIZE: usize = 50000;
+    pub const GENESIS_HASHID: HashId = [
+        0x6f, 0xe2, 0x8c, 0x0a, 0xb6, 0xf1, 0xb3, 0x72, 0xc1, 0xa6, 0xa2, 0x46, 0xae, 0x63, 0xf7,
+        0x4f, 0x93, 0x1e, 0x83, 0x65, 0xe1, 0x5a, 0x08, 0x9c, 0x68, 0xd6, 0x19, 0x00, 0x00, 0x00,
+        0x00, 0x00,
+    ];
 }
 
 pub mod commands {
+    pub const GETHEADERS: &str = "getheaders\0\0";
+    pub const GETDATA: &str = "getdata\0\0\0\0\0";
+    pub const BLOCK: &str = "block\0\0\0\0\0\0\0";
     pub const VERSION: &str = "version\0\0\0\0\0";
     pub const VERACK: &str = "verack\0\0\0\0\0\0";
-    pub const HEADER: &str = "headers\0\0\0\0\0";
+    pub const HEADERS: &str = "headers\0\0\0\0\0";
     pub const UNKNOWN: &str = "no_command\0\0";
 }
 

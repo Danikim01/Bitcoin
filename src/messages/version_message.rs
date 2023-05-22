@@ -1,12 +1,12 @@
 use crate::config::Config;
-use crate::messages::constants::{version_constants::LATEST_VERSION, commands::VERSION};
-use crate::messages::utility::{read_from_varint, EndianRead};
-use crate::messages::{Message, Services};
+use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
+use crate::messages::utility::{read_from_varint, StreamRead};
+use crate::messages::{Message, Serialize, Services};
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use crate::utility::actual_timestamp_or_default;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Version {
     // message_header: MessageHeader,
     version: i32,
@@ -100,28 +100,6 @@ impl Version {
         }, addr_trans_port: address.port(), ..Default::default()}
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Version, io::Error> {
-        let mut cursor = Cursor::new(bytes);
-
-        let version = Version::new(
-            i32::from_le_stream(&mut cursor)?,
-            Services::new(u64::from_le_stream(&mut cursor)?),
-            i64::from_le_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?,
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
-            u16::from_be_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?, // not used
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
-            u16::from_be_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?,
-            deser_user_agent(&mut cursor)?,
-            i32::from_le_stream(&mut cursor)?,
-            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
-        );
-
-        Ok(version)
-    }
-
     fn build_payload(&self) -> io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
@@ -143,11 +121,32 @@ impl Version {
     }
 }
 
-impl Message for Version {
+impl Serialize for Version {
     fn serialize(&self) -> io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message(VERSION, Some(payload))?;
         Ok(message)
+    }
+
+    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
+        let mut cursor = Cursor::new(bytes);
+
+        let version = Version::new(
+            i32::from_le_stream(&mut cursor)?,
+            Services::new(u64::from_le_stream(&mut cursor)?),
+            i64::from_le_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?, // not used
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            deser_user_agent(&mut cursor)?,
+            i32::from_le_stream(&mut cursor)?,
+            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
+        );
+        Ok(Message::Version(version))
     }
 }
 
@@ -162,44 +161,52 @@ fn deser_user_agent(cursor: &mut Cursor<&[u8]>) -> Result<String, io::Error> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::messages::MessageHeader;
     #[test]
-    fn test_version_header(){
-        let header = [0xF9, 0xBE, 0xB4, 0xD9, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x55, 0x00, 0x00, 0x00,0x66,0x66,0x66,0x66];
+    fn test_version_header() {
+        let header = [
+            0xF9, 0xBE, 0xB4, 0xD9, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x55, 0x00, 0x00, 0x00, 0x66, 0x66, 0x66, 0x66,
+        ];
 
         let message_header = MessageHeader::from_bytes(&header).unwrap();
-        
-        assert_eq!(message_header.start_string,[0xF9,0xBE,0xB4,0xD9]);
-        assert_eq!(message_header.command_name,"version\0\0\0\0\0".to_string());
-        assert_eq!(message_header.payload_size,85);
-        assert_eq!(message_header.checksum,[0x66,0x66,0x66,0x66]);
+
+        assert_eq!(message_header.start_string, [0xF9, 0xBE, 0xB4, 0xD9]);
+        assert_eq!(message_header.command_name, "version\0\0\0\0\0".to_string());
+        assert_eq!(message_header.payload_size, 85);
+        assert_eq!(message_header.checksum, [0x66, 0x66, 0x66, 0x66]);
     }
 
     #[test]
     fn test_read_version() {
         //Ejemplo tomado de: https://en.bitcoin.it/wiki/Protocol_documentation#version
-        let data_version: Vec<u8> = vec![127, 17, 1, 0, 13, 4, 0, 0, 0, 0, 0, 0, 145, 212, 106, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 200, 105, 43, 35, 207, 40, 13, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 212, 180, 39, 227, 7, 96, 85, 98, 16, 47, 83, 97, 116, 111, 115, 104, 105, 58, 48, 46, 49, 54, 46, 51, 47, 153, 38, 37, 0, 1];
-       
-        let data = Version::from_bytes(&data_version).unwrap();
-        assert_eq!(data.version,70015);
-        assert_eq!(data.services,Services { bitmap: 1037 });
-        assert_eq!(data.timestamp,1684722833);
-        assert_eq!(data.addr_recv_services,0);
-        let expected_addr = "::ffff:200.105.43.35".parse::<Ipv6Addr>().expect("Invalid IPv6 address");
-        assert_eq!(data.addr_recv_ip.to_string(), expected_addr.to_string());
-        assert_eq!(data.addr_recv_port,53032);
-        assert_eq!(data._addr_trans_services,1037);
-        assert_eq!(data.addr_trans_port,0);
-        assert_eq!(data.nonce,7085675175729411284);
-        assert_eq!(data._user_agent,"/Satoshi:0.16.3/".to_string());
-        assert_eq!(data._start_height,2434713);
-        assert_eq!(data._relay,true);
-    }   
+        let data_version: Vec<u8> = vec![
+            127, 17, 1, 0, 13, 4, 0, 0, 0, 0, 0, 0, 145, 212, 106, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 200, 105, 43, 35, 207, 40, 13, 4, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 212, 180, 39, 227,
+            7, 96, 85, 98, 16, 47, 83, 97, 116, 111, 115, 104, 105, 58, 48, 46, 49, 54, 46, 51, 47,
+            153, 38, 37, 0, 1,
+        ];
 
-    
+        if let Message::Version(data) = Version::deserialize(&data_version).unwrap() {
+            assert_eq!(data.version, 70015);
+            assert_eq!(data.services, Services { bitmap: 1037 });
+            assert_eq!(data.timestamp, 1684722833);
+            assert_eq!(data.addr_recv_services, 0);
+            let expected_addr = "::ffff:200.105.43.35"
+                .parse::<Ipv6Addr>()
+                .expect("Invalid IPv6 address");
+            assert_eq!(data.addr_recv_ip.to_string(), expected_addr.to_string());
+            assert_eq!(data.addr_recv_port, 53032);
+            assert_eq!(data._addr_trans_services, 1037);
+            assert_eq!(data.addr_trans_port, 0);
+            assert_eq!(data.nonce, 7085675175729411284);
+            assert_eq!(data._user_agent, "/Satoshi:0.16.3/".to_string());
+            assert_eq!(data._start_height, 2434713);
+            assert_eq!(data._relay, true);
+        }
+    }
 }

@@ -1,11 +1,10 @@
 use crate::io::Cursor;
-use crate::messages::utility::*;
+use crate::messages::{utility::*, Hashable};
 use bitcoin_hashes::{sha256, Hash};
 use std::io::ErrorKind::InvalidData;
 
-
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BlockHeader {
     pub version: i32,
     pub prev_block_hash: [u8; 32],
@@ -58,15 +57,7 @@ impl BlockHeader {
         &self.merkle_root_hash
     }
 
-    pub fn hash_block_header(&self) -> [u8; 32] {
-        let first_hash = sha256::Hash::hash(&self.to_bytes());
-        let second_hash = sha256::Hash::hash(&first_hash[..]);
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&second_hash[..]);
-        bytes
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut header_bytes = vec![];
         header_bytes.extend(&self.version.to_le_bytes());
         header_bytes.extend(&self.prev_block_hash);
@@ -83,7 +74,7 @@ impl BlockHeader {
 
     pub fn validate_proof_of_work(&self) -> Result<(), std::io::Error> {
         let target_threshold: [u8; 32] = Self::nbits_to_target(self.nbits);
-        let block_header_hash: [u8; 32] = self.hash_block_header();
+        let block_header_hash: [u8; 32] = self.hash();
         match Self::compare_target_threshold_and_hash(&target_threshold, &block_header_hash) {
             std::cmp::Ordering::Less => {
                 // The block header hash is lower than the target threshold
@@ -105,7 +96,7 @@ impl BlockHeader {
     fn nbits_to_target(nbits: u32) -> [u8; 32] {
         let exponent = (nbits >> 24) as usize;
         let significand = nbits & 0x00FFFFFF;
-        
+
         let significand_bytes = significand.to_be_bytes();
         let right_padding = vec![0u8; exponent - 3];
         let target = significand_bytes
@@ -114,8 +105,18 @@ impl BlockHeader {
             .collect::<Vec<u8>>();
 
         let mut target_arr = [0u8; 32];
-        target_arr[31-exponent..].copy_from_slice(&target);
+        target_arr[31 - exponent..].copy_from_slice(&target);
         target_arr
+    }
+}
+
+impl Hashable for BlockHeader {
+    fn hash(&self) -> [u8; 32] {
+        let first_hash = sha256::Hash::hash(&self.serialize());
+        let second_hash = sha256::Hash::hash(&first_hash[..]);
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&second_hash[..]);
+        bytes
     }
 }
 
@@ -138,7 +139,6 @@ impl Default for BlockHeader {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,7 +146,7 @@ mod tests {
     fn nbits_to_target(nbits: u32) -> [u8; 32] {
         let exponent = (nbits >> 24) as usize;
         let significand = nbits & 0x00FFFFFF;
-        
+
         let significand_bytes = significand.to_be_bytes();
         let right_padding = vec![0u8; exponent - 3];
         let target = significand_bytes
@@ -155,7 +155,7 @@ mod tests {
             .collect::<Vec<u8>>();
 
         let mut target_arr = [0u8; 32];
-        target_arr[31-exponent..].copy_from_slice(&target);
+        target_arr[31 - exponent..].copy_from_slice(&target);
         target_arr
     }
 
@@ -163,22 +163,43 @@ mod tests {
     fn test_nbits_to_target() {
         let nbits: u32 = 0x181bc330;
         let target = nbits_to_target(nbits);
-        assert_eq!(target,[0, 0, 0, 0, 0, 0, 0, 0, 27, 195, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(
+            target,
+            [
+                0, 0, 0, 0, 0, 0, 0, 0, 27, 195, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0
+            ]
+        );
     }
 
-    
-     #[test]
+    #[test]
     fn test_read_block_header() {
-        let block_header_bytes: [u8; 80]= [0, 0, 160, 32, 51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136, 175, 122, 209, 45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0, 219, 236, 86, 82, 205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7, 42, 179, 16, 189, 22, 176, 239, 148, 154, 195, 174, 188, 14, 245, 255, 123, 51, 100, 126, 10, 41, 25, 33, 90, 175, 108];
-        let slice:&[u8] = block_header_bytes.as_ref();
+        let block_header_bytes: [u8; 80] = [
+            0, 0, 160, 32, 51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136,
+            175, 122, 209, 45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0, 219, 236, 86, 82,
+            205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7, 42, 179, 16, 189, 22,
+            176, 239, 148, 154, 195, 174, 188, 14, 245, 255, 123, 51, 100, 126, 10, 41, 25, 33, 90,
+            175, 108,
+        ];
+        let slice: &[u8] = block_header_bytes.as_ref();
         let mut cursor = Cursor::new(slice);
         let block_header = BlockHeader::from_bytes(&mut cursor).unwrap();
-        assert_eq!(block_header.prev_block_hash, [51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136, 175, 122, 209, 45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(block_header.merkle_root_hash,[219, 236, 86, 82, 205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7, 42, 179, 16, 189, 22, 176, 239, 148, 154, 195, 174, 188, 14, 245]);
-        assert_eq!(block_header.timestamp,1681095679);
-        assert_eq!(block_header.nbits,422120062);
-        assert_eq!(block_header.nonce,1823431201);
+        assert_eq!(
+            block_header.prev_block_hash,
+            [
+                51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136, 175, 122, 209,
+                45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0
+            ]
+        );
+        assert_eq!(
+            block_header.merkle_root_hash,
+            [
+                219, 236, 86, 82, 205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7,
+                42, 179, 16, 189, 22, 176, 239, 148, 154, 195, 174, 188, 14, 245
+            ]
+        );
+        assert_eq!(block_header.timestamp, 1681095679);
+        assert_eq!(block_header.nbits, 422120062);
+        assert_eq!(block_header.nonce, 1823431201);
     }
-
-
 }
