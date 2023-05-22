@@ -67,9 +67,9 @@ impl From<[u8; 8]> for Services {
     }
 }
 
-impl Into<[u8; 8]> for Services {
-    fn into(self) -> [u8; 8] {
-        self.bitmap.to_le_bytes()
+impl From<Services> for [u8; 8] {
+    fn from(value: Services) -> Self {
+        value.bitmap.to_le_bytes()
     }
 }
 

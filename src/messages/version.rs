@@ -26,7 +26,6 @@ pub struct Version {
 
 impl Default for Version {
     fn default() -> Self {
-        // let message_header = MessageHeader::default();
         let version = LATEST_VERSION;
         let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -70,7 +69,6 @@ impl Default for Version {
 
 impl Version {
     fn new(
-        // message_header: MessageHeader,
         version: i32,
         services: Services,
         timestamp: i64,
@@ -86,7 +84,6 @@ impl Version {
         _relay: bool,
     ) -> Self {
         Self {
-            // message_header,
             version,
             services,
             timestamp,

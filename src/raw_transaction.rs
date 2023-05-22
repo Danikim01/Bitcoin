@@ -75,7 +75,7 @@ pub struct PkScriptData {
 
 impl PkScriptData {
     pub fn from_pk_script_bytes(pk_script_bytes: &[u8]) -> Result<Self, Error> {
-        let first_hash = sha256::Hash::hash(&pk_script_bytes[..]);
+        let first_hash = sha256::Hash::hash(pk_script_bytes);
         let second_hash = ripemd160::Hash::hash(&first_hash[..]);
 
         let mut bytes = [0u8; 20];
