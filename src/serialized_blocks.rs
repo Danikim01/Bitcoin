@@ -47,7 +47,17 @@ impl SerializedBlock {
 
         // build merkle tree from transaction hashes
         let mut _merkle_tree = MerkleTree::from_hashes(txn_hashes);
-
+        let merkle_tree_root_hash = _merkle_tree._get_root_hash();
+        println!("root:{:?}",merkle_tree_root_hash);
+        match merkle_tree_root_hash{
+            Some(root_hash)=>{
+                println!("root hash {:?}",root_hash.to_byte_array());
+                println!("root hash del header block {:?}",&serialized_block.block_header.hash_block_header());
+            }
+            None => {
+                println!("Error");
+            }
+        }
         Ok(serialized_block)
     }
 
@@ -63,28 +73,7 @@ mod tests {
         let bytes = fs::read("./tmp/block_message_payload.dat").unwrap();
         let serialized_block = SerializedBlock::from_bytes(&bytes).unwrap();
 
-        let mut txid_hashes_vector = Vec::new();
-        for transaction in &serialized_block.txns{
-            // Serialize the transaction
-            let serialized_transaction = transaction.serialize();
-            // Hash the serialized transaction
-            let mut transaction_hash = sha256::Hash::hash(&serialized_transaction);
-            transaction_hash = sha256::Hash::hash(&transaction_hash[..]);
-            txid_hashes_vector.push(transaction_hash);
-        }
-        
-        let merkle_tree = MerkleTree::from_hashes(txid_hashes_vector);
-        let merkle_tree_root_hash = merkle_tree._get_root_hash();
-        println!("root:{:?}",merkle_tree_root_hash);
-        match merkle_tree_root_hash{
-            Some(root_hash)=>{
-                println!("root hash {:?}",root_hash.to_byte_array());
-                println!("root hash del header block {:?}",&serialized_block.block_header.merkle_root_hash);
-            }
-            None => {
-                println!("Error");
-            }
-        }
+        assert_eq!(serialized_block.txn_count,serialized_block.txns.len());
 
     }
 }
