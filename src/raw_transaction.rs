@@ -1,6 +1,6 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
-use std::io::{Error, Read};
+use std::{io::{Error, Read}, ptr::read};
 
 fn read_coinbase_script(
     cursor: &mut Cursor<&[u8]>,
@@ -70,6 +70,36 @@ impl Outpoint {
 }
 
 #[derive(Debug)]
+pub struct PkScriptData {
+    pub pk_hash: [u8; 20],
+}
+
+impl PkScriptData {
+    pub fn from_pk_script_bytes(pk_script_bytes: &Vec<u8>) -> Result<Self, Error> {
+        println!("pk_script_bytes: {:?}", pk_script_bytes);
+
+        // create cursor to iterate bytes
+        let mut cursor: Cursor<&[u8]> = Cursor::new(pk_script_bytes);
+
+        // read a single byte at a time until we find the OP_HASH160 opcode
+        let mut opcode = u8::from_le_stream(&mut cursor)?;
+        while opcode != 169 && opcode != 0 {
+            // Do nothing as of now
+            opcode = u8::from_le_stream(&mut cursor)?;
+        }
+
+        // read the next byte to get the pk_hash length
+        // let pk_hash_length = u8::from_le_stream(&mut cursor)? as usize;
+
+        // read the next 20 bytes to get the pk_hash
+        let mut buffer = [0_u8; 20]; // replace hardcoded value later
+        cursor.read_exact(&mut buffer)?;
+
+        Ok(PkScriptData { pk_hash: buffer })
+    }
+}
+
+#[derive(Debug)]
 pub struct TxInput {
     previous_output: Outpoint,
     script_bytes: u64,
@@ -128,6 +158,9 @@ impl TxOutput {
             let pk_script_bytes = read_from_varint(cursor)?;
             let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
 
+            let pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
+            println!("pk_script_data: {:?}\n\n", pk_script_data);
+
             let tx_output = TxOutput {
                 value,
                 pk_script_bytes,
@@ -148,6 +181,10 @@ impl TxOutput {
             bytes.extend_from_slice(&tx_output.pk_script);
         }
         bytes
+    }
+
+    pub fn get_pk_script_data(&self) -> Result<PkScriptData, Error> {
+        PkScriptData::from_pk_script_bytes(&self.pk_script)
     }
 }
 

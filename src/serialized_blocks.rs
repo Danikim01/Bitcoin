@@ -56,7 +56,7 @@ impl SerializedBlock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::fs; 
 
     #[test]
     fn test_read_serialized_block_from_bytes() {
