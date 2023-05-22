@@ -19,7 +19,7 @@ pub use message_headers::MessageHeader;
 pub use verack::VerAck;
 pub use version::Version;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy,PartialEq)]
 pub struct Services {
     bitmap: u64,
 }
