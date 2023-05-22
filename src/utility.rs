@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 pub fn to_max_len_buckets<T>(initial_vector: Vec<T>, max_bucket_size: usize) -> Vec<Vec<T>> {
     let mut buckets: Vec<Vec<T>> = vec![];
     if initial_vector.is_empty() || max_bucket_size < 1 {
@@ -45,4 +47,13 @@ pub fn _to_n_chunks<T>(initial_vector: Vec<T>, amount_of_chunks: usize) -> Vec<V
         chunks[chunk_idx].push(element)
     }
     chunks
+}
+
+pub fn actual_timestamp_or_default() -> i64{
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration,
+        Err(..) => Duration::default(),
+    }
+        .as_secs() as i64
+
 }
