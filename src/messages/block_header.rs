@@ -136,3 +136,33 @@ impl Default for BlockHeader {
         )
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn nbits_to_target(nbits: u32) -> [u8; 32] {
+        let exponent = (nbits >> 24) as usize;
+        let significand = nbits & 0x00FFFFFF;
+        
+        let significand_bytes = significand.to_be_bytes();
+        let right_padding = vec![0u8; exponent - 3];
+        let target = significand_bytes
+            .into_iter()
+            .chain(right_padding.into_iter())
+            .collect::<Vec<u8>>();
+
+        let mut target_arr = [0u8; 32];
+        target_arr[31-exponent..].copy_from_slice(&target);
+        target_arr
+    }
+
+    #[test]
+    fn test_nbits_to_target() {
+        let nbits: u32 = 0x181bc330;
+        let target = nbits_to_target(nbits);
+        assert_eq!(target,[0, 0, 0, 0, 0, 0, 0, 0, 27, 195, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+}
