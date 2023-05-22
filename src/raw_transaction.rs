@@ -1,6 +1,7 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
 use std::{io::{Error, Read}, ptr::read};
+use bitcoin_hashes::{Hash,sha256, ripemd160};
 
 fn read_coinbase_script(
     cursor: &mut Cursor<&[u8]>,
@@ -76,26 +77,13 @@ pub struct PkScriptData {
 
 impl PkScriptData {
     pub fn from_pk_script_bytes(pk_script_bytes: &Vec<u8>) -> Result<Self, Error> {
-        println!("pk_script_bytes: {:?}", pk_script_bytes);
 
-        // create cursor to iterate bytes
-        let mut cursor: Cursor<&[u8]> = Cursor::new(pk_script_bytes);
+        let mut first_hash = sha256::Hash::hash(&pk_script_bytes[..]);
+        let mut second_hash = ripemd160::Hash::hash(&first_hash[..]);
 
-        // read a single byte at a time until we find the OP_HASH160 opcode
-        let mut opcode = u8::from_le_stream(&mut cursor)?;
-        while opcode != 169 && opcode != 0 {
-            // Do nothing as of now
-            opcode = u8::from_le_stream(&mut cursor)?;
-        }
-
-        // read the next byte to get the pk_hash length
-        // let pk_hash_length = u8::from_le_stream(&mut cursor)? as usize;
-
-        // read the next 20 bytes to get the pk_hash
-        let mut buffer = [0_u8; 20]; // replace hardcoded value later
-        cursor.read_exact(&mut buffer)?;
-
-        Ok(PkScriptData { pk_hash: buffer })
+        let mut bytes = [0u8; 20];
+        bytes.copy_from_slice(&second_hash[..]);
+        Ok(PkScriptData { pk_hash:  bytes })
     }
 }
 
