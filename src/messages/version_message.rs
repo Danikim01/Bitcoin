@@ -121,7 +121,7 @@ impl Version {
     }
 }
 
-impl Message for Version {
+impl Serialize for Version {
     fn serialize(&self) -> io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message(VERSION, Some(payload))?;
