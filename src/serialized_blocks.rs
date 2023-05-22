@@ -5,7 +5,6 @@ use crate::raw_transaction::RawTransaction;
 use crate::utxoset::UTXOset;
 use bitcoin_hashes::{sha256, Hash};
 
-
 #[derive(Debug)]
 pub struct SerializedBlock {
     pub block_header: BlockHeader,
@@ -48,26 +47,15 @@ impl SerializedBlock {
 
         // build merkle tree from transaction hashes
         let mut _merkle_tree = MerkleTree::from_hashes(txn_hashes);
-        let merkle_tree_root_hash = _merkle_tree._get_root_hash();
-        println!("root:{:?}",merkle_tree_root_hash);
-        match merkle_tree_root_hash{
-            Some(root_hash)=>{
-                println!("root hash {:?}",root_hash.to_byte_array());
-                println!("root hash del header block {:?}",&serialized_block.block_header.hash_block_header());
-            }
-            None => {
-                println!("Error");
-            }
-        }
+
         Ok(serialized_block)
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs; 
+    use std::fs;
 
     #[test]
     fn test_read_serialized_block_from_bytes() {
@@ -75,7 +63,6 @@ mod tests {
         let mut utxo_set = UTXOset::new();
         let serialized_block = SerializedBlock::from_bytes(&bytes, &mut utxo_set).unwrap();
 
-        assert_eq!(serialized_block.txn_count,serialized_block.txns.len());
+        assert_eq!(serialized_block.txn_count, serialized_block.txns.len());
     }
-
 }
