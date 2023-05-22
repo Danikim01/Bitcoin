@@ -4,7 +4,7 @@ use crate::messages::utility::{read_from_varint, StreamRead};
 use crate::messages::{Message, Serialize, Services};
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use crate::utility::actual_timestamp_or_default;
 
 #[derive(Debug, Clone)]
 pub struct Version {
@@ -28,16 +28,8 @@ impl Default for Version {
     fn default() -> Self {
         let version = LATEST_VERSION;
         let services = Services::new(0_u64);
-        let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(duration) => duration,
-            Err(..) => Duration::default(),
-        }
-        .as_secs() as i64;
-        let config = match Config::from_file() {
-            Ok(config) => config,
-            Err(..) => Config::default(),
-        };
-
+        let timestamp = actual_timestamp_or_default();
+        let config = Config::from_file_or_default();
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
         let addr_recv_port = *config.get_port();
@@ -68,6 +60,7 @@ impl Default for Version {
 }
 
 impl Version {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         version: i32,
         services: Services,
@@ -101,13 +94,10 @@ impl Version {
     }
 
     pub fn default_for_trans_addr(address: SocketAddr) -> Self {
-        let mut version = Self::default();
-        version.addr_trans_ip = match address.ip() {
+        Version { addr_trans_ip: match address.ip() {
             IpAddr::V4(ip4) => ip4.to_ipv6_compatible(),
             IpAddr::V6(ip6) => ip6,
-        };
-        version.addr_trans_port = address.port();
-        version
+        }, addr_trans_port: address.port(), ..Default::default()}
     }
 
     fn build_payload(&self) -> io::Result<Vec<u8>> {
@@ -131,8 +121,8 @@ impl Version {
     }
 }
 
-impl Serialize for Version {
-    fn serialize(&self) -> std::io::Result<Vec<u8>> {
+impl Message for Version {
+    fn serialize(&self) -> io::Result<Vec<u8>> {
         let payload = self.build_payload()?;
         let message = self.build_message(VERSION, Some(payload))?;
         Ok(message)

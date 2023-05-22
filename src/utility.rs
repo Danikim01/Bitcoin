@@ -1,5 +1,6 @@
 use crate::messages::{HashId, Hashable};
 use std::collections::HashMap;
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
 use std::fmt::Display;
 use std::io;
 
@@ -19,4 +20,13 @@ where
         .map(|element| (element.hash(), element))
         .collect();
     hashmap
+}
+
+pub fn actual_timestamp_or_default() -> i64{
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration,
+        Err(..) => Duration::default(),
+    }
+        .as_secs() as i64
+
 }
