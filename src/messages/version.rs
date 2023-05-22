@@ -26,7 +26,6 @@ pub struct Version {
 
 impl Default for Version {
     fn default() -> Self {
-        // let message_header = MessageHeader::default();
         let version = LATEST_VERSION;
         let services = Services::new(0_u64);
         let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
@@ -70,7 +69,6 @@ impl Default for Version {
 
 impl Version {
     fn new(
-        // message_header: MessageHeader,
         version: i32,
         services: Services,
         timestamp: i64,
@@ -86,7 +84,6 @@ impl Version {
         _relay: bool,
     ) -> Self {
         Self {
-            // message_header,
             version,
             services,
             timestamp,
@@ -173,4 +170,46 @@ fn deser_user_agent(cursor: &mut Cursor<&[u8]>) -> Result<String, io::Error> {
         Ok(user_agent) => Ok(user_agent.to_string()),
         Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e.to_string())),
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::messages::MessageHeader;
+    #[test]
+    fn test_version_header(){
+        let header = [0xF9, 0xBE, 0xB4, 0xD9, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x55, 0x00, 0x00, 0x00,0x66,0x66,0x66,0x66];
+
+        let message_header = MessageHeader::from_bytes(&header).unwrap();
+        
+        assert_eq!(message_header.start_string,[0xF9,0xBE,0xB4,0xD9]);
+        assert_eq!(message_header.command_name,"version\0\0\0\0\0".to_string());
+        assert_eq!(message_header.payload_size,85);
+        assert_eq!(message_header.checksum,[0x66,0x66,0x66,0x66]);
+    }
+
+    #[test]
+    fn test_read_version() {
+        //Ejemplo tomado de: https://en.bitcoin.it/wiki/Protocol_documentation#version
+        let data_version: Vec<u8> = vec![127, 17, 1, 0, 13, 4, 0, 0, 0, 0, 0, 0, 145, 212, 106, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 200, 105, 43, 35, 207, 40, 13, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 212, 180, 39, 227, 7, 96, 85, 98, 16, 47, 83, 97, 116, 111, 115, 104, 105, 58, 48, 46, 49, 54, 46, 51, 47, 153, 38, 37, 0, 1];
+       
+        let data = Version::from_bytes(&data_version).unwrap();
+        assert_eq!(data.version,70015);
+        assert_eq!(data.services,Services { bitmap: 1037 });
+        assert_eq!(data.timestamp,1684722833);
+        assert_eq!(data.addr_recv_services,0);
+        let expected_addr = "::ffff:200.105.43.35".parse::<Ipv6Addr>().expect("Invalid IPv6 address");
+        assert_eq!(data.addr_recv_ip.to_string(), expected_addr.to_string());
+        assert_eq!(data.addr_recv_port,53032);
+        assert_eq!(data._addr_trans_services,1037);
+        assert_eq!(data.addr_trans_port,0);
+        assert_eq!(data.nonce,7085675175729411284);
+        assert_eq!(data._user_agent,"/Satoshi:0.16.3/".to_string());
+        assert_eq!(data._start_height,2434713);
+        assert_eq!(data._relay,true);
+    }   
+
+    
 }

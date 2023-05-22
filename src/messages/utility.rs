@@ -78,3 +78,48 @@ pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
         _ => Ok(first_byte as u64),
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_varint() {
+        assert_eq!(to_varint(0), vec![0]);
+        assert_eq!(to_varint(100), vec![100]);
+        assert_eq!(to_varint(500), vec![0xfd, 0xf4, 0x01]);
+        assert_eq!(to_varint(1000000), vec![0xfe, 0x40, 0x42, 0x0f, 0x00]);
+    }
+
+    #[test]
+    fn test_endian_read() {
+        let bytes = [0x01, 0x02, 0x03, 0x04];
+        let slice: &[u8] = &bytes;
+        let mut cursor = Cursor::new(slice);
+        let value = u32::from_le_stream(&mut cursor).unwrap();
+        assert_eq!(value, 67305985);
+
+        let _bytes = [0x04, 0x03, 0x02, 0x01];
+        let _slice: &[u8] = &_bytes;
+        let mut cursor = Cursor::new(_slice);
+        let value = u32::from_be_stream(&mut cursor).unwrap();
+        assert_eq!(value, 67305985);
+    }
+
+    #[test]
+    fn test_read_hash() {
+        let data: [u8; 32] = [
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10,
+        ];
+        let slice: &[u8] = &data;
+
+        let mut cursor = Cursor::new(slice);
+        let result = read_hash(&mut cursor);
+
+        assert_eq!(result.is_ok(), true);
+        assert_eq!(result.unwrap(), data);
+    }
+
+}

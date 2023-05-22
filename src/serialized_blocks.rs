@@ -2,8 +2,8 @@ use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader};
 use crate::raw_transaction::RawTransaction;
+use crate::utxoset::UTXOset;
 use bitcoin_hashes::{sha256, Hash};
-use crate::io::ErrorKind::InvalidData;
 
 #[derive(Debug)]
 pub struct SerializedBlock {
@@ -14,7 +14,7 @@ pub struct SerializedBlock {
 
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl SerializedBlock {
-    pub fn from_bytes(bytes: &[u8]) -> Result<SerializedBlock, io::Error> {
+    pub fn from_bytes(bytes: &[u8], utxo_set: &mut UTXOset) -> Result<SerializedBlock, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         let block_header = BlockHeader::from_bytes(&mut cursor)?;
@@ -22,10 +22,10 @@ impl SerializedBlock {
 
         let mut txns = vec![];
 
-        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
+        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor, utxo_set)?;
         txns.push(coinbase_transaction);
 
-        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
+        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize, utxo_set)?;
         txns.extend(other_txns);
 
         let serialized_block = SerializedBlock {
@@ -50,7 +50,6 @@ impl SerializedBlock {
 
         Ok(serialized_block)
     }
-
 }
 
 #[cfg(test)]
@@ -61,30 +60,9 @@ mod tests {
     #[test]
     fn test_read_serialized_block_from_bytes() {
         let bytes = fs::read("./tmp/block_message_payload.dat").unwrap();
-        let serialized_block = SerializedBlock::from_bytes(&bytes).unwrap();
+        let mut utxo_set = UTXOset::new();
+        let serialized_block = SerializedBlock::from_bytes(&bytes, &mut utxo_set).unwrap();
 
-        let mut txid_hashes_vector = Vec::new();
-        for transaction in &serialized_block.txns{
-            // Serialize the transaction
-            let serialized_transaction = transaction.serialize();
-            // Hash the serialized transaction
-            let mut transaction_hash = sha256::Hash::hash(&serialized_transaction);
-            transaction_hash = sha256::Hash::hash(&transaction_hash[..]);
-            txid_hashes_vector.push(transaction_hash);
-        }
-        
-        let merkle_tree = MerkleTree::from_hashes(txid_hashes_vector);
-        let merkle_tree_root_hash = merkle_tree.get_root_hash();
-        println!("root:{:?}",merkle_tree_root_hash);
-        match merkle_tree_root_hash{
-            Some(root_hash)=>{
-                println!("root hash {:?}",root_hash.to_byte_array());
-                println!("root hash del header block {:?}",&serialized_block.block_header.merkle_root_hash);
-            }
-            None => {
-                println!("Error");
-            }
-        }
-
+        assert_eq!(serialized_block.txn_count, serialized_block.txns.len());
     }
 }

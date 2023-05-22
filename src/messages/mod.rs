@@ -19,7 +19,7 @@ pub use message_headers::MessageHeader;
 pub use verack::VerAck;
 pub use version::Version;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy,PartialEq)]
 pub struct Services {
     bitmap: u64,
 }
@@ -67,9 +67,9 @@ impl From<[u8; 8]> for Services {
     }
 }
 
-impl Into<[u8; 8]> for Services {
-    fn into(self) -> [u8; 8] {
-        self.bitmap.to_le_bytes()
+impl From<Services> for [u8; 8] {
+    fn from(value: Services) -> Self {
+        value.bitmap.to_le_bytes()
     }
 }
 

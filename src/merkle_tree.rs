@@ -15,53 +15,50 @@ pub struct MerkleTree {
 // Doc: https://developer.bitcoin.org/reference/block_chain.html#merkle-trees
 // Guide: https://www.derpturkey.com/merkle-tree-construction-and-proof-of-inclusion/
 impl MerkleTree {
-    pub fn from_hashes(hashes: Vec<sha256::Hash>) -> Self {
-        // Map all hashes to MerkleNodes
-        let mut children = hashes
+    fn map_hashes_to_nodes(hashes: Vec<sha256::Hash>) -> Vec<MerkleNode> {
+        hashes
             .into_iter()
-            .map(|hash| {
-                Box::new(MerkleNode {
-                    hash,
-                    _left: None,
-                    _right: None,
-                })
+            .map(|hash| MerkleNode {
+                hash,
+                _left: None,
+                _right: None,
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    }
 
-        // iterate children until there is only one left, which is the root
+    fn get_hash(data: &[u8]) -> sha256::Hash {
+        let hash = sha256::Hash::hash(data);
+        sha256::Hash::hash(&hash[..])
+    }
+
+    pub fn from_hashes(hashes: Vec<sha256::Hash>) -> Self {
+        let mut children = Self::map_hashes_to_nodes(hashes);
+
         while children.len() > 1 {
             let mut parents: Vec<Box<MerkleNode>> = Vec::new();
-            // iterate in pairs
-            let mut childs_iter = children.chunks(2);
+            let childs_iter = children.chunks(2);
             for pair in childs_iter {
-            // while let Some(pair) = childs_iter.next() {
-                // Case only one child in the pair
                 if pair.len() == 1 {
-                    let mut hash =
-                        sha256::Hash::hash(&[&pair[0].hash[..], &pair[0].hash[..]].concat());
-                    hash = sha256::Hash::hash(&hash[..]);
                     parents.push(Box::new(MerkleNode {
-                        hash,
-                        _left: Some(pair[0].clone()),
+                        hash: Self::get_hash(&[&pair[0].hash[..], &pair[0].hash[..]].concat()),
+                        _left: Some(Box::new(pair[0].clone())),
                         _right: None,
                     }));
                 } else {
-                    let mut hash =
-                        sha256::Hash::hash(&[&pair[0].hash[..], &pair[1].hash[..]].concat());
-                    hash = sha256::Hash::hash(&hash[..]);
                     parents.push(Box::new(MerkleNode {
-                        hash,
-                        _left: Some(pair[0].clone()),
-                        _right: Some(pair[1].clone()),
+                        hash: Self::get_hash(&[&pair[0].hash[..], &pair[1].hash[..]].concat()),
+                        _left: Some(Box::new(pair[0].clone())),
+                        _right: Some(Box::new(pair[1].clone())),
                     }));
                 }
             }
-            children = parents.clone();
+            children = parents.into_iter().map(|boxed_node| *boxed_node).collect();
         }
 
-        // return tree with root
         if let Some(root) = children.pop() {
-            return Self { root: Some(root) };
+            return Self {
+                root: Some(Box::new(root)),
+            };
         }
 
         Self { root: None } // something wrong happened
@@ -73,7 +70,6 @@ impl MerkleTree {
         }
         None
     }
-    
 
     pub fn _validate_inclusion_recursive(node: &MerkleNode, hash: sha256::Hash) -> bool {
         if node.hash == hash {
@@ -101,14 +97,8 @@ impl MerkleTree {
 }
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
-
-    // #[test]
-    // fn test_merklee_tree_no_elements() {
-    //     assert!(false);
-    // }
 
     #[test]
     fn test_merkle_tree_one_element() {
@@ -123,7 +113,7 @@ mod tests {
         let txid_hashes = vec![a_hash];
 
         // Merkle tree
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Actual merkle root hash
         let actual_hash = merkle_tree._get_root_hash().unwrap();
@@ -144,7 +134,7 @@ mod tests {
         b_hash = sha256::Hash::hash(&b_hash[..]);
 
         let txid_hashes = vec![a_hash, b_hash];
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Expected merkle root
         let mut ab_hash = sha256::Hash::hash(&[&a_hash[..], &b_hash[..]].concat());
@@ -174,7 +164,7 @@ mod tests {
         let txid_hashes = vec![a_hash, b_hash, c_hash];
 
         // Merkle tree
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Expected merkle root
         let mut ab_hash = sha256::Hash::hash(&[&a_hash[..], &b_hash[..]].concat());
@@ -263,7 +253,7 @@ mod tests {
         ];
 
         // Merkle tree
-        let mut merkle_tree = MerkleTree::from_hashes(txid_hashes);
+        let merkle_tree = MerkleTree::from_hashes(txid_hashes);
 
         // Expected merkle root
         let mut ab_hash = sha256::Hash::hash(&[&a_hash[..], &b_hash[..]].concat());
@@ -345,6 +335,5 @@ mod tests {
         let j_hash = sha256::Hash::hash(j);
 
         assert!(!merkle_tree._validate_inclusion(j_hash));
-
     }
 }
