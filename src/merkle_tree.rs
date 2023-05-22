@@ -32,7 +32,7 @@ impl MerkleTree {
         while children.len() > 1 {
             let mut parents: Vec<Box<MerkleNode>> = Vec::new();
             // iterate in pairs
-            let mut childs_iter = children.chunks(2);
+            let childs_iter = children.chunks(2);
             for pair in childs_iter {
             // while let Some(pair) = childs_iter.next() {
                 // Case only one child in the pair

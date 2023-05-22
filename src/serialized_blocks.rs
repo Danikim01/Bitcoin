@@ -3,7 +3,7 @@ use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader};
 use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::{sha256, Hash};
-use crate::io::ErrorKind::InvalidData;
+
 
 #[derive(Debug)]
 pub struct SerializedBlock {

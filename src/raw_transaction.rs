@@ -1,12 +1,12 @@
 use crate::io::Cursor;
 use crate::messages::utility::*;
-use std::{io::{Error, Read}, ptr::read};
+use std::{io::{Error, Read}};
 use bitcoin_hashes::{Hash,sha256, ripemd160};
 
 fn read_coinbase_script(
     cursor: &mut Cursor<&[u8]>,
     count: usize,
-) -> Result<Vec<u8>, std::io::Error> {
+) -> Result<Vec<u8>, Error> {
     let mut array = vec![0_u8; count];
     cursor.read_exact(&mut array)?;
     Ok(array)
@@ -76,10 +76,10 @@ pub struct PkScriptData {
 }
 
 impl PkScriptData {
-    pub fn from_pk_script_bytes(pk_script_bytes: &Vec<u8>) -> Result<Self, Error> {
+    pub fn from_pk_script_bytes(pk_script_bytes: &[u8]) -> Result<Self, Error> {
 
-        let mut first_hash = sha256::Hash::hash(&pk_script_bytes[..]);
-        let mut second_hash = ripemd160::Hash::hash(&first_hash[..]);
+        let first_hash = sha256::Hash::hash(&pk_script_bytes[..]);
+        let second_hash = ripemd160::Hash::hash(&first_hash[..]);
 
         let mut bytes = [0u8; 20];
         bytes.copy_from_slice(&second_hash[..]);
@@ -171,7 +171,7 @@ impl TxOutput {
         bytes
     }
 
-    pub fn get_pk_script_data(&self) -> Result<PkScriptData, Error> {
+    pub fn _get_pk_script_data(&self) -> Result<PkScriptData, Error> {
         PkScriptData::from_pk_script_bytes(&self.pk_script)
     }
 }
