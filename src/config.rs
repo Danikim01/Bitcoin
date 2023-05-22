@@ -60,7 +60,7 @@ impl Config {
 
         Ok(config)
     }
-    
+
     pub fn from_file_or_default() -> Config {
         match Config::from_file() {
             Ok(config) => config,

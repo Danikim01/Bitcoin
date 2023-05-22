@@ -50,7 +50,7 @@ impl Listener {
 
 pub struct Node {
     pub stream: TcpStream,
-    listener: thread::JoinHandle<io::Result<()>>,
+    _listener: thread::JoinHandle<io::Result<()>>,
 }
 
 impl Node {
@@ -58,7 +58,7 @@ impl Node {
         println!("MAIN: Established connection with node: {:?}", stream);
         Self {
             stream,
-            listener,
+            _listener: listener,
         }
     }
 

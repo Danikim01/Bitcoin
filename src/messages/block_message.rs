@@ -1,5 +1,4 @@
 use crate::io::{self, Cursor};
-use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::RawTransaction;
 use crate::utxo::{Utxo, UtxoId};

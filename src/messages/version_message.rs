@@ -2,9 +2,9 @@ use crate::config::Config;
 use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
 use crate::messages::utility::{read_from_varint, StreamRead};
 use crate::messages::{Message, Serialize, Services};
+use crate::utility::actual_timestamp_or_default;
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
-use crate::utility::actual_timestamp_or_default;
 
 #[derive(Debug, Clone)]
 pub struct Version {
@@ -94,10 +94,14 @@ impl Version {
     }
 
     pub fn default_for_trans_addr(address: SocketAddr) -> Self {
-        Version { addr_trans_ip: match address.ip() {
-            IpAddr::V4(ip4) => ip4.to_ipv6_compatible(),
-            IpAddr::V6(ip6) => ip6,
-        }, addr_trans_port: address.port(), ..Default::default()}
+        Version {
+            addr_trans_ip: match address.ip() {
+                IpAddr::V4(ip4) => ip4.to_ipv6_compatible(),
+                IpAddr::V6(ip6) => ip6,
+            },
+            addr_trans_port: address.port(),
+            ..Default::default()
+        }
     }
 
     fn build_payload(&self) -> io::Result<Vec<u8>> {
