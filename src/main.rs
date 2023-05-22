@@ -10,6 +10,8 @@ mod merkle_tree;
 mod utxoset;
 fn main() -> Result<(), io::Error> {
     let (mut nodes, _mpsc_reader) = connection::connect_to_network()?;
-    connection::sync(&mut nodes)?;
+    let mut utxo_set = utxoset::UTXOset::new();
+    connection::sync(&mut nodes, &mut utxo_set)?;
+    println!("UTXOset has {} transactions", utxo_set.utxo_vector.len());
     Ok(())
 }

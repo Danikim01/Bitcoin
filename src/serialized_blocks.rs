@@ -2,6 +2,7 @@ use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader};
 use crate::raw_transaction::RawTransaction;
+use crate::utxoset::UTXOset;
 use bitcoin_hashes::{sha256, Hash};
 
 
@@ -14,7 +15,7 @@ pub struct SerializedBlock {
 
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl SerializedBlock {
-    pub fn from_bytes(bytes: &[u8]) -> Result<SerializedBlock, io::Error> {
+    pub fn from_bytes(bytes: &[u8], utxo_set: &mut UTXOset) -> Result<SerializedBlock, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
         let block_header = BlockHeader::from_bytes(&mut cursor)?;
@@ -22,10 +23,10 @@ impl SerializedBlock {
 
         let mut txns = vec![];
 
-        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
+        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor, utxo_set)?;
         txns.push(coinbase_transaction);
 
-        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
+        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize, utxo_set)?;
         txns.extend(other_txns);
 
         let serialized_block = SerializedBlock {
@@ -71,7 +72,8 @@ mod tests {
     #[test]
     fn test_read_serialized_block_from_bytes() {
         let bytes = fs::read("./tmp/block_message_payload.dat").unwrap();
-        let serialized_block = SerializedBlock::from_bytes(&bytes).unwrap();
+        let mut utxo_set = UTXOset::new();
+        let serialized_block = SerializedBlock::from_bytes(&bytes, &mut utxo_set).unwrap();
 
         assert_eq!(serialized_block.txn_count,serialized_block.txns.len());
     }

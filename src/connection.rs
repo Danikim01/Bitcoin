@@ -6,6 +6,7 @@ use crate::messages::{
 use crate::node::Node;
 use crate::serialized_blocks::SerializedBlock;
 use crate::utility::to_max_len_buckets;
+use crate::utxoset::UTXOset;
 use std::sync::mpsc;
 use std::{
     io,
@@ -27,9 +28,8 @@ fn handle_headers_message(node: &mut Node) -> Result<Headers, io::Error> {
     Ok(headers)
 }
 
-fn handle_getdata_message(node: &mut Node, headers: Vec<BlockHeader>) -> Result<(), io::Error> {
+fn handle_getdata_message(node: &mut Node, headers: Vec<BlockHeader>, utxo_set: &mut UTXOset) -> Result<(), io::Error> {
     let get_data = GetData::from_inv(headers.len(), headers);
-    // println!("Sending GetData message: {:?}", &get_data);
     node.send(get_data.serialize()?)?;
     let block_message = MessageHeader::read_until_command(&mut node.stream, "block\0\0\0\0\0\0\0")?;
     let data_blocks = block_message.read_payload(&mut node.stream)?;
@@ -38,8 +38,7 @@ fn handle_getdata_message(node: &mut Node, headers: Vec<BlockHeader>) -> Result<
     // let mut save_stream = File::create("src/block_message_payload.dat")?;
     // save_stream.write_all(&data_blocks)?;
 
-    let _block_message_data = SerializedBlock::from_bytes(&data_blocks)?;
-    // println!("{:?}",_block_message_data);
+    let _block_message_data = SerializedBlock::from_bytes(&data_blocks, utxo_set)?;
     Ok(())
 }
 
@@ -60,7 +59,7 @@ pub fn initial_header_download(nodes: &mut Vec<Node>) -> Result<Headers, io::Err
     Ok(headers)
 }
 
-pub fn sync(nodes: &mut Vec<Node>) -> Result<(), io::Error> {
+pub fn sync(nodes: &mut Vec<Node>, utxo_set: &mut UTXOset) -> Result<(), io::Error> {
     let mut headers = match Headers::from_file("tmp/headers_backup.dat") {
         Ok(headers) => headers,
         Err(..) => initial_header_download(nodes)?,
@@ -74,7 +73,7 @@ pub fn sync(nodes: &mut Vec<Node>) -> Result<(), io::Error> {
     let headers_buckets =
         to_max_len_buckets(headers.block_headers, constants::messages::MAX_INV_SIZE);
     for bucket in headers_buckets {
-        handle_getdata_message(&mut nodes[0], bucket)?;
+        handle_getdata_message(&mut nodes[0], bucket, utxo_set)?;
     }
     Ok(())
 }
