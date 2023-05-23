@@ -1,6 +1,6 @@
 use crate::io::Cursor;
 use crate::messages::{utility::*, Hashable};
-use bitcoin_hashes::{sha256, Hash};
+use crate::utility::double_hash;
 use std::io::ErrorKind::InvalidData;
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
@@ -112,10 +112,9 @@ impl BlockHeader {
 
 impl Hashable for BlockHeader {
     fn hash(&self) -> [u8; 32] {
-        let first_hash = sha256::Hash::hash(&self.serialize());
-        let second_hash = sha256::Hash::hash(&first_hash[..]);
+        let hash = double_hash(&self.serialize());
         let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&second_hash[..]);
+        bytes.copy_from_slice(&hash[..]);
         bytes
     }
 }
