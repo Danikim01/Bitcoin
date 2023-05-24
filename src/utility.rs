@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::io;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use bitcoin_hashes::{sha256, Hash};
 
 pub fn to_io_err<E>(error: E) -> io::Error
 where
@@ -28,4 +29,23 @@ pub fn actual_timestamp_or_default() -> i64 {
         Err(..) => Duration::default(),
     }
     .as_secs() as i64
+}
+
+pub fn double_hash(bytes: &[u8]) -> sha256::Hash {
+    let hash = sha256::Hash::hash(bytes);
+    sha256::Hash::hash(&hash[..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_double_hash() {
+        let bytes = b"hello world";
+        let hash = double_hash(bytes);
+
+        let expected = sha256::Hash::hash(&sha256::Hash::hash(bytes)[..]);
+        assert_eq!(hash, expected);
+    }
 }
