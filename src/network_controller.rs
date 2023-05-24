@@ -9,6 +9,7 @@ use crate::utxo::{Utxo, UtxoId};
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
+use crate::logger::log;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
@@ -48,7 +49,7 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-        println!("Received block. New block count: {:?}", self.blocks.len());
+        log(&format!("Received block. New block count: {:?}", self.blocks.len()) as &str);
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
 
@@ -95,7 +96,7 @@ impl NetworkController {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
             self.nodes.send_to_any(&get_data.serialize()?)?;
         }
-        println!("Requesting blocks, sent GetData message.");
+        log("Requesting blocks, sent GetData message.");
         Ok(())
     }
 
