@@ -8,6 +8,7 @@ mod node_controller;
 mod raw_transaction;
 mod utility;
 mod utxo;
+mod logger;
 
 fn main() -> Result<(), io::Error> {
     let mut controller = network_controller::NetworkController::new()?;
