@@ -12,6 +12,14 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
     Ok(array)
 }
 
+fn _remove_right_empty_bytes(bytes: &[u8]) -> &[u8] {
+    let last_non_zero_index = bytes
+        .iter()
+        .rposition(|&x| x != 0)
+        .unwrap_or(bytes.len() - 1);
+    &bytes[..=last_non_zero_index]
+}
+
 #[derive(Debug, Clone)]
 pub struct CoinBaseInput {
     _hash: [u8; 32],
@@ -126,19 +134,8 @@ impl TxInput {
         bytes.extend_from_slice(&self.previous_output._hash);
         bytes.extend_from_slice(&self.previous_output._index.to_le_bytes());
 
-        // THIS IS A CRAPPY HACK
-        // Find the index of the last non-zero byte
-        let last_non_zero_index = self
-            .script_bytes
-            .to_le_bytes()
-            .iter()
-            .rposition(|&x| x != 0)
-            .unwrap_or(0);
-
-        // Create a new array containing only the non-zero bytes
-        let trimmed_pk_bytes: &[u8] = &self.script_bytes.to_le_bytes()[..=last_non_zero_index];
-        bytes.extend_from_slice(trimmed_pk_bytes);
-        // FIX THE CRAPPY HACK
+        let script_bytes: &[u8] = &self.script_bytes.to_le_bytes();
+        bytes.extend_from_slice(_remove_right_empty_bytes(script_bytes));
 
         bytes.extend_from_slice(&self.script_sig);
         bytes.extend_from_slice(&self.sequence.to_le_bytes());
@@ -197,19 +194,8 @@ impl TxOutput {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self.value.to_le_bytes());
 
-        // THIS IS A CRAPPY HACK
-        // Find the index of the last non-zero byte
-        let last_non_zero_index = self
-            .pk_script_bytes
-            .to_le_bytes()
-            .iter()
-            .rposition(|&x| x != 0)
-            .unwrap_or(0);
-
-        // Create a new array containing only the non-zero bytes
-        let trimmed_pk_bytes: &[u8] = &self.pk_script_bytes.to_le_bytes()[..=last_non_zero_index];
-        bytes.extend_from_slice(trimmed_pk_bytes);
-        // FIX THE CRAPPY HACK
+        let script_bytes: &[u8] = &self.pk_script_bytes.to_le_bytes();
+        bytes.extend_from_slice(_remove_right_empty_bytes(script_bytes));
 
         bytes.extend_from_slice(&self.pk_script);
         bytes
