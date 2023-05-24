@@ -1,6 +1,7 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Once};
+use chrono::Local;
 
 struct Logger {
     log_file: Arc<Mutex<std::fs::File>>,
@@ -18,7 +19,8 @@ impl Logger {
     }
 
     fn log(&self, message: &str) {
-        let line = format!("{}\n", message);
+        let now = Local::now();
+        let line = format!("{} - {}\n", now, message);
         print!("{}", line);
         let mut file = self.log_file.lock().unwrap();
         file.write_all(line.as_bytes()).expect("Failed to write to log file");
