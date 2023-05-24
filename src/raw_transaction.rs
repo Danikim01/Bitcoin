@@ -95,25 +95,54 @@ pub struct TxInput {
 }
 
 impl TxInput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let previous_output = Outpoint::from_bytes(cursor)?;
+        let script_bytes = read_from_varint(cursor)?;
+        let script_sig = read_coinbase_script(cursor, script_bytes as usize)?;
+        let sequence = u32::from_le_stream(cursor)?;
+
+        let tx_input = TxInput {
+            previous_output,
+            script_bytes,
+            script_sig,
+            sequence,
+        };
+
+        Ok(tx_input)
+    }
+
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
         let mut tx_inputs = vec![];
 
         for _ in 0..count {
-            let previous_output = Outpoint::from_bytes(cursor)?;
-            let script_bytes = read_from_varint(cursor)?;
-            let script_sig = read_coinbase_script(cursor, script_bytes as usize)?;
-            let sequence = u32::from_le_stream(cursor)?;
-
-            let tx_input = TxInput {
-                previous_output,
-                script_bytes,
-                script_sig,
-                sequence,
-            };
-
+            let tx_input = TxInput::from_bytes(cursor)?;
             tx_inputs.push(tx_input);
         }
         Ok(tx_inputs)
+    }
+
+    pub fn _serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self.previous_output._hash);
+        bytes.extend_from_slice(&self.previous_output._index.to_le_bytes());
+
+        // THIS IS A CRAPPY HACK
+        // Find the index of the last non-zero byte
+        let last_non_zero_index = self
+            .script_bytes
+            .to_le_bytes()
+            .iter()
+            .rposition(|&x| x != 0)
+            .unwrap_or(0);
+
+        // Create a new array containing only the non-zero bytes
+        let trimmed_pk_bytes: &[u8] = &self.script_bytes.to_le_bytes()[..=last_non_zero_index];
+        bytes.extend_from_slice(trimmed_pk_bytes);
+        // FIX THE CRAPPY HACK
+
+        bytes.extend_from_slice(&self.script_sig);
+        bytes.extend_from_slice(&self.sequence.to_le_bytes());
+        bytes
     }
 
     pub fn serialize_vec(tx_inputs: &Vec<Self>) -> Vec<u8> {
@@ -137,26 +166,53 @@ pub struct TxOutput {
 }
 
 impl TxOutput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let value = i64::from_le_stream(cursor)?; // this is actually a float?
+        let pk_script_bytes = read_from_varint(cursor)?;
+        let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
+
+        let _pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
+
+        let tx_output = TxOutput {
+            value,
+            pk_script_bytes,
+            pk_script,
+        };
+
+        Ok(tx_output)
+    }
+
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<Self>, Error> {
         let mut tx_outputs = vec![];
 
         for _ in 0..n {
-            let value = i64::from_le_stream(cursor)?;
-            let pk_script_bytes = read_from_varint(cursor)?;
-            let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
-
-            let _pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
-
-            let tx_output = TxOutput {
-                value,
-                pk_script_bytes,
-                pk_script,
-            };
-
+            let tx_output = TxOutput::from_bytes(cursor)?;
             tx_outputs.push(tx_output);
         }
 
         Ok(tx_outputs)
+    }
+
+    pub fn _serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self.value.to_le_bytes());
+
+        // THIS IS A CRAPPY HACK
+        // Find the index of the last non-zero byte
+        let last_non_zero_index = self
+            .pk_script_bytes
+            .to_le_bytes()
+            .iter()
+            .rposition(|&x| x != 0)
+            .unwrap_or(0);
+
+        // Create a new array containing only the non-zero bytes
+        let trimmed_pk_bytes: &[u8] = &self.pk_script_bytes.to_le_bytes()[..=last_non_zero_index];
+        bytes.extend_from_slice(trimmed_pk_bytes);
+        // FIX THE CRAPPY HACK
+
+        bytes.extend_from_slice(&self.pk_script);
+        bytes
     }
 
     pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
@@ -269,4 +325,80 @@ impl RawTransaction {
         transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_txou_serialization() {
+        // txou bytes
+        let bytes: &[u8] = &[
+            0xf0, 0xca, 0x05, 0x2a, 0x01, 0x00, 0x00, 0x00, // value
+            0x19, // pk_script_bytes
+            0x76, // OP_DUP
+            0xa9, // OP_HASH160
+            0x14, // OP_PUSHDATA(20)
+            0xcb, 0xc2, 0x0a, 0x76, 0x64, 0xf2, 0xf6, 0x9e, 0x53, 0x55, 0xaa, 0x42, 0x70, 0x45,
+            0xbc, 0x15, 0xe7, 0xc6, 0xc7, 0x72, // PubKeyHash
+            0x88, // OP_EQUALVERIFY
+            0xac, // OP_CHECKSIG
+        ];
+
+        // we deserialize the txou
+        let mut cursor = Cursor::new(bytes);
+        let txou = TxOutput::from_bytes(&mut cursor).unwrap();
+
+        // we serialize the txou
+        let serialized_txou = txou._serialize();
+
+        // we compare the deserialized txou with the original one
+        assert_eq!(bytes[0..8], serialized_txou[0..8]); // value bytes
+        assert_eq!(bytes[8], serialized_txou[8]); // pk_script_bytes
+        assert_eq!(bytes[9..], serialized_txou[9..]); // pk_script
+    }
+
+    #[test]
+    fn test_txin_serialization() {
+        // txin bytes
+        let bytes: &[u8] = &[
+            0xf0, 0xca, 0x05, 0x2a, 0x01, 0x00, 0x00, 0x00, //
+            0xf0, 0xca, 0x05, 0x2a, 0x01, 0x00, 0x00, 0x00, //
+            0xf0, 0xca, 0x05, 0x2a, 0x01, 0x00, 0x00, 0x00, //
+            0xf0, 0xca, 0x05, 0x2a, 0x01, 0x00, 0x00, 0x00, // previous_output
+            0x19, // signature_script_bytes
+            0x19, 0x76, 0xa9, 0x14, 0xcb, 0xc2, 0x0a, 0x76, //
+            0x64, 0xf2, 0xf6, 0x9e, 0x53, 0x55, 0xaa, 0x42, //
+            0x70, 0x45, 0xbc, 0x15, 0xe7, 0xc6, 0xc7, 0x72, //
+            0x88, // signature_script
+            0xff, 0xff, 0xff, 0xff, // sequence
+        ];
+
+        // we deserialize the txin
+        let mut cursor = Cursor::new(bytes);
+        let txin = TxInput::from_bytes(&mut cursor).unwrap();
+
+        // we serialize the txin
+        let serialized_txin = txin._serialize();
+
+        // we compare the deserialized txin with the original one
+        assert_eq!(bytes[0..32], serialized_txin[0..32]); // previous_output
+        assert_eq!(bytes[32], serialized_txin[32]); // signature_script_bytes
+        assert_eq!(bytes[33..58], serialized_txin[33..58]); // signature_script
+        assert_eq!(bytes[58..61], serialized_txin[58..61]); // sequence
+    }
+
+    // #[test]
+    // fn test_coinbase_transaction_serialization() {
+    //     // coinbase bytes
+    //     let bytes: &[u8] = &[];
+
+    //     // we deserialize the coinbase transaction
+
+    //     // we serialize the coinbase transaction
+
+    //     // we compare the deserialized transaction with the original one
+    //     assert!(false);
+    // }
 }
