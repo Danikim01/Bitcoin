@@ -48,7 +48,7 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-        println!("Received block. New block count: {:?}", self.blocks.len());
+        println!("Received block . New block count: {:?}", self.blocks.len());
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
 

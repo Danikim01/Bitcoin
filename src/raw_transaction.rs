@@ -12,12 +12,31 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
     Ok(array)
 }
 
-fn _remove_right_empty_bytes(bytes: &[u8]) -> &[u8] {
+fn remove_right_zero_bytes(bytes: &[u8]) -> &[u8] {
     let last_non_zero_index = bytes
         .iter()
         .rposition(|&x| x != 0)
         .unwrap_or(bytes.len() - 1);
     &bytes[..=last_non_zero_index]
+}
+
+// https://developer.bitcoin.org/reference/transactions.html#compact_size-unsigned-integers
+fn to_compact_size_bytes(compact_size: u64) -> Vec<u8> {
+    let mut bytes: Vec<u8> = vec![];
+    if compact_size <= 252 {
+        bytes.extend(compact_size.to_le_bytes()[..1].iter());
+    } else if compact_size <= 0xffff {
+        bytes.push(0xfd);
+        bytes.extend(compact_size.to_le_bytes()[..2].iter());
+    } else if compact_size <= 0xffffffff {
+        bytes.push(0xfe);
+        bytes.extend(compact_size.to_le_bytes()[..4].iter());
+    } else {
+        bytes.push(0xff);
+        bytes.extend(compact_size.to_le_bytes()[..8].iter());
+    }
+
+    bytes
 }
 
 #[derive(Debug, Clone)]
@@ -55,8 +74,8 @@ impl CoinBaseInput {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self._hash);
         bytes.extend_from_slice(&self._index.to_le_bytes());
-        bytes.extend_from_slice(_remove_right_empty_bytes(&self._script_bytes.to_le_bytes()));
-        bytes.extend_from_slice(_remove_right_empty_bytes(&self._height.to_le_bytes()));
+        bytes.extend_from_slice(&to_compact_size_bytes(self._script_bytes));
+        bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
         bytes.extend_from_slice(&self._coinbase_script);
         bytes.extend_from_slice(&self._sequence.to_le_bytes());
         bytes
@@ -133,8 +152,7 @@ impl TxOutput {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self.value.to_le_bytes());
 
-        let script_bytes: &[u8] = &self.pk_script_bytes.to_le_bytes();
-        bytes.extend_from_slice(_remove_right_empty_bytes(script_bytes));
+        bytes.extend_from_slice(&to_compact_size_bytes(self.pk_script_bytes));
 
         bytes.extend_from_slice(&self.pk_script);
         bytes
@@ -199,8 +217,7 @@ impl TxInput {
                 bytes.extend_from_slice(&[0u8]);
             }
             _ => {
-                bytes
-                    .extend_from_slice(_remove_right_empty_bytes(&self.script_bytes.to_le_bytes()));
+                bytes.extend_from_slice(&to_compact_size_bytes(self.script_bytes));
             }
         }
 
@@ -240,7 +257,7 @@ pub struct RawTransaction {
     tx_in: TxInputType,
     tx_out_count: u64,
     pub tx_out: Vec<TxOutput>,
-    lock_time: u32,
+    pub lock_time: u32,
 }
 
 impl RawTransaction {
@@ -310,9 +327,9 @@ impl RawTransaction {
     pub fn serialize(&self) -> Vec<u8> {
         let mut transaction_bytes = vec![];
         transaction_bytes.extend(self.version.to_le_bytes());
-        transaction_bytes.extend(_remove_right_empty_bytes(&self.tx_in_count.to_le_bytes()));
+        transaction_bytes.extend(&to_compact_size_bytes(self.tx_in_count));
         transaction_bytes.extend(self.tx_in.to_bytes());
-        transaction_bytes.extend(_remove_right_empty_bytes(&self.tx_out_count.to_le_bytes()));
+        transaction_bytes.extend(&to_compact_size_bytes(self.tx_out_count));
         transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
         transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
@@ -323,6 +340,22 @@ impl RawTransaction {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn test_compactsize_serialization_u16() {
+        let bytes: &[u8] = &[
+            0xfd, // format
+            0x03, 0x02, // number 515
+        ];
+
+        let mut cursor = Cursor::new(bytes);
+
+        let compact_size = read_from_varint(&mut cursor).unwrap();
+        assert_eq!(compact_size, 515);
+
+        let serialized_compactsize = to_compact_size_bytes(compact_size);
+        assert_eq!(serialized_compactsize, bytes);
+    }
 
     #[test]
     fn test_txou_serialization() {
