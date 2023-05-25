@@ -8,6 +8,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use crate::logger::log;
 
 pub struct Listener {
     stream: TcpStream,
@@ -27,8 +28,8 @@ impl Listener {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                println!("{:?}", e);
-                println!("connection: {:?}", self.stream);
+                log(&format!("{:?}",e) as &str);
+                log(&format!("connection: {:?}", self.stream) as &str);
                 Err(e)
             }
         }
@@ -50,12 +51,12 @@ impl Listener {
 
 pub struct Node {
     pub stream: TcpStream,
-    _listener: thread::JoinHandle<io::Result<()>>,
+    _listener: JoinHandle<io::Result<()>>,
 }
 
 impl Node {
     fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>) -> Self {
-        println!("MAIN: Established connection with node: {:?}", stream);
+        log(&format!("MAIN: Established connection with node: {:?}", stream) as &str);
         Self {
             stream,
             _listener: listener,
@@ -70,9 +71,9 @@ impl Node {
 
     fn _is_alive(&mut self) -> bool {
         let mut buf = [0u8; 1];
-        println!("is_alive: peeking");
+        log("is_alive: peeking");
         let bytes_read = self.stream.peek(&mut buf);
-        println!("is_alive: done peeking");
+        log("is_alive: done peeking");
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,
