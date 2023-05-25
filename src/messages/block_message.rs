@@ -93,16 +93,10 @@ impl Block {
             }
             false => {
                 println!("\x1b[93mMerkle root is invalid!\x1b[0m");
-                // println!(
-                //     "Data of failed block:\ntxn count: {:?}\nactual txn count: {:?}",
-                //     self.txn_count,
-                //     self.txns.len()
-                // );
-                // Err(io::Error::new(
-                //     io::ErrorKind::InvalidData,
-                //     "Merkle root hash mismatch",
-                // ))
-                Ok(()) // not really OK, but we want to continue
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Merkle root hash mismatch",
+                ))
             }
         }
     }
