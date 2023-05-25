@@ -78,6 +78,13 @@ impl MerkleTree {
         hashes
     }
 
+    pub fn get_root(&self) -> sha256::Hash {
+        if self.tree.is_empty() {
+            return double_hash(b"foo");
+        }
+        self.tree[self.tree.len() - 1][0]
+    }
+
     pub fn _merkle_root_from_hashes(hashes: Vec<sha256::Hash>) -> Result<sha256::Hash, Error> {
         if hashes.is_empty() {
             return Err(Error::new(
@@ -103,7 +110,7 @@ impl MerkleTree {
         Self::_merkle_root_from_hashes(combined_hashes)
     }
 
-    pub fn _generate_from_hashes(hashes: Vec<sha256::Hash>) -> Self {
+    pub fn generate_from_hashes(hashes: Vec<sha256::Hash>) -> Self {
         if hashes.is_empty() {
             return Self { tree: Vec::new() };
         }
@@ -152,15 +159,15 @@ impl MerkleTree {
                 Direction::_Left
             };
 
-            let sibling_index = if is_left_child {
+            let mut sibling_index = if is_left_child {
                 hash_index + 1
             } else {
                 hash_index - 1
             };
 
-            // This means that the hash is not in the tree, return proof as is
-            if self.tree[level].len() <= sibling_index {
-                return Ok(MerkleProof { proof });
+            // This means that the hash is the last one in the tree
+            if sibling_index >= self.tree[level].len()  {
+                sibling_index = self.tree[level].len() - 1;
             }
 
             let sibling_node: (sha256::Hash, Direction) =
@@ -333,7 +340,7 @@ mod tests {
         let expected_tree = vec![vec![a_hash]];
 
         // Actual merkle tree
-        let actual_tree = MerkleTree::_generate_from_hashes(txid_hashes);
+        let actual_tree = MerkleTree::generate_from_hashes(txid_hashes);
 
         assert_eq!(actual_tree.tree, expected_tree);
     }
@@ -355,7 +362,7 @@ mod tests {
         let expected_tree = vec![vec![a_hash, b_hash], vec![ab_hash]];
 
         // Actual merkle tree
-        let actual_tree = MerkleTree::_generate_from_hashes(txid_hashes);
+        let actual_tree = MerkleTree::generate_from_hashes(txid_hashes);
 
         assert_eq!(actual_tree.tree, expected_tree);
     }
@@ -384,7 +391,7 @@ mod tests {
         ];
 
         // Generate merkle tree
-        let actual_tree = MerkleTree::_generate_from_hashes(txid_hashes);
+        let actual_tree = MerkleTree::generate_from_hashes(txid_hashes);
 
         assert_eq!(actual_tree.tree, expected_tree);
     }
@@ -407,7 +414,7 @@ mod tests {
         let abcd_hash = double_hash(&[&ab_hash[..], &cd_hash[..]].concat()); // Expected merkle root
 
         let txid_hashes = vec![a_hash, b_hash, c_hash, d_hash];
-        let actual_tree = MerkleTree::_generate_from_hashes(txid_hashes.clone());
+        let actual_tree = MerkleTree::generate_from_hashes(txid_hashes.clone());
 
         // iterate all elements in the tree and validate their proof
         for transaction in txid_hashes {

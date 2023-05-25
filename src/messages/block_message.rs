@@ -1,6 +1,8 @@
 use crate::io::{self, Cursor};
+use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::RawTransaction;
+use crate::utility::double_hash;
 use crate::utxo::{Utxo, UtxoId};
 use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
@@ -50,6 +52,55 @@ impl Hashable for Block {
 }
 
 impl Block {
+    fn hash_transactions(&self) -> Vec<sha256::Hash> {
+        let mut txn_hashes: Vec<sha256::Hash> = vec![];
+        self.txns.iter().for_each(|txn| {
+            let txn_bytes = txn.serialize();
+            let txn_hash = double_hash(&txn_bytes);
+            txn_hashes.push(txn_hash);
+        });
+        txn_hashes
+    }
+
+    fn validate_merkle_root(&self) -> io::Result<()> {
+        // hash all transactions in the block
+        let txn_hashes = self.hash_transactions();
+
+        // build merkle tree from transaction hashes
+        let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes); // clone txn_hashes if merkle proofing
+        let root_hash = merkle_tree.get_root();
+
+        // check proof of inclusion for each transaction - not really needed
+        // for hash in txn_hashes {
+        //     let proof = merkle_tree._generate_proof(hash)?;
+        //     let root_from_proof = proof._generate_merkle_root();
+        //     let equal = root_hash == root_from_proof;
+        //     match equal {
+        //         true => (),
+        //         false => {
+        //             return Err(io::Error::new(
+        //                 io::ErrorKind::InvalidData,
+        //                 "Transaction failed proof of inclusion",
+        //             ))
+        //         }
+        //     }
+        // }
+
+        match self.block_header.merkle_root_hash == root_hash.to_byte_array() {
+            true => {
+                println!("Merkle root is valid!");
+                Ok(())
+            }
+            false => {
+                println!("\x1b[93mMerkle root is invalid!\x1b[0m");
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Merkle root hash mismatch",
+                ))
+            }
+        }
+    }
+
     pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
         let mut utxo_set_snapshot = utxo_set.clone();
         // check for double spending
@@ -58,49 +109,38 @@ impl Block {
         }
 
         self.block_header.validate_proof_of_work()?;
+        self.validate_merkle_root()?;
 
-        // check proof of inclusion -> merkle tree root
-        let mut txn_hashes: Vec<sha256::Hash> = vec![];
-        self.txns.iter().for_each(|txn| {
-            let txn_serial = txn.serialize();
-            let mut txn_hash = sha256::Hash::hash(&txn_serial);
-            txn_hash = sha256::Hash::hash(&txn_hash[..]);
-            txn_hashes.push(txn_hash);
-        });
-        // proof of inclusion not yet included
-
-        // build merkle tree from transaction hashes
-        //let mut _merkle_tree = MerkleTree::from_hashes(txn_hashes);
-        //
-        //match _merkle_tree._get_root_hash() {
-        //    Some(root_hash) if root_hash.to_byte_array() == self.block_header.merkle_root_hash => {
-        //        utxo_set.extend(utxo_set_snapshot);
-        //        Ok(())
-        //    }
-        //    _ => Err(io::Error::new(
-        //        io::ErrorKind::InvalidData,
-        //        "Transactions failed proof of inclusion",
-        //    )),
-        //}
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use std::fs;
+    use super::*;
+    use crate::messages::Block;
+    use std::fs;
 
-    // Commented out to avoid github actions error
-    // #[test]
-    // fn test_read_serialized_block_from_bytes() -> io::Result<()> {
-    //     let bytes = fs::read("./tmp/block_message_payload.dat").unwrap();
-    //     let message = Block::deserialize(&bytes).unwrap();
-    //     let mut utxo_set = HashMap::new();
-    //     if let Message::Block(block) = message {
-    //         block.validate(&mut utxo_set)?;
-    //         assert_eq!(block.txn_count, block.txns.len());
-    //     };
-    //     Ok(())
-    // }
+    #[test]
+    fn test_read_serialized_block_from_bytes() -> io::Result<()> {
+        // Needed to avoid github actions error
+        let bytes = match fs::read("./tmp/block_message_payload.dat") {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                println!("Error reading file: {}", e);
+                vec![]
+            }
+        };
+
+        if !bytes.is_empty() {
+            let message = Block::deserialize(&bytes).unwrap();
+            let mut utxo_set = HashMap::new();
+            if let Message::Block(block) = message {
+                block.validate(&mut utxo_set)?;
+                assert_eq!(block.txn_count, block.txns.len());
+            };
+        }
+
+        Ok(())
+    }
 }
