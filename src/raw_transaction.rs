@@ -481,7 +481,6 @@ mod tests {
                 Vec::new()
             }
         };
-        // let bytes: &[u8] = &fs::read("./tmp/block_message_payload.dat").unwrap();
 
         if !bytes.is_empty() {
             // create a cursor over the bytes
