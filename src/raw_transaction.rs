@@ -51,12 +51,12 @@ impl CoinBaseInput {
         Ok(coinbase_input)
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self._hash);
         bytes.extend_from_slice(&self._index.to_le_bytes());
-        bytes.extend_from_slice(&self._script_bytes.to_le_bytes());
-        bytes.extend_from_slice(&self._height.to_le_bytes());
+        bytes.extend_from_slice(_remove_right_empty_bytes(&self._script_bytes.to_le_bytes()));
+        bytes.extend_from_slice(_remove_right_empty_bytes(&self._height.to_le_bytes()));
         bytes.extend_from_slice(&self._coinbase_script);
         bytes.extend_from_slice(&self._sequence.to_le_bytes());
         bytes
@@ -91,67 +91,6 @@ impl PkScriptData {
         let mut bytes = [0u8; 20];
         bytes.copy_from_slice(&second_hash[..]);
         Ok(PkScriptData { pk_hash: bytes })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TxInput {
-    previous_output: Outpoint,
-    script_bytes: u64,
-    script_sig: Vec<u8>,
-    sequence: u32,
-}
-
-impl TxInput {
-    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let previous_output = Outpoint::from_bytes(cursor)?;
-        let script_bytes = read_from_varint(cursor)?;
-        let script_sig = read_coinbase_script(cursor, script_bytes as usize)?;
-        let sequence = u32::from_le_stream(cursor)?;
-
-        let tx_input = TxInput {
-            previous_output,
-            script_bytes,
-            script_sig,
-            sequence,
-        };
-
-        Ok(tx_input)
-    }
-
-    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
-        let mut tx_inputs = vec![];
-
-        for _ in 0..count {
-            let tx_input = TxInput::from_bytes(cursor)?;
-            tx_inputs.push(tx_input);
-        }
-        Ok(tx_inputs)
-    }
-
-    pub fn _serialize(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        bytes.extend_from_slice(&self.previous_output._hash);
-        bytes.extend_from_slice(&self.previous_output._index.to_le_bytes());
-
-        let script_bytes: &[u8] = &self.script_bytes.to_le_bytes();
-        bytes.extend_from_slice(_remove_right_empty_bytes(script_bytes));
-
-        bytes.extend_from_slice(&self.script_sig);
-        bytes.extend_from_slice(&self.sequence.to_le_bytes());
-        bytes
-    }
-
-    pub fn serialize_vec(tx_inputs: &Vec<Self>) -> Vec<u8> {
-        let mut bytes = vec![];
-        for tx_input in tx_inputs {
-            bytes.extend_from_slice(&tx_input.previous_output._hash);
-            bytes.extend_from_slice(&tx_input.previous_output._index.to_le_bytes());
-            bytes.extend_from_slice(&tx_input.script_bytes.to_le_bytes());
-            bytes.extend_from_slice(&tx_input.script_sig);
-            bytes.extend_from_slice(&tx_input.sequence.to_le_bytes());
-        }
-        bytes
     }
 }
 
@@ -204,15 +143,78 @@ impl TxOutput {
     pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
         let mut bytes = vec![];
         for tx_output in tx_outputs {
-            bytes.extend_from_slice(&tx_output.value.to_le_bytes());
-            bytes.extend_from_slice(&tx_output.pk_script_bytes.to_le_bytes());
-            bytes.extend_from_slice(&tx_output.pk_script);
+            bytes.extend_from_slice(&tx_output._serialize());
         }
         bytes
     }
 
     pub fn _get_pk_script_data(&self) -> Result<PkScriptData, Error> {
         PkScriptData::from_pk_script_bytes(&self.pk_script)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TxInput {
+    previous_output: Outpoint,
+    script_bytes: u64,
+    script_sig: Vec<u8>,
+    sequence: u32,
+}
+
+impl TxInput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let previous_output = Outpoint::from_bytes(cursor)?;
+        let script_bytes = read_from_varint(cursor)?;
+        let script_sig = read_coinbase_script(cursor, script_bytes as usize)?;
+        let sequence = u32::from_le_stream(cursor)?;
+
+        let tx_input = TxInput {
+            previous_output,
+            script_bytes,
+            script_sig,
+            sequence,
+        };
+
+        Ok(tx_input)
+    }
+
+    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
+        let mut tx_inputs = vec![];
+
+        for _ in 0..count {
+            let tx_input = TxInput::from_bytes(cursor)?;
+            tx_inputs.push(tx_input);
+        }
+        Ok(tx_inputs)
+    }
+
+    pub fn _serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self.previous_output._hash);
+        bytes.extend_from_slice(&self.previous_output._index.to_le_bytes());
+
+        // this is needed in case the script bytes is 0
+        match self.script_bytes {
+            0 => {
+                bytes.extend_from_slice(&[0u8]);
+            }
+            _ => {
+                bytes
+                    .extend_from_slice(_remove_right_empty_bytes(&self.script_bytes.to_le_bytes()));
+            }
+        }
+
+        bytes.extend_from_slice(&self.script_sig);
+        bytes.extend_from_slice(&self.sequence.to_le_bytes());
+        bytes
+    }
+
+    pub fn serialize_vec(tx_inputs: &Vec<Self>) -> Vec<u8> {
+        let mut bytes = vec![];
+        for tx_input in tx_inputs {
+            bytes.extend_from_slice(&tx_input._serialize());
+        }
+        bytes
     }
 }
 
@@ -225,7 +227,7 @@ enum TxInputType {
 impl TxInputType {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            TxInputType::CoinBaseInput(coinbase_input) => coinbase_input.serialize(),
+            TxInputType::CoinBaseInput(coinbase_input) => coinbase_input._serialize(),
             TxInputType::TxInput(tx_inputs) => TxInput::serialize_vec(tx_inputs),
         }
     }
@@ -271,30 +273,34 @@ impl RawTransaction {
         Ok(())
     }
 
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let version = u32::from_le_stream(cursor)?;
+
+        let tx_in_count = read_from_varint(cursor)?;
+        let tx_in = TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
+
+        let tx_out_count = read_from_varint(cursor)?;
+        let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
+
+        let lock_time = u32::from_le_stream(cursor)?;
+
+        let raw_transaction = RawTransaction {
+            version,
+            tx_in_count,
+            tx_in,
+            tx_out_count,
+            tx_out,
+            lock_time,
+        };
+
+        Ok(raw_transaction)
+    }
+
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
         let mut raw_transactions = vec![];
 
         for _ in 1..count {
-            let version = u32::from_le_stream(cursor)?;
-
-            let tx_in_count = read_from_varint(cursor)?;
-            let tx_in =
-                TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
-
-            let tx_out_count = read_from_varint(cursor)?;
-            let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
-
-            let lock_time = u32::from_le_stream(cursor)?;
-
-            let raw_transaction = RawTransaction {
-                version,
-                tx_in_count,
-                tx_in,
-                tx_out_count,
-                tx_out,
-                lock_time,
-            };
-
+            let raw_transaction = RawTransaction::from_bytes(cursor)?;
             raw_transactions.push(raw_transaction);
         }
 
@@ -304,9 +310,9 @@ impl RawTransaction {
     pub fn serialize(&self) -> Vec<u8> {
         let mut transaction_bytes = vec![];
         transaction_bytes.extend(self.version.to_le_bytes());
-        transaction_bytes.extend(self.tx_in_count.to_le_bytes());
+        transaction_bytes.extend(_remove_right_empty_bytes(&self.tx_in_count.to_le_bytes()));
         transaction_bytes.extend(self.tx_in.to_bytes());
-        transaction_bytes.extend(self.tx_out_count.to_le_bytes());
+        transaction_bytes.extend(_remove_right_empty_bytes(&self.tx_out_count.to_le_bytes()));
         transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
         transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
@@ -316,6 +322,7 @@ impl RawTransaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_txou_serialization() {
@@ -375,16 +382,114 @@ mod tests {
         assert_eq!(bytes[58..61], serialized_txin[58..61]); // sequence
     }
 
-    // #[test]
-    // fn test_coinbase_transaction_serialization() {
-    //     // coinbase bytes
-    //     let bytes: &[u8] = &[];
+    #[test]
+    fn test_coinbase_transaction_serialization() {
+        // coinbase bytes
+        let bytes: &[u8] = &[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, // hash
+            0xff, 0xff, 0xff, 0xff, // index
+            0x29, // script bytes
+            0x03, // bytes in block height
+            0x4e, 0x01, 0x05, // block height
+            0x06, 0x2f, 0x50, 0x32, 0x53, 0x48, 0x2f, 0x04, 0x72, 0xd3, 0x54, 0x54, 0x08, 0x5f,
+            0xff, 0xed, 0xf2, 0x40, 0x00, 0x00, 0xf9, 0x0f, 0x54, 0x69, 0x6d, 0x65, 0x20, 0x26,
+            0x20, 0x48, 0x65, 0x61, 0x6c, 0x74, 0x68, 0x20, 0x21, // script
+            0x00, 0x00, 0x00, 0x00, // sequence
+        ];
 
-    //     // we deserialize the coinbase transaction
+        // we deserialize the coinbase transaction
+        let mut cursor = Cursor::new(bytes);
+        let coinbase = CoinBaseInput::from_bytes(&mut cursor).unwrap();
 
-    //     // we serialize the coinbase transaction
+        // we serialize the coinbase transaction
+        let serialized_coinbase = coinbase._serialize();
 
-    //     // we compare the deserialized transaction with the original one
-    //     assert!(false);
-    // }
+        // we compare the deserialized transaction with the original one
+        assert_eq!(bytes[0..32], serialized_coinbase[0..32]); // hash
+        assert_eq!(bytes[32..36], serialized_coinbase[32..36]); // index
+        assert_eq!(bytes[36], serialized_coinbase[36]); // script bytes
+        assert_eq!(bytes[37], serialized_coinbase[37]); // bytes in block height
+        assert_eq!(bytes[38..41], serialized_coinbase[38..41]); // block height
+        assert_eq!(bytes[41..77], serialized_coinbase[41..77]); // script
+        assert_eq!(bytes[77..82], serialized_coinbase[77..82]); // sequence
+    }
+
+    #[test]
+    fn test_transaction_serialization() {
+        let bytes: &[u8] = &fs::read("./tmp/block_message_payload.dat").unwrap();
+
+        // create a cursor over the bytes
+        let mut cursor = Cursor::new(bytes);
+
+        // we skip the first 80 bytes (block header)
+        cursor.set_position(80);
+
+        // we read the txn_count
+        let txn_count = read_from_varint(&mut cursor).unwrap();
+        let mut pos_start = cursor.position() as usize;
+
+        // we read the first transaction manually as it's a coinbase transaction
+        let tx_coinbase = RawTransaction::coinbase_from_bytes(&mut cursor).unwrap();
+        let mut pos_end = cursor.position() as usize;
+
+        // we serialize the transaction
+        let serialized_tx_coinbase = tx_coinbase.serialize();
+
+        assert_eq!(bytes[pos_start..pos_end], serialized_tx_coinbase);
+
+        // we read the rest of the transactions
+        for _ in 1..txn_count {
+            // save the cursor position
+            pos_start = cursor.position() as usize;
+
+            // we deserialize the transaction
+            let tx = RawTransaction::from_bytes(&mut cursor).unwrap();
+
+            // we save the cursor position
+            pos_end = cursor.position() as usize;
+
+            // we serialize the transaction
+            let serialized_tx = tx.serialize();
+
+            // we compare bytes from start to end
+            assert_eq!(bytes[pos_start..pos_end], serialized_tx);
+            // println!("serialized transaction {} correctly", i);
+        }
+    }
+
+    #[test]
+    fn test_transaction_vector_serialization() {
+        let bytes: &[u8] = &fs::read("./tmp/block_message_payload.dat").unwrap();
+
+        // create a cursor over the bytes
+        let mut cursor = Cursor::new(bytes);
+
+        // we skip the first 80 bytes (block header)
+        cursor.set_position(80);
+
+        // we read the txn_count
+        let txn_count = read_from_varint(&mut cursor).unwrap() as usize;
+
+        // we read the first transaction manually as it's a coinbase transaction
+        let tx_coinbase = RawTransaction::coinbase_from_bytes(&mut cursor).unwrap();
+
+        // we read the rest of the transactions
+        let txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count).unwrap();
+
+        // we serialize all transactions
+        let mut serialized_txn_vec = Vec::new();
+
+        let serialized_tx_coinbase = tx_coinbase.serialize();
+        serialized_txn_vec.push(serialized_tx_coinbase);
+
+        for tx in txns {
+            let serialized_tx = tx.serialize();
+            serialized_txn_vec.push(serialized_tx);
+        }
+
+        // we compare the bytes
+        assert_eq!(bytes[81..], serialized_txn_vec.concat());
+    }
 }
