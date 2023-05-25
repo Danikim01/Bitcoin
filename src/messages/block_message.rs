@@ -67,7 +67,7 @@ impl Block {
         let txn_hashes = self.hash_transactions();
 
         // build merkle tree from transaction hashes
-        let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes.clone());
+        let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes); // clone txn_hashes if merkle proofing
         let root_hash = merkle_tree.get_root();
 
         // check proof of inclusion for each transaction - not really needed
