@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
 use crate::logger::log;
+use crate::messages::constants::config::{QUIET, VERBOSE};
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
@@ -49,8 +50,11 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-
-        log(&format!("Received block. New block count: {:?}", self.blocks.len()) as &str);
+        if self.blocks.len()%100 == 0 {
+            log(&format!("Received block. New block count: {:?}", self.blocks.len()) as &str, QUIET);
+        } else {
+            log(&format!("Received block. New block count: {:?}", self.blocks.len()) as &str, VERBOSE);
+        }
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
 
@@ -61,10 +65,7 @@ impl NetworkController {
     }
 
     fn read_headers(&mut self, mut headers: Headers) -> io::Result<()> {
-        println!(
-            "Received header. New header count: {:?}",
-            self.headers.len()
-        );
+        log(&format!("Received header. New header count: {:?}", self.headers.len()), VERBOSE);
         // request more headers
         self.tallest_header = headers.last_header_hash();
         if headers.is_paginated() {
@@ -97,7 +98,7 @@ impl NetworkController {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
             self.nodes.send_to_any(&get_data.serialize()?)?;
         }
-        log("Requesting blocks, sent GetData message.");
+        log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
 

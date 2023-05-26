@@ -8,7 +8,7 @@ pub struct Config {
     seed: String,
     port: u16,
     start_timestamp: u32,
-    pub logger_mode: String,
+    logger_mode: String,
 }
 
 impl Config {
@@ -46,6 +46,8 @@ impl Config {
     pub fn get_hostname(&self) -> String {
         self.seed.to_owned() + ":" + &self.port.to_string()
     }
+
+    pub fn get_logger_mode(&self) -> String { self.logger_mode.clone() }
 
     pub fn from_file() -> Result<Config, io::Error> {
         let file = File::open(PATH)?;

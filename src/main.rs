@@ -1,5 +1,6 @@
 use std::io;
 use crate::logger::log;
+use crate::messages::constants::config::VERBOSE;
 
 mod config;
 mod merkle_tree;
@@ -14,7 +15,7 @@ mod logger;
 
 fn main() -> Result<(), io::Error> {
     let mut controller = network_controller::NetworkController::new()?;
-    log("Connected to network, starting sync");
+    log("Connected to network, starting sync", VERBOSE);
     // move this to another thread before adding gtk
     controller.start_sync()?;
     Ok(())
