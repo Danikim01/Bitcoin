@@ -2,9 +2,12 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Once};
 use chrono::Local;
+use crate::config::Config;
+use crate::messages::constants::config::VERBOSE;
 
 struct Logger {
     log_file: Arc<Mutex<std::fs::File>>,
+    mode: String,
 }
 
 impl Logger {
@@ -15,15 +18,17 @@ impl Logger {
             .open("src/log.txt").expect("Failed to open log file");
         Logger {
             log_file: Arc::new(Mutex::new(file)),
+            mode: Config::from_file_or_default().logger_mode,
         }
     }
 
     fn log(&self, message: &str) {
         let now = Local::now();
         let line = format!("{} - {}\n", now, message);
-        print!("{}", line);
+        print!("{}", message);
+        if self.mode != VERBOSE { return; }
         let mut file = self.log_file.lock().unwrap();
-        file.write_all(line.as_bytes()).expect("Failed to write to log file");
+        file.write_all(line.as_bytes()).expect("Failed to write to log file")
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::messages::constants::config::PATH;
+use crate::messages::constants::config::{PATH, QUIET};
 use crate::messages::constants::config::PORT;
 use std::fs::File;
 use std::io;
@@ -8,14 +8,16 @@ pub struct Config {
     seed: String,
     port: u16,
     start_timestamp: u32,
+    pub logger_mode: String,
 }
 
 impl Config {
-    pub fn _new(seed: String, port: u16, start_timestamp: u32) -> Config {
+    pub fn _new(seed: String, port: u16, start_timestamp: u32, logger_mode: String) -> Config {
         Config {
             seed,
             port,
             start_timestamp,
+            logger_mode,
         }
     }
 
@@ -24,6 +26,8 @@ impl Config {
             seed: "".to_string(),
             port: "".to_string().parse().unwrap_or(PORT),
             start_timestamp: 1,
+            logger_mode: QUIET.to_string(),
+
         }
     }
 
@@ -54,7 +58,7 @@ impl Config {
                 0 => config.seed = line,
                 1 => config.port = line.parse().unwrap_or(PORT),
                 2 => config.start_timestamp = line.parse().unwrap_or(1681095600),
-                _ => (),
+                _ => config.logger_mode = line,
             }
         }
 
