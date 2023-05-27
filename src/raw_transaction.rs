@@ -1,6 +1,7 @@
 use crate::io::{self, Cursor};
 use crate::messages::utility::{read_from_varint, read_hash, StreamRead};
 
+use crate::utility::double_hash;
 use crate::utxo::{Utxo, UtxoId};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::collections::HashMap;
@@ -37,138 +38,6 @@ fn to_compact_size_bytes(compact_size: u64) -> Vec<u8> {
     }
 
     bytes
-}
-
-#[derive(Debug, Clone)]
-pub struct CoinBaseInput {
-    _hash: [u8; 32],
-    _index: u32,
-    _script_bytes: u64,
-    _height: u32,
-    _coinbase_script: Vec<u8>,
-    _sequence: u32,
-}
-
-impl CoinBaseInput {
-    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> io::Result<Self> {
-        let _hash = read_hash(cursor)?;
-        let _index = u32::from_le_stream(cursor)?;
-        let _script_bytes = read_from_varint(cursor)?;
-        let _height = u32::from_le_stream(cursor)?;
-        let _coinbase_script = read_coinbase_script(cursor, (_script_bytes - 4) as usize)?;
-        let _sequence = u32::from_le_stream(cursor)?;
-
-        let coinbase_input = CoinBaseInput {
-            _hash,
-            _index,
-            _script_bytes,
-            _height,
-            _coinbase_script,
-            _sequence,
-        };
-
-        Ok(coinbase_input)
-    }
-
-    pub fn _serialize(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        bytes.extend_from_slice(&self._hash);
-        bytes.extend_from_slice(&self._index.to_le_bytes());
-        bytes.extend_from_slice(&to_compact_size_bytes(self._script_bytes));
-        bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
-        bytes.extend_from_slice(&self._coinbase_script);
-        bytes.extend_from_slice(&self._sequence.to_le_bytes());
-        bytes
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Outpoint {
-    _hash: [u8; 32],
-    _index: u32,
-}
-
-impl Outpoint {
-    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let _hash = read_hash(cursor)?;
-        let _index = u32::from_le_stream(cursor)?;
-        let outpoint = Outpoint { _hash, _index };
-        Ok(outpoint)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PkScriptData {
-    pub pk_hash: [u8; 20],
-}
-
-impl PkScriptData {
-    pub fn from_pk_script_bytes(pk_script_bytes: &[u8]) -> Result<Self, Error> {
-        let first_hash = sha256::Hash::hash(pk_script_bytes);
-        let second_hash = ripemd160::Hash::hash(&first_hash[..]);
-
-        let mut bytes = [0u8; 20];
-        bytes.copy_from_slice(&second_hash[..]);
-        Ok(PkScriptData { pk_hash: bytes })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TxOutput {
-    pub value: i64,
-    pk_script_bytes: u64,
-    pk_script: Vec<u8>,
-}
-
-impl TxOutput {
-    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let value = i64::from_le_stream(cursor)?; // this is actually a float?
-        let pk_script_bytes = read_from_varint(cursor)?;
-        let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
-
-        let _pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
-
-        let tx_output = TxOutput {
-            value,
-            pk_script_bytes,
-            pk_script,
-        };
-
-        Ok(tx_output)
-    }
-
-    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<Self>, Error> {
-        let mut tx_outputs = vec![];
-
-        for _ in 0..n {
-            let tx_output = TxOutput::from_bytes(cursor)?;
-            tx_outputs.push(tx_output);
-        }
-
-        Ok(tx_outputs)
-    }
-
-    pub fn _serialize(&self) -> Vec<u8> {
-        let mut bytes = vec![];
-        bytes.extend_from_slice(&self.value.to_le_bytes());
-
-        bytes.extend_from_slice(&to_compact_size_bytes(self.pk_script_bytes));
-
-        bytes.extend_from_slice(&self.pk_script);
-        bytes
-    }
-
-    pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
-        let mut bytes = vec![];
-        for tx_output in tx_outputs {
-            bytes.extend_from_slice(&tx_output._serialize());
-        }
-        bytes
-    }
-
-    pub fn _get_pk_script_data(&self) -> Result<PkScriptData, Error> {
-        PkScriptData::from_pk_script_bytes(&self.pk_script)
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +105,21 @@ impl TxInput {
 }
 
 #[derive(Debug, Clone)]
+pub struct Outpoint {
+    pub _hash: [u8; 32],
+    pub _index: u32,
+}
+
+impl Outpoint {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let _hash = read_hash(cursor)?;
+        let _index = u32::from_le_stream(cursor)?;
+        let outpoint = Outpoint { _hash, _index };
+        Ok(outpoint)
+    }
+}
+
+#[derive(Debug, Clone)]
 enum TxInputType {
     CoinBaseInput(CoinBaseInput),
     TxInput(Vec<TxInput>),
@@ -247,6 +131,123 @@ impl TxInputType {
             TxInputType::CoinBaseInput(coinbase_input) => coinbase_input._serialize(),
             TxInputType::TxInput(tx_inputs) => TxInput::serialize_vec(tx_inputs),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CoinBaseInput {
+    _hash: [u8; 32],
+    _index: u32,
+    _script_bytes: u64,
+    _height: u32,
+    _coinbase_script: Vec<u8>,
+    _sequence: u32,
+}
+
+impl CoinBaseInput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> io::Result<Self> {
+        let _hash = read_hash(cursor)?;
+        let _index = u32::from_le_stream(cursor)?;
+        let _script_bytes = read_from_varint(cursor)?;
+        let _height = u32::from_le_stream(cursor)?;
+        let _coinbase_script = read_coinbase_script(cursor, (_script_bytes - 4) as usize)?;
+        let _sequence = u32::from_le_stream(cursor)?;
+
+        let coinbase_input = CoinBaseInput {
+            _hash,
+            _index,
+            _script_bytes,
+            _height,
+            _coinbase_script,
+            _sequence,
+        };
+
+        Ok(coinbase_input)
+    }
+
+    pub fn _serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self._hash);
+        bytes.extend_from_slice(&self._index.to_le_bytes());
+        bytes.extend_from_slice(&to_compact_size_bytes(self._script_bytes));
+        bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
+        bytes.extend_from_slice(&self._coinbase_script);
+        bytes.extend_from_slice(&self._sequence.to_le_bytes());
+        bytes
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PkScriptData {
+    pub pk_hash: [u8; 20],
+}
+
+impl PkScriptData {
+    pub fn from_pk_script_bytes(pk_script_bytes: &[u8]) -> Result<Self, Error> {
+        let first_hash = sha256::Hash::hash(pk_script_bytes);
+        let second_hash = ripemd160::Hash::hash(&first_hash[..]);
+
+        let mut bytes = [0u8; 20];
+        bytes.copy_from_slice(&second_hash[..]);
+        Ok(PkScriptData { pk_hash: bytes })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TxOutput {
+    pub value: i64,
+    pk_script_bytes: u64,
+    pub pk_script: Vec<u8>,
+}
+
+impl TxOutput {
+    pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
+        let value = i64::from_le_stream(cursor)?; // this is actually a float?
+        let pk_script_bytes = read_from_varint(cursor)?;
+        let pk_script = read_coinbase_script(cursor, pk_script_bytes as usize)?;
+
+        let _pk_script_data = PkScriptData::from_pk_script_bytes(&pk_script)?;
+
+        let tx_output = TxOutput {
+            value,
+            pk_script_bytes,
+            pk_script,
+        };
+
+        Ok(tx_output)
+    }
+
+    pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<Self>, Error> {
+        let mut tx_outputs = vec![];
+
+        for _ in 0..n {
+            let tx_output = TxOutput::from_bytes(cursor)?;
+            tx_outputs.push(tx_output);
+        }
+
+        Ok(tx_outputs)
+    }
+
+    pub fn _serialize(&self) -> Vec<u8> {
+        let mut bytes = vec![];
+        bytes.extend_from_slice(&self.value.to_le_bytes());
+
+        bytes.extend_from_slice(&to_compact_size_bytes(self.pk_script_bytes));
+
+        bytes.extend_from_slice(&self.pk_script);
+        bytes
+    }
+
+    pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
+        let mut bytes = vec![];
+        for tx_output in tx_outputs {
+            bytes.extend_from_slice(&tx_output._serialize());
+        }
+        bytes
+    }
+
+    pub fn _get_pk_script_data(&self) -> Result<PkScriptData, Error> {
+        PkScriptData::from_pk_script_bytes(&self.pk_script)
     }
 }
 
@@ -281,12 +282,47 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
-        // this should also check the inputs and mark them as spent
-        for txo in self.tx_out.iter() {
-            let utxo = Utxo::from_txoutput(txo)?;
-            utxo_set.insert(utxo.id, utxo);
+    fn validate_inputs(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+        // iterate over the inputs and check if they are in the utxo set
+        match self.tx_in {
+            TxInputType::CoinBaseInput(_) => {
+                // what should we do in this case?
+            }
+            TxInputType::TxInput(ref tx_inputs) => {
+                for txin in tx_inputs {
+                    // check if the input exists in the hashmap
+                    let utxo = utxo_set.get(&txin.previous_output._hash);
+                    match utxo {
+                        Some(utxo) => {
+                            println!("\x1b[92mTransaction found on utxo set!\x1b[0m");
+                            let index = txin.previous_output._index as usize;
+                            utxo._validate_spend(index)?;
+                        }
+                        None => {
+                            println!("\x1b[93mTransaction not found on utxo set!\x1b[0m");
+                        }
+                    }
+                }
+            }
         }
+        Ok(())
+    }
+
+    fn generate_utxo(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+        let new_id = double_hash(&self.serialize()).to_byte_array();
+        let new_utxo = Utxo::_from_raw_transaction(self)?;
+
+        utxo_set.insert(new_id, new_utxo);
+        Ok(())
+    }
+
+    pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+        // check the inputs and mark them as spent
+        self.validate_inputs(utxo_set)?;
+
+        // generate new utxos from the outputs
+        self.generate_utxo(utxo_set)?;
+
         Ok(())
     }
 

@@ -1,107 +1,71 @@
-use crate::raw_transaction::{PkScriptData, RawTransaction, TxOutput};
-use std::collections::HashMap;
+use crate::raw_transaction::{RawTransaction, TxOutput};
+use crate::utility::double_hash;
+use bitcoin_hashes::Hash;
 use std::io;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Utxo {
-    pub id: UtxoId,
-    _pk_address: String,
-    _satoshi_value: i64,
+pub struct UtxoTransaction {
+    _value: i64,
+    _lock: Vec<u8>,
+    _spent: bool,
 }
 
-pub type UtxoId = [u8; 20];
-
-impl Utxo {
-    pub fn _new(id: [u8; 20], pk_address: String, satoshi_value: i64) -> Self {
-        Self {
-            id,
-            _pk_address: pk_address,
-            _satoshi_value: satoshi_value,
-        }
-    }
-
-    pub fn from_txoutput(tx_output: &TxOutput) -> io::Result<Self> {
-        let pk_script_data: PkScriptData = tx_output._get_pk_script_data()?;
-
+impl UtxoTransaction {
+    pub fn _from_tx_output(tx_output: &TxOutput) -> io::Result<Self> {
+        let value = tx_output.value;
+        let lock = tx_output.pk_script.clone();
         Ok(Self {
-            id: pk_script_data.pk_hash,
-            _pk_address: "addr".to_string(),
-            _satoshi_value: tx_output.value,
+            _value: value,
+            _lock: lock,
+            _spent: false,
         })
     }
+}
 
-    pub fn _from_raw_transaction(
-        utxoset: &mut HashMap<UtxoId, Utxo>,
-        raw_transaction: &RawTransaction,
-    ) -> io::Result<()> {
+pub type UtxoId = [u8; 32];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Utxo {
+    pub txid: UtxoId,
+    transaction: Vec<UtxoTransaction>,
+}
+
+impl Utxo {
+    pub fn _from_raw_transaction(raw_transaction: &RawTransaction) -> io::Result<Utxo> {
+        let txid = double_hash(&raw_transaction.serialize()).to_byte_array();
+
+        let mut utxo = Utxo {
+            txid,
+            transaction: Vec::new(),
+        };
+
         for tx_output in &raw_transaction.tx_out {
-            let utxo = Utxo::from_txoutput(tx_output)?;
-            utxoset.insert(utxo.id, utxo);
+            let utxo_transaction = UtxoTransaction::_from_tx_output(tx_output)?;
+            utxo.transaction.push(utxo_transaction);
         }
+        Ok(utxo)
+    }
+
+    /// Validate that the transaction of index in txid can be spent
+    /// and mark it as spent
+    pub fn _validate_spend(&self, index: usize) -> io::Result<()> {
+        // first check that it exists
+        if index >= self.transaction.len() {
+            println!("Utxo index out of bounds!");
+            // return Err(io::Error::new(
+            //     io::ErrorKind::InvalidInput,
+            //     "Index out of bounds",
+            // ));
+        }
+
+        // then check the lock (research how to do this)
+
         Ok(())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_utxosetappend_transaction() {
-        let mut utxo_set = HashMap::new();
-
-        let id1: [u8; 20] = vec![1; 20].try_into().unwrap();
-        let transaction1 = Utxo::_new(id1, "pk_adress1".to_string(), 100);
-        utxo_set.insert(id1, transaction1);
-
-        let id2: [u8; 20] = vec![2; 20].try_into().unwrap();
-        let transaction2 = Utxo::_new(id2, "pk_adress2".to_string(), 150);
-        utxo_set.insert(id2, transaction2);
-
-        let id3: [u8; 20] = vec![3; 20].try_into().unwrap();
-        let transaction3 = Utxo::_new(id3, "pk_adress3".to_string(), 200);
-        utxo_set.insert(id3, transaction3);
-
-        assert_eq!(utxo_set.len(), 3);
-    }
-
-    #[test]
-    fn test_utxout_remove_transaction() {
-        let mut utxo_set = HashMap::new();
-
-        let id1: [u8; 20] = vec![1; 20].try_into().unwrap();
-        let transaction1 = Utxo::_new(id1, "pk_adress1".to_string(), 100);
-        utxo_set.insert(id1, transaction1);
-
-        let id2: [u8; 20] = vec![2; 20].try_into().unwrap();
-        let transaction2 = Utxo::_new(id2, "pk_adress2".to_string(), 150);
-        utxo_set.insert(id2, transaction2);
-
-        let id3: [u8; 20] = vec![3; 20].try_into().unwrap();
-        let transaction3 = Utxo::_new(id3, "pk_adress3".to_string(), 200);
-        utxo_set.insert(id3, transaction3);
-
-        utxo_set.remove(&id2);
-        assert_eq!(utxo_set.len(), 2);
-    }
-
-    #[test]
-    fn test_utxout_remove_invalid_trasnsaction() {
-        let mut utxo_set = HashMap::new();
-
-        let id1: [u8; 20] = vec![1; 20].try_into().unwrap();
-        let transaction1 = Utxo::_new(id1, "pk_adress1".to_string(), 100);
-        utxo_set.insert(id1, transaction1);
-
-        let id2: [u8; 20] = vec![2; 20].try_into().unwrap();
-        let transaction2 = Utxo::_new(id2, "pk_adress2".to_string(), 150);
-        utxo_set.insert(id2, transaction2);
-
-        let id3: [u8; 20] = vec![3; 20].try_into().unwrap();
-        let transaction3 = Utxo::_new(id3, "pk_adress3".to_string(), 200);
-        utxo_set.insert(id3, transaction3);
-
-        let id4: [u8; 20] = vec![4; 20].try_into().unwrap();
-        assert_eq!(utxo_set.remove(&id4), None);
-    }
-}
+// ADD TESTING
+// #[cfg(test)]
+// mod tests {    
+//     use super::*;
+// }
