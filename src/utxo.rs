@@ -23,9 +23,12 @@ impl UtxoTransaction {
     }
 
     // TODO: add desired pk_adress as parameter
-    pub fn _get_wallet_balance(&self) -> i64 {
+    pub fn _get_wallet_balance(&self, pk_address: Vec<u8>) -> i64 {
         // if desired pk_adress is the same as the adress held
         // and the transaction is not spent, return the value
+        if self._lock == pk_address && !self._spent {
+            return self._value;
+        }
         0
     }
 }
@@ -68,26 +71,49 @@ impl Utxo {
     }
 
     // TODO: add desired pk_adress as parameter
-    pub fn _get_wallet_balance(&self) -> i64 {
+    pub fn _get_wallet_balance(&self, pk_address: Vec<u8>) -> i64 {
         let mut balance = 0;
         for transaction in &self.transactions {
-            balance += transaction._get_wallet_balance();
+            balance += transaction._get_wallet_balance(pk_address.clone());
         }
         balance
     }
 }
 
-// ADD TESTING
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+//ADD TESTING
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     #[test]
-//     fn test_get_pk_address_balance() {
-//         // create mock utxo set
+    #[test]
+    fn test_get_pk_address_balance() {
+        // create mock utxo set
 
-//         // create mock pk_address
+        // create mock pk_address
 
-//         // assert_eq!(utxo.get_pk_address_balance(pk_address), expected_balance);
-//     }
-// }
+        // assert_eq!(utxo.get_pk_address_balance(pk_address), expected_balance);
+
+        // Create a mock UTXO with transactions
+        let mut utxo = Utxo {
+            transactions: Vec::new(),
+        };
+
+        // Create a mock transaction with a specific pk_address and value
+        let mock_pk_address: Vec<u8> = vec![1, 2, 3, 4, 5];
+        let mock_value = 100;
+
+        let mock_transaction = UtxoTransaction {
+            _value: mock_value,
+            _lock: mock_pk_address.clone(),
+            _spent: false,
+        };
+
+        // Add the mock transaction to the UTXO
+        utxo.transactions.push(mock_transaction);
+
+        // Call the _get_wallet_balance() function for the specific pk_address
+        let balance = utxo._get_wallet_balance(mock_pk_address);
+        // Assert that the balance matches the mock_value
+        assert_eq!(balance, mock_value);
+    }
+}
