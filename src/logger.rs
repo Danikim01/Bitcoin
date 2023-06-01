@@ -1,7 +1,7 @@
+use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Once};
-use chrono::Local;
 
 struct Logger {
     log_file: Arc<Mutex<std::fs::File>>,
@@ -12,7 +12,8 @@ impl Logger {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open("src/log.txt").expect("Failed to open log file");
+            .open("src/log.txt")
+            .expect("Failed to open log file");
         Logger {
             log_file: Arc::new(Mutex::new(file)),
         }
@@ -23,11 +24,10 @@ impl Logger {
         let line = format!("{} - {}\n", now, message);
         print!("{}", line);
         let mut file = self.log_file.lock().unwrap();
-        file.write_all(line.as_bytes()).expect("Failed to write to log file");
+        file.write_all(line.as_bytes())
+            .expect("Failed to write to log file");
     }
 }
-
-
 
 struct LazyLogger {
     once: Once,

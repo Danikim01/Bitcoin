@@ -1,8 +1,8 @@
 use crate::io::Cursor;
+use crate::logger::log;
 use crate::messages::{utility::*, Hashable};
 use crate::utility::double_hash;
 use std::io::ErrorKind::InvalidData;
-use crate::logger::log;
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone, Copy)]

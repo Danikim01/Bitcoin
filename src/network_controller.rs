@@ -1,21 +1,21 @@
 use crate::config::Config;
+use crate::logger::log;
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::utility::{into_hashmap, to_io_err};
-use crate::utxo::{Utxo, UtxoId};
+use crate::utxo::UtxoSet;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
-use crate::logger::log;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
     blocks: HashMap<HashId, Block>,
-    utxo_set: HashMap<UtxoId, Utxo>,
+    utxo_set: UtxoSet,
     reader: mpsc::Receiver<Message>,
     nodes: NodeController,
 }
@@ -49,7 +49,6 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-
         log(&format!("Received block. New block count: {:?}", self.blocks.len()) as &str);
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation

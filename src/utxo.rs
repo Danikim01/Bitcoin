@@ -1,5 +1,8 @@
 use crate::raw_transaction::{RawTransaction, TxOutput};
+use std::collections::HashMap;
 use std::io;
+
+pub type UtxoSet = HashMap<UtxoId, Utxo>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UtxoTransaction {
@@ -18,6 +21,13 @@ impl UtxoTransaction {
             _spent: false,
         })
     }
+
+    // TODO: add desired pk_adress as parameter
+    pub fn _get_wallet_balance(&self) -> i64 {
+        // if desired pk_adress is the same as the adress held
+        // and the transaction is not spent, return the value
+        0
+    }
 }
 
 pub type UtxoId = [u8; 32];
@@ -29,7 +39,6 @@ pub struct Utxo {
 
 impl Utxo {
     pub fn _from_raw_transaction(raw_transaction: &RawTransaction) -> io::Result<Utxo> {
-
         let mut utxo = Utxo {
             transactions: Vec::new(),
         };
@@ -57,10 +66,28 @@ impl Utxo {
 
         Ok(())
     }
+
+    // TODO: add desired pk_adress as parameter
+    pub fn _get_wallet_balance(&self) -> i64 {
+        let mut balance = 0;
+        for transaction in &self.transactions {
+            balance += transaction._get_wallet_balance();
+        }
+        balance
+    }
 }
 
 // ADD TESTING
 // #[cfg(test)]
-// mod tests {    
+// mod tests {
 //     use super::*;
+
+//     #[test]
+//     fn test_get_pk_address_balance() {
+//         // create mock utxo set
+
+//         // create mock pk_address
+
+//         // assert_eq!(utxo.get_pk_address_balance(pk_address), expected_balance);
+//     }
 // }
