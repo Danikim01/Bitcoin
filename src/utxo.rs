@@ -43,7 +43,6 @@ impl UtxoTransaction {
         })
     }
 
-    // TODO: add desired pk_adress as parameter
     pub fn _get_wallet_balance(&self, pk_address: Vec<u8>) -> io::Result<i64> {
         // if desired pk_adress is the same as the adress held
         // and the transaction is not spent, return the value
@@ -91,7 +90,6 @@ impl Utxo {
         Ok(())
     }
 
-    // TODO: add desired pk_adress as parameter
     pub fn _get_wallet_balance(&self, pk_address: Vec<u8>) -> io::Result<i64> {
         let mut balance = 0;
         for transaction in &self.transactions {
