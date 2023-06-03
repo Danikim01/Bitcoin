@@ -25,7 +25,7 @@ impl Logger {
     fn log_verbose(&self, message: &str) {
         let now = Local::now();
         let line = format!("{} - {}\n", now, message);
-        print!("{}\n", message);
+        println!("{}", message);
 
         if self.mode != VERBOSE { return; }
         let mut file = self.log_file.lock().unwrap();
@@ -35,7 +35,7 @@ impl Logger {
     fn log_quiet(&self, message: &str) {
         let now = Local::now();
         let line = format!("{} - {}\n", now, message);
-        print!("{}\n", message);
+        println!("{}", message);
         let mut file = self.log_file.lock().unwrap();
         file.write_all(line.as_bytes()).expect("Failed to write to log file")
     }
