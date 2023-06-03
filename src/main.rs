@@ -1,6 +1,7 @@
 use crate::logger::log;
 use std::io;
 use gtk::glib;
+use crate::messages::constants::config::VERBOSE;
 
 mod config;
 mod interface;
@@ -21,7 +22,7 @@ fn main() -> Result<(), io::Error> {
 
     thread::spawn(|| -> Result<(), io::Error>{
         let mut controller = network_controller::NetworkController::new(sender)?;
-        log("Connected to network, starting sync");
+        log("Connected to network, starting sync", VERBOSE);
 
         controller.start_sync()?;
         Ok(())

@@ -6,6 +6,7 @@ use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
 use crate::logger::log;
+use crate::messages::constants::config::QUIET;
 
 // gtk imports
 use gtk::glib::Sender;
@@ -39,7 +40,7 @@ impl NodeController {
         match self.nodes[node_number].send(payload) {
             Ok(k) => Ok(k),
             Err(e) => {
-                log(&format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str);
+                log(&format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str, QUIET);
                 self.nodes.swap_remove(node_number);
                 if self.nodes.is_empty() {
                     return Err(io::Error::new(
