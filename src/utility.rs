@@ -1,9 +1,9 @@
 use crate::messages::{HashId, Hashable};
+use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use bitcoin_hashes::{sha256, Hash};
 
 pub fn to_io_err<E>(error: E) -> io::Error
 where

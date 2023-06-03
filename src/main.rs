@@ -1,8 +1,9 @@
-use std::io;
 use crate::logger::log;
 use crate::messages::constants::config::VERBOSE;
+use std::io;
 
 mod config;
+mod logger;
 mod merkle_tree;
 mod messages;
 mod network_controller;
@@ -11,7 +12,6 @@ mod node_controller;
 mod raw_transaction;
 mod utility;
 mod utxo;
-mod logger;
 
 fn main() -> Result<(), io::Error> {
     let mut controller = network_controller::NetworkController::new()?;

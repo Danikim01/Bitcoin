@@ -1,3 +1,4 @@
+use crate::logger::log;
 use crate::messages::Block;
 use crate::messages::{
     constants::commands, Headers, Message, MessageHeader, Serialize, VerAck, Version,
@@ -8,7 +9,6 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use crate::logger::log;
 use crate::messages::constants::config::VERBOSE;
 
 pub struct Listener {

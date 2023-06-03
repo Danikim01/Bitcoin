@@ -166,7 +166,7 @@ impl MerkleTree {
             };
 
             // This means that the hash is the last one in the tree
-            if sibling_index >= self.tree[level].len()  {
+            if sibling_index >= self.tree[level].len() {
                 sibling_index = self.tree[level].len() - 1;
             }
 
