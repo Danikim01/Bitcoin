@@ -35,4 +35,6 @@ pub mod version_constants {
 pub mod config {
     pub const PATH: &str = "src/initial_config.txt";
     pub const PORT: u16 = 8333;
+    pub const VERBOSE: &str = "VERBOSE";
+    pub const QUIET: &str = "QUIET";
 }
