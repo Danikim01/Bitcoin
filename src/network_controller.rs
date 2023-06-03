@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::logger::log;
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
@@ -9,7 +10,10 @@ use crate::utxo::{Utxo, UtxoId};
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
-use crate::logger::log;
+
+// gtk imports
+use gtk::glib::Sender;
+use crate::interface::GtkMessage;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
@@ -21,7 +25,7 @@ pub struct NetworkController {
 }
 
 impl NetworkController {
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new(sender: Sender<GtkMessage>) -> Result<Self, io::Error> {
         let (writer_end, reader_end) = mpsc::channel();
         Ok(Self {
             headers: HashMap::new(),
@@ -29,7 +33,7 @@ impl NetworkController {
             blocks: HashMap::new(),
             utxo_set: HashMap::new(),
             reader: reader_end,
-            nodes: NodeController::connect_to_peers(writer_end)?,
+            nodes: NodeController::connect_to_peers(writer_end, sender)?,
         })
     }
 
@@ -49,8 +53,8 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-
-        log(&format!("Received block. New block count: {:?}", self.blocks.len()) as &str);
+        let message = format!("Received block. New block count: {:?}", self.blocks.len());
+        log(&message);
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
 

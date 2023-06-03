@@ -1,3 +1,4 @@
+use crate::logger::log;
 use crate::messages::Block;
 use crate::messages::{
     constants::commands, Headers, Message, MessageHeader, Serialize, VerAck, Version,
@@ -8,7 +9,10 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use crate::logger::log;
+
+// gtk imports
+use gtk::glib::Sender;
+use crate::interface::GtkMessage;
 
 pub struct Listener {
     stream: TcpStream,
@@ -28,7 +32,7 @@ impl Listener {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                log(&format!("{:?}",e) as &str);
+                log(&format!("{:?}", e) as &str);
                 log(&format!("connection: {:?}", self.stream) as &str);
                 Err(e)
             }
@@ -55,18 +59,23 @@ pub struct Node {
 }
 
 impl Node {
-    fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>) -> Self {
-        log(&format!("MAIN: Established connection with node: {:?}", stream) as &str);
+    fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>, sender: Sender<GtkMessage>) -> Self {
+        let message = &format!("MAIN: Established connection with node: {:?}", stream) as &str;
+        log(message);
+        
+        // update ui
+        let _ = sender.send(GtkMessage::UpdateStatus(message.to_string()));
+
         Self {
             stream,
             _listener: listener,
         }
     }
 
-    fn spawn(stream: TcpStream, writer_channel: mpsc::Sender<Message>) -> io::Result<Self> {
+    fn spawn(stream: TcpStream, writer_channel: mpsc::Sender<Message>, sender: Sender<GtkMessage>) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
         let handle = thread::spawn(move || listener.log_listen());
-        Ok(Self::new(stream, handle))
+        Ok(Self::new(stream, handle, sender))
     }
 
     fn _is_alive(&mut self) -> bool {
@@ -83,6 +92,7 @@ impl Node {
     pub fn try_from_addr(
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<Message>,
+        sender: Sender<GtkMessage>
     ) -> Result<Node, io::Error> {
         if !node_addr.is_ipv4() {
             return Err(io::Error::new(
@@ -92,7 +102,7 @@ impl Node {
         }
         let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
         Node::handshake(&mut stream)?;
-        Node::spawn(stream, writer_channel)
+        Node::spawn(stream, writer_channel, sender)
     }
 
     fn handshake(stream: &mut TcpStream) -> io::Result<()> {

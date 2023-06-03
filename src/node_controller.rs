@@ -7,6 +7,10 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
 use crate::logger::log;
 
+// gtk imports
+use gtk::glib::Sender;
+use crate::interface::GtkMessage;
+
 pub struct NodeController {
     nodes: Vec<Node>,
 }
@@ -17,11 +21,11 @@ fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
 }
 
 impl NodeController {
-    pub fn connect_to_peers(writer_end: mpsc::Sender<Message>) -> Result<Self, io::Error> {
+    pub fn connect_to_peers(writer_end: mpsc::Sender<Message>, sender: Sender<GtkMessage>) -> Result<Self, io::Error> {
         let node_addresses = find_nodes()?;
         let mut nodes = Vec::new();
         for node_addr in node_addresses {
-            match Node::try_from_addr(node_addr, writer_end.clone()) {
+            match Node::try_from_addr(node_addr, writer_end.clone(), sender.clone()) {
                 Ok(node) => nodes.push(node),
                 Err(..) => continue,
             }

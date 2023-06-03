@@ -1,7 +1,10 @@
-use std::io;
 use crate::logger::log;
+use std::io;
+use gtk::glib;
 
 mod config;
+mod interface;
+mod logger;
 mod merkle_tree;
 mod messages;
 mod network_controller;
@@ -10,12 +13,21 @@ mod node_controller;
 mod raw_transaction;
 mod utility;
 mod utxo;
-mod logger;
+
+use std::thread;
 
 fn main() -> Result<(), io::Error> {
-    let mut controller = network_controller::NetworkController::new()?;
-    log("Connected to network, starting sync");
-    // move this to another thread before adding gtk
-    controller.start_sync()?;
+    let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+    thread::spawn(|| -> Result<(), io::Error>{
+        let mut controller = network_controller::NetworkController::new(sender)?;
+        log("Connected to network, starting sync");
+
+        controller.start_sync()?;
+        Ok(())
+    });
+
+    interface::init(receiver)?;
+
     Ok(())
 }
