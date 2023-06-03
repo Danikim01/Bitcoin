@@ -9,6 +9,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use crate::messages::constants::config::VERBOSE;
 
 pub struct Listener {
     stream: TcpStream,
@@ -24,12 +25,11 @@ impl Listener {
     }
 
     fn log_listen(mut self) -> io::Result<()> {
-        // this should be later replaced by a logger
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                log(&format!("{:?}", e) as &str);
-                log(&format!("connection: {:?}", self.stream) as &str);
+                log(&format!("{:?}",e) as &str, VERBOSE);
+                log(&format!("connection: {:?}", self.stream) as &str, VERBOSE);
                 Err(e)
             }
         }
@@ -56,7 +56,7 @@ pub struct Node {
 
 impl Node {
     fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>) -> Self {
-        log(&format!("MAIN: Established connection with node: {:?}", stream) as &str);
+        log(&format!("MAIN: Established connection with node: {:?}", stream) as &str, VERBOSE);
         Self {
             stream,
             _listener: listener,
@@ -71,9 +71,9 @@ impl Node {
 
     fn _is_alive(&mut self) -> bool {
         let mut buf = [0u8; 1];
-        log("is_alive: peeking");
+        log("is_alive: peeking", VERBOSE);
         let bytes_read = self.stream.peek(&mut buf);
-        log("is_alive: done peeking");
+        log("is_alive: done peeking", VERBOSE);
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,
