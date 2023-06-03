@@ -1,11 +1,11 @@
 use crate::config::Config;
+use crate::logger::log;
 use crate::messages::Message;
 use crate::node::Node;
 use rand::random;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
-use crate::logger::log;
 use crate::messages::constants::config::QUIET;
 
 // gtk imports

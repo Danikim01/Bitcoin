@@ -1,7 +1,7 @@
+use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Once};
-use chrono::Local;
 use crate::config::Config;
 use crate::messages::constants::config::VERBOSE;
 
@@ -15,7 +15,8 @@ impl Logger {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open("src/log.txt").expect("Failed to open log file");
+            .open("src/log.txt")
+            .expect("Failed to open log file");
         Logger {
             log_file: Arc::new(Mutex::new(file)),
             mode: Config::from_file_or_default().get_logger_mode(),
@@ -41,8 +42,6 @@ impl Logger {
     }
 
 }
-
-
 
 struct LazyLogger {
     once: Once,

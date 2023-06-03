@@ -1,26 +1,26 @@
 use crate::config::Config;
 use crate::logger::log;
+use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::utility::{into_hashmap, to_io_err};
-use crate::utxo::{Utxo, UtxoId};
+use crate::utxo::UtxoSet;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
 
 // gtk imports
 use crate::interface::GtkMessage;
-use crate::messages::constants::config::{QUIET, VERBOSE};
 use gtk::glib::Sender;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
     blocks: HashMap<HashId, Block>,
-    utxo_set: HashMap<UtxoId, Utxo>,
+    utxo_set: UtxoSet,
     reader: mpsc::Receiver<Message>,
     nodes: NodeController,
 }
@@ -53,13 +53,38 @@ impl NetworkController {
         }
     }
 
+    // HARDCODED NEEDS TO BE DYNAMIC
+    fn _read_wallet_balance(&self) -> io::Result<()> {
+        let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        println!("Wallet address: {:?}", pk);
+
+        let mut balance = 0;
+        for utxo in self.utxo_set.values() {
+            balance += utxo._get_wallet_balance(pk.to_vec())?;
+        }
+
+        println!("Wallet balance: {:?}", balance);
+
+        Ok(())
+    }
+
     fn read_block(&mut self, block: Block) -> io::Result<()> {
         if self.blocks.len() % 100 == 0 {
             log(
                 &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
                 QUIET,
             );
+        }
+        if self.blocks.len() % 100 == 0 {
+            log(
+                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
+                QUIET,
+            );
         } else {
+            log(
+                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
+                VERBOSE,
+            );
             log(
                 &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
                 VERBOSE,
@@ -75,6 +100,13 @@ impl NetworkController {
     }
 
     fn read_headers(&mut self, mut headers: Headers) -> io::Result<()> {
+        log(
+            &format!(
+                "Received header. New header count: {:?}",
+                self.headers.len()
+            ),
+            VERBOSE,
+        );
         log(
             &format!(
                 "Received header. New header count: {:?}",
