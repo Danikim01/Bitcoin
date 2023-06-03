@@ -282,7 +282,8 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    fn validate_inputs(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+    /// Unused function as of now, the whole utxo set doesn't need to be validated
+    fn _validate_inputs(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
         // iterate over the inputs and check if they are in the utxo set
         match self.tx_in {
             TxInputType::CoinBaseInput(_) => {
@@ -318,7 +319,7 @@ impl RawTransaction {
 
     pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
         // check the inputs and mark them as spent
-        self.validate_inputs(utxo_set)?;
+        // self.validate_inputs(utxo_set)?; // unused function as of now
 
         // generate new utxos from the outputs
         self.generate_utxo(utxo_set)?;
