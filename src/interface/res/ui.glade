@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.40.0 -->
+<!-- Generated with glade 3.38.2 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
   <object class="GtkWindow" id="main_window">
@@ -333,12 +333,78 @@
     <property name="margin-top">2</property>
     <property name="column-homogeneous">True</property>
     <child>
-      <object class="GtkLabel" id="balance_id">
+      <object class="GtkBox" id="overview_left_col">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Balances</property>
-        <property name="use-markup">True</property>
-        <property name="justify">fill</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkLabel" id="balance_id">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="label" translatable="yes">Balances</property>
+            <property name="use-markup">True</property>
+            <property name="justify">fill</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox" id="overview_available_box">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkLabel" id="balance_available_lab">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Available:</property>
+                <property name="width-chars">20</property>
+                <property name="xalign">0.009999999776482582</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="balance_available_val">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">0</property>
+                <property name="justify">fill</property>
+                <property name="width-chars">0</property>
+                <property name="max-width-chars">0</property>
+                <property name="xalign">0.99000000953674316</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkButton" id="get_balance_btn">
+            <property name="label" translatable="yes">get balance</property>
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="left-attach">0</property>
@@ -346,10 +412,22 @@
       </packing>
     </child>
     <child>
-      <object class="GtkLabel" id="recent_transactions_id">
+      <object class="GtkBox" id="overview_right_col">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Recent transactions</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkLabel" id="recent_transactions_id">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="label" translatable="yes">Recent transactions</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="left-attach">1</property>
