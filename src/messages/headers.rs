@@ -2,6 +2,7 @@ use crate::messages::constants::commands::UNKNOWN;
 use crate::messages::constants::header_constants::*;
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
+use crate::messages::constants::messages::MAX_PAYLOAD_SIZE;
 
 #[derive(Debug, Clone)]
 pub struct MessageHeader {
@@ -74,7 +75,21 @@ impl MessageHeader {
         MessageHeader::from_bytes(&header_buffer)
     }
 
+    fn validate_payload_size(&self) -> Result<(), io::Error>{
+        if self.payload_size > MAX_PAYLOAD_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "Payload size {} exceeds maximum payload size {}",
+                    self.payload_size, MAX_PAYLOAD_SIZE
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
+        self.validate_payload_size()?;
         let mut payload_buffer = vec![0_u8; self.payload_size as usize];
         stream.read_exact(&mut payload_buffer)?;
         Ok(payload_buffer)
