@@ -16,19 +16,21 @@ mod utility;
 mod utxo;
 
 use std::thread;
+use std::sync::mpsc;
 
 fn main() -> Result<(), io::Error> {
     let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+    let (sender_aux, receiver_aux) = mpsc::channel();
 
     thread::spawn(|| -> Result<(), io::Error>{
-        let mut controller = network_controller::NetworkController::new(sender)?;
+        let mut controller = network_controller::NetworkController::new(sender, receiver_aux)?;
         log("Connected to network, starting sync", VERBOSE);
 
         controller.start_sync()?;
         Ok(())
     });
 
-    interface::init(receiver)?;
+    interface::init(receiver, sender_aux)?;
 
     Ok(())
 }

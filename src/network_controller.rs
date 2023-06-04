@@ -10,11 +10,12 @@ use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use std::collections::HashMap;
 use std::io;
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 
 // gtk imports
-use crate::interface::GtkMessage;
+use crate::interface::{GtkMessage, ModelRequest};
 use gtk::glib::Sender;
+use std::thread;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
@@ -26,15 +27,33 @@ pub struct NetworkController {
 }
 
 impl NetworkController {
-    pub fn new(sender: Sender<GtkMessage>) -> Result<Self, io::Error> {
+    pub fn new(
+        sender: Sender<GtkMessage>,
+        receiver: Receiver<ModelRequest>,
+    ) -> Result<Self, io::Error> {
         let (writer_end, reader_end) = mpsc::channel();
+
+        // this is only an example
+        let sender_clone = sender.clone();
+        thread::spawn(move || loop {
+            match receiver.recv().unwrap() {
+                ModelRequest::GetWalletBalance => {
+                    println!("Received request for wallet balance");
+                    sender
+                        .send(GtkMessage::UpdateStatus("Wallet balance: 100".to_string()))
+                        .unwrap();
+                }
+            }
+        });
+        //
+
         Ok(Self {
             headers: HashMap::new(),
             tallest_header: GENESIS_HASHID,
             blocks: HashMap::new(),
             utxo_set: HashMap::new(),
             reader: reader_end,
-            nodes: NodeController::connect_to_peers(writer_end, sender)?,
+            nodes: NodeController::connect_to_peers(writer_end, sender_clone)?,
         })
     }
 
@@ -74,17 +93,7 @@ impl NetworkController {
                 &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
                 QUIET,
             );
-        }
-        if self.blocks.len() % 100 == 0 {
-            log(
-                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
-                QUIET,
-            );
         } else {
-            log(
-                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
-                VERBOSE,
-            );
             log(
                 &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
                 VERBOSE,
