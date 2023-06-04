@@ -11,10 +11,12 @@ use crate::utxo::UtxoSet;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
+use std::sync::Mutex;
 
 // gtk imports
 use crate::interface::{GtkMessage, ModelRequest};
 use gtk::glib::Sender;
+use std::sync::Arc;
 use std::thread;
 
 pub struct NetworkController {
@@ -24,28 +26,15 @@ pub struct NetworkController {
     utxo_set: UtxoSet,
     reader: mpsc::Receiver<Message>,
     nodes: NodeController,
+    ui_sender: Sender<GtkMessage>,
+    dummy: Arc<Mutex<i32>>,
 }
 
 impl NetworkController {
-    pub fn new(
-        sender: Sender<GtkMessage>,
-        receiver: Receiver<ModelRequest>,
-    ) -> Result<Self, io::Error> {
+    pub fn new(sender: Sender<GtkMessage>) -> Result<Self, io::Error> {
         let (writer_end, reader_end) = mpsc::channel();
 
-        // this is only an example
-        let sender_clone = sender.clone();
-        thread::spawn(move || loop {
-            match receiver.recv().unwrap() {
-                ModelRequest::GetWalletBalance => {
-                    println!("Received request for wallet balance");
-                    sender
-                        .send(GtkMessage::UpdateStatus("Wallet balance: 100".to_string()))
-                        .unwrap();
-                }
-            }
-        });
-        //
+        let dummy: Arc<Mutex<i32>> = Arc::new(Mutex::new(518));
 
         Ok(Self {
             headers: HashMap::new(),
@@ -53,7 +42,9 @@ impl NetworkController {
             blocks: HashMap::new(),
             utxo_set: HashMap::new(),
             reader: reader_end,
-            nodes: NodeController::connect_to_peers(writer_end, sender_clone)?,
+            nodes: NodeController::connect_to_peers(writer_end, sender.clone())?,
+            ui_sender: sender,
+            dummy,
         })
     }
 
@@ -159,12 +150,36 @@ impl NetworkController {
         Ok(())
     }
 
-    pub fn start_sync(&mut self) -> io::Result<()> {
+    fn recv_ui_messages(&mut self, receiver: Receiver<ModelRequest>) -> io::Result<()> {
+        let sender_clone = self.ui_sender.clone();
+        let dummy_mutex = self.dummy.clone();
+        thread::spawn(move || loop {
+            match receiver.recv().unwrap() {
+                ModelRequest::GetWalletBalance => {
+                    println!("Received request for wallet balance");
+                    let val = *dummy_mutex.lock().unwrap();
+                    sender_clone
+                        .send(GtkMessage::UpdateStatus(format!(
+                            "Wallet balance: {:?}",
+                            val
+                        )))
+                        .unwrap();
+                }
+            }
+        });
+        Ok(())
+    }
+
+    pub fn start_sync(&mut self, receiver: Receiver<ModelRequest>) -> io::Result<()> {
         if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.tallest_header = headers.last_header_hash();
             self.headers = into_hashmap(headers.block_headers);
         }
         self.request_headers(self.tallest_header)?;
+
+        // this is only an example - improve
+        self.recv_ui_messages(receiver)?;
+
         self.recv_messages()?;
         Ok(())
     }

@@ -23,10 +23,10 @@ fn main() -> Result<(), io::Error> {
     let (sender_aux, receiver_aux) = mpsc::channel();
 
     thread::spawn(|| -> Result<(), io::Error>{
-        let mut controller = network_controller::NetworkController::new(sender, receiver_aux)?;
+        let mut controller = network_controller::NetworkController::new(sender)?;
         log("Connected to network, starting sync", VERBOSE);
 
-        controller.start_sync()?;
+        controller.start_sync(receiver_aux)?;
         Ok(())
     });
 
