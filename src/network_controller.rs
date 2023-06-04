@@ -159,7 +159,7 @@ impl NetworkController {
                     println!("Received request for wallet balance");
                     let val = *dummy_mutex.lock().unwrap();
                     sender_clone
-                        .send(GtkMessage::UpdateStatus(format!(
+                        .send(GtkMessage::UpdateBotton(format!(
                             "Wallet balance: {:?}",
                             val
                         )))

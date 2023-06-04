@@ -1,13 +1,14 @@
 use gtk::glib;
 use gtk::glib::Receiver;
-use std::sync::mpsc::Sender;
 use gtk::prelude::*;
 use std::io;
+use std::sync::mpsc::Sender;
 
 mod components;
 
 pub enum GtkMessage {
     UpdateStatus(String),
+    UpdateBotton(String),
 }
 
 pub enum ModelRequest {
@@ -21,7 +22,17 @@ fn attach_rcv(receiver: Receiver<GtkMessage>, builder: gtk::Builder) {
                 let status_bar: gtk::Label = builder.object("status_bar").unwrap(); // add err handling
                 status_bar.set_text(text.as_str())
             }
+            GtkMessage::UpdateBotton(text) => {
+                let builder_aux = builder.clone();
+                let get_balance_btn: gtk::Button = builder_aux.object("get_balance_btn").unwrap();
+                get_balance_btn.connect_clicked(move |_| {
+                    let balance_available_val: gtk::Label =
+                        builder_aux.object("balance_available_val").unwrap(); // add err handling
+                    balance_available_val.set_text(text.as_str());
+                });
+            }
         }
+
         // Returning false here would close the receiver
         // and have senders fail
         glib::Continue(true)
@@ -48,7 +59,6 @@ pub fn init(receiver: Receiver<GtkMessage>, sender: Sender<ModelRequest>) -> io:
         println!("click");
         sender.send(ModelRequest::GetWalletBalance).unwrap();
     });
-
 
     let window: gtk::Window = components::init(builder)?;
     window.show_all();
