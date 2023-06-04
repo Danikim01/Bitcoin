@@ -24,47 +24,27 @@ pub struct NetworkController {
     tallest_header: HashId,
     blocks: HashMap<HashId, Block>,
     utxo_set: UtxoSet,
-    reader: mpsc::Receiver<Message>,
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
-    dummy: Arc<Mutex<i32>>,
 }
 
 impl NetworkController {
-    pub fn new(sender: Sender<GtkMessage>) -> Result<Self, io::Error> {
-        let (writer_end, reader_end) = mpsc::channel();
-
-        let dummy: Arc<Mutex<i32>> = Arc::new(Mutex::new(518));
-
+    pub fn new(
+        ui_sender: Sender<GtkMessage>,
+        writer_end: mpsc::Sender<Message>,
+    ) -> Result<Self, io::Error> {
         Ok(Self {
             headers: HashMap::new(),
             tallest_header: GENESIS_HASHID,
             blocks: HashMap::new(),
             utxo_set: HashMap::new(),
-            reader: reader_end,
-            nodes: NodeController::connect_to_peers(writer_end, sender.clone())?,
-            ui_sender: sender,
-            dummy,
+            nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone())?,
+            ui_sender,
         })
     }
 
-    fn recv_messages(&mut self) -> io::Result<()> {
-        loop {
-            match self.reader.recv().map_err(to_io_err)? {
-                Message::Headers(headers) => self.read_headers(headers),
-                Message::Block(block) => self.read_block(block),
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Received unsupported message",
-                    ))
-                }
-            }?;
-        }
-    }
-
     // HARDCODED NEEDS TO BE DYNAMIC
-    fn _read_wallet_balance(&self) -> io::Result<()> {
+    fn _read_wallet_balance(&self) -> io::Result<i64> {
         let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         println!("Wallet address: {:?}", pk);
 
@@ -75,7 +55,7 @@ impl NetworkController {
 
         println!("Wallet balance: {:?}", balance);
 
-        Ok(())
+        Ok(balance + 518)
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
@@ -150,37 +130,85 @@ impl NetworkController {
         Ok(())
     }
 
-    fn recv_ui_messages(&mut self, receiver: Receiver<ModelRequest>) -> io::Result<()> {
-        let sender_clone = self.ui_sender.clone();
-        let dummy_mutex = self.dummy.clone();
-        thread::spawn(move || loop {
-            match receiver.recv().unwrap() {
-                ModelRequest::GetWalletBalance => {
-                    println!("Received request for wallet balance");
-                    let val = *dummy_mutex.lock().unwrap();
-                    sender_clone
-                        .send(GtkMessage::UpdateBotton(format!(
-                            "Wallet balance: {:?}",
-                            val
-                        )))
-                        .unwrap();
-                }
-            }
-        });
-        Ok(())
-    }
-
-    pub fn start_sync(&mut self, receiver: Receiver<ModelRequest>) -> io::Result<()> {
+    pub fn start_sync(&mut self) -> io::Result<()> {
         if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.tallest_header = headers.last_header_hash();
             self.headers = into_hashmap(headers.block_headers);
         }
         self.request_headers(self.tallest_header)?;
+        Ok(())
+    }
+}
 
-        // this is only an example - improve
-        self.recv_ui_messages(receiver)?;
+pub struct OuterNetworkController {
+    inner: Arc<Mutex<NetworkController>>,
+}
 
-        self.recv_messages()?;
+impl OuterNetworkController {
+    pub fn new(
+        ui_sender: Sender<GtkMessage>,
+        writer_end: mpsc::Sender<Message>,
+    ) -> Result<Self, io::Error> {
+        let inner = Arc::new(Mutex::new(NetworkController::new(ui_sender, writer_end)?));
+        Ok(Self { inner })
+    }
+
+    fn recv_ui_messages(&self, ui_receiver: Receiver<ModelRequest>) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> {
+            loop {
+                let t_inner = inner.clone();
+                match ui_receiver.recv().map_err(to_io_err)? {
+                    ModelRequest::GetWalletBalance => {
+                        println!("Received request for wallet balance");
+                        let inner_lock = t_inner.lock().map_err(to_io_err)?;
+                        let val = inner_lock._read_wallet_balance()?;
+                        inner_lock
+                            .ui_sender
+                            .send(GtkMessage::UpdateBotton(format!("{:?}", val)))
+                            .map_err(to_io_err)
+                    }
+                }?;
+            }
+        });
+        Ok(())
+    }
+
+    fn recv_node_messages(&self, node_receiver: mpsc::Receiver<Message>) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> {
+            loop {
+                let t_inner = inner.clone();
+                match node_receiver.recv().map_err(to_io_err)? {
+                    Message::Headers(headers) => {
+                        t_inner.lock().map_err(to_io_err)?.read_headers(headers)
+                    }
+                    Message::Block(block) => t_inner.lock().map_err(to_io_err)?.read_block(block),
+                    _ => Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Received unsupported message",
+                    )),
+                }?;
+            }
+        });
+        Ok(())
+    }
+
+    fn sync(&self) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() });
+        Ok(())
+    }
+
+    pub fn start_sync(
+        &self,
+        node_receiver: mpsc::Receiver<Message>,
+        ui_receiver: Receiver<ModelRequest>,
+    ) -> io::Result<()> {
+        self.recv_node_messages(node_receiver)?;
+        self.recv_ui_messages(ui_receiver)?;
+        self.sync()?;
+
         Ok(())
     }
 }

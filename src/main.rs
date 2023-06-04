@@ -1,7 +1,7 @@
 use crate::logger::log;
-use std::io;
-use gtk::glib;
 use crate::messages::constants::config::VERBOSE;
+use gtk::glib;
+use std::io;
 
 mod config;
 mod interface;
@@ -15,18 +15,19 @@ mod raw_transaction;
 mod utility;
 mod utxo;
 
-use std::thread;
 use std::sync::mpsc;
+use std::thread;
 
 fn main() -> Result<(), io::Error> {
     let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     let (sender_aux, receiver_aux) = mpsc::channel();
+    let (writer_end, node_receiver) = mpsc::channel();
 
-    thread::spawn(|| -> Result<(), io::Error>{
-        let mut controller = network_controller::NetworkController::new(sender)?;
+    thread::spawn(|| -> Result<(), io::Error> {
+        let outer_controller = network_controller::OuterNetworkController::new(sender, writer_end)?;
         log("Connected to network, starting sync", VERBOSE);
 
-        controller.start_sync(receiver_aux)?;
+        outer_controller.start_sync(node_receiver, receiver_aux)?;
         Ok(())
     });
 
