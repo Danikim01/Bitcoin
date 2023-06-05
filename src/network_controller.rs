@@ -10,47 +10,41 @@ use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use std::collections::HashMap;
 use std::io;
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
+use std::sync::Mutex;
+
+// gtk imports
+use crate::interface::{GtkMessage, ModelRequest};
+use gtk::glib::Sender;
+use std::sync::Arc;
+use std::thread;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
     blocks: HashMap<HashId, Block>,
     utxo_set: UtxoSet,
-    reader: mpsc::Receiver<Message>,
     nodes: NodeController,
+    ui_sender: Sender<GtkMessage>,
 }
 
 impl NetworkController {
-    pub fn new() -> Result<Self, io::Error> {
-        let (writer_end, reader_end) = mpsc::channel();
+    pub fn new(
+        ui_sender: Sender<GtkMessage>,
+        writer_end: mpsc::Sender<Message>,
+    ) -> Result<Self, io::Error> {
         Ok(Self {
             headers: HashMap::new(),
             tallest_header: GENESIS_HASHID,
             blocks: HashMap::new(),
             utxo_set: HashMap::new(),
-            reader: reader_end,
-            nodes: NodeController::connect_to_peers(writer_end)?,
+            nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone())?,
+            ui_sender,
         })
     }
 
-    fn recv_messages(&mut self) -> io::Result<()> {
-        loop {
-            match self.reader.recv().map_err(to_io_err)? {
-                Message::Headers(headers) => self.read_headers(headers),
-                Message::Block(block) => self.read_block(block),
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Received unsupported message",
-                    ))
-                }
-            }?;
-        }
-    }
-
     // HARDCODED NEEDS TO BE DYNAMIC
-    fn _read_wallet_balance(&self) -> io::Result<()> {
+    fn _read_wallet_balance(&self) -> io::Result<i64> {
         let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         println!("Wallet address: {:?}", pk);
 
@@ -61,23 +55,25 @@ impl NetworkController {
 
         println!("Wallet balance: {:?}", balance);
 
-        Ok(())
+        Ok(balance + 518)
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-        if self.blocks.len() % 100 == 0 {
-            log(
-                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
-                QUIET,
-            );
-        } else {
-            log(
-                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
-                VERBOSE,
-            );
-        }
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
+        if self.blocks.len() % 100 == 0 {
+            let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
+            log(msg, QUIET);
+        } else {
+            let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
+            log(msg, VERBOSE);
+            self.ui_sender
+                .send(GtkMessage::UpdateLabel((
+                    "status_bar".to_string(),
+                    msg.to_string(),
+                )))
+                .map_err(to_io_err)?;
+        }
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
@@ -93,6 +89,7 @@ impl NetworkController {
             ),
             VERBOSE,
         );
+
         // request more headers
         self.tallest_header = headers.last_header_hash();
         if headers.is_paginated() {
@@ -130,12 +127,94 @@ impl NetworkController {
     }
 
     pub fn start_sync(&mut self) -> io::Result<()> {
+        self.ui_sender
+            .send(GtkMessage::UpdateLabel((
+                "status_bar".to_string(),
+                "Connected to network, starting sync".to_string(),
+            )))
+            .map_err(to_io_err)?;
+
         if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.tallest_header = headers.last_header_hash();
             self.headers = into_hashmap(headers.block_headers);
         }
         self.request_headers(self.tallest_header)?;
-        self.recv_messages()?;
+        Ok(())
+    }
+}
+
+pub struct OuterNetworkController {
+    inner: Arc<Mutex<NetworkController>>,
+}
+
+impl OuterNetworkController {
+    pub fn new(
+        ui_sender: Sender<GtkMessage>,
+        writer_end: mpsc::Sender<Message>,
+    ) -> Result<Self, io::Error> {
+        let inner = Arc::new(Mutex::new(NetworkController::new(ui_sender, writer_end)?));
+        Ok(Self { inner })
+    }
+
+    fn recv_ui_messages(&self, ui_receiver: Receiver<ModelRequest>) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> {
+            loop {
+                let t_inner = inner.clone();
+                match ui_receiver.recv().map_err(to_io_err)? {
+                    ModelRequest::GetWalletBalance => {
+                        println!("Received request for wallet balance");
+                        let inner_lock = t_inner.lock().map_err(to_io_err)?;
+                        let val = inner_lock._read_wallet_balance()?;
+                        inner_lock
+                            .ui_sender
+                            .send(GtkMessage::UpdateLabel((
+                                "balance_available_val".to_string(),
+                                format!("{:?}", val),
+                            )))
+                            .map_err(to_io_err)
+                    }
+                }?;
+            }
+        });
+        Ok(())
+    }
+
+    fn recv_node_messages(&self, node_receiver: mpsc::Receiver<Message>) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> {
+            loop {
+                let t_inner = inner.clone();
+                match node_receiver.recv().map_err(to_io_err)? {
+                    Message::Headers(headers) => {
+                        t_inner.lock().map_err(to_io_err)?.read_headers(headers)
+                    }
+                    Message::Block(block) => t_inner.lock().map_err(to_io_err)?.read_block(block),
+                    _ => Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Received unsupported message",
+                    )),
+                }?;
+            }
+        });
+        Ok(())
+    }
+
+    fn sync(&self) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() });
+        Ok(())
+    }
+
+    pub fn start_sync(
+        &self,
+        node_receiver: mpsc::Receiver<Message>,
+        ui_receiver: Receiver<ModelRequest>,
+    ) -> io::Result<()> {
+        self.recv_node_messages(node_receiver)?;
+        self.recv_ui_messages(ui_receiver)?;
+        self.sync()?;
+
         Ok(())
     }
 }
