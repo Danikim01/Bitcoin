@@ -7,8 +7,7 @@ use std::sync::mpsc::Sender;
 mod components;
 
 pub enum GtkMessage {
-    UpdateStatus(String),
-    UpdateBotton(String),
+    UpdateLabel((String, String)),
 }
 
 pub enum ModelRequest {
@@ -18,18 +17,10 @@ pub enum ModelRequest {
 fn attach_rcv(receiver: Receiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
         match msg {
-            GtkMessage::UpdateStatus(text) => {
-                let status_bar: gtk::Label = builder.object("status_bar").unwrap(); // add err handling
-                status_bar.set_text(text.as_str())
-            }
-            GtkMessage::UpdateBotton(text) => {
+            GtkMessage::UpdateLabel((label, text)) => {
                 let builder_aux = builder.clone();
-                let get_balance_btn: gtk::Button = builder_aux.object("get_balance_btn").unwrap();
-                get_balance_btn.connect_clicked(move |_| {
-                    let balance_available_val: gtk::Label =
-                        builder_aux.object("balance_available_val").unwrap(); // add err handling
-                    balance_available_val.set_text(text.as_str());
-                });
+                let label: gtk::Label = builder_aux.object(label.as_str()).unwrap();
+                label.set_text(text.as_str());
             }
         }
 

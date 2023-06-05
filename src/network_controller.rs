@@ -59,19 +59,21 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-        if self.blocks.len() % 100 == 0 {
-            log(
-                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
-                QUIET,
-            );
-        } else {
-            log(
-                &format!("Received block. New block count: {:?}", self.blocks.len()) as &str,
-                VERBOSE,
-            );
-        }
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
+        if self.blocks.len() % 100 == 0 {
+            let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
+            log(msg, QUIET);
+        } else {
+            let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
+            log(msg, VERBOSE);
+            self.ui_sender
+                .send(GtkMessage::UpdateLabel((
+                    "status_bar".to_string(),
+                    msg.to_string(),
+                )))
+                .map_err(to_io_err)?;
+        }
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
@@ -87,13 +89,7 @@ impl NetworkController {
             ),
             VERBOSE,
         );
-        log(
-            &format!(
-                "Received header. New header count: {:?}",
-                self.headers.len()
-            ),
-            VERBOSE,
-        );
+
         // request more headers
         self.tallest_header = headers.last_header_hash();
         if headers.is_paginated() {
@@ -131,6 +127,13 @@ impl NetworkController {
     }
 
     pub fn start_sync(&mut self) -> io::Result<()> {
+        self.ui_sender
+            .send(GtkMessage::UpdateLabel((
+                "status_bar".to_string(),
+                "Connected to network, starting sync".to_string(),
+            )))
+            .map_err(to_io_err)?;
+
         if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.tallest_header = headers.last_header_hash();
             self.headers = into_hashmap(headers.block_headers);
@@ -165,7 +168,10 @@ impl OuterNetworkController {
                         let val = inner_lock._read_wallet_balance()?;
                         inner_lock
                             .ui_sender
-                            .send(GtkMessage::UpdateBotton(format!("{:?}", val)))
+                            .send(GtkMessage::UpdateLabel((
+                                "balance_available_val".to_string(),
+                                format!("{:?}", val),
+                            )))
                             .map_err(to_io_err)
                     }
                 }?;

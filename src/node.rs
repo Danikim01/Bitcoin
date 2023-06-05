@@ -11,9 +11,9 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 // gtk imports
-use gtk::glib::Sender;
 use crate::interface::GtkMessage;
 use crate::messages::constants::config::VERBOSE;
+use gtk::glib::Sender;
 
 pub struct Listener {
     stream: TcpStream,
@@ -59,12 +59,19 @@ pub struct Node {
 }
 
 impl Node {
-    fn new(stream: TcpStream, listener: JoinHandle<io::Result<()>>, sender: Sender<GtkMessage>) -> Self {
+    fn new(
+        stream: TcpStream,
+        listener: JoinHandle<io::Result<()>>,
+        ui_sender: Sender<GtkMessage>,
+    ) -> Self {
         let message = &format!("MAIN: Established connection with node: {:?}", stream) as &str;
         log(message, VERBOSE);
-        
-        // update ui
-        let _ = sender.send(GtkMessage::UpdateStatus(message.to_string()));
+
+        // update ui // handle error
+        let _ = ui_sender.send(GtkMessage::UpdateLabel((
+            "status_bar".to_string(),
+            message.to_string(),
+        )));
 
         Self {
             stream,
@@ -72,10 +79,14 @@ impl Node {
         }
     }
 
-    fn spawn(stream: TcpStream, writer_channel: mpsc::Sender<Message>, sender: Sender<GtkMessage>) -> io::Result<Self> {
+    fn spawn(
+        stream: TcpStream,
+        writer_channel: mpsc::Sender<Message>,
+        ui_sender: Sender<GtkMessage>,
+    ) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
         let handle = thread::spawn(move || listener.log_listen());
-        Ok(Self::new(stream, handle, sender))
+        Ok(Self::new(stream, handle, ui_sender))
     }
 
     fn _is_alive(&mut self) -> bool {
@@ -92,7 +103,7 @@ impl Node {
     pub fn try_from_addr(
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<Message>,
-        sender: Sender<GtkMessage>
+        ui_sender: Sender<GtkMessage>,
     ) -> Result<Node, io::Error> {
         if !node_addr.is_ipv4() {
             return Err(io::Error::new(
@@ -102,7 +113,7 @@ impl Node {
         }
         let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
         Node::handshake(&mut stream)?;
-        Node::spawn(stream, writer_channel, sender)
+        Node::spawn(stream, writer_channel, ui_sender)
     }
 
     fn handshake(stream: &mut TcpStream) -> io::Result<()> {
