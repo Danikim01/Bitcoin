@@ -5,7 +5,7 @@ use crate::messages::{
 };
 use crate::utility::to_io_err;
 use std::io::{self, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -42,6 +42,12 @@ impl Listener {
     fn listen(&mut self) -> io::Result<()> {
         loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
+            if message_header.validate_header().is_err() {
+                println!("Invalid header: {:?}, shutting down header", message_header);
+                self.stream.shutdown(Shutdown::Both)?;
+                return Ok(());
+            }
+
             let payload = message_header.read_payload(&mut self.stream)?;
             let dyn_message: Message = match message_header.command_name.as_str() {
                 commands::HEADERS => Headers::deserialize(&payload)?,

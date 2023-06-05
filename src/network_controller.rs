@@ -202,7 +202,7 @@ impl OuterNetworkController {
 
     fn sync(&self) -> io::Result<()> {
         let inner = self.inner.clone();
-        thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() });
+        thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() }); // useless thread?
         Ok(())
     }
 
@@ -211,9 +211,9 @@ impl OuterNetworkController {
         node_receiver: mpsc::Receiver<Message>,
         ui_receiver: Receiver<ModelRequest>,
     ) -> io::Result<()> {
-        self.recv_node_messages(node_receiver)?;
         self.recv_ui_messages(ui_receiver)?;
         self.sync()?;
+        self.recv_node_messages(node_receiver)?;
 
         Ok(())
     }

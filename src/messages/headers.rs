@@ -1,8 +1,8 @@
-use crate::messages::constants::commands::UNKNOWN;
+use crate::messages::constants::commands::*;
 use crate::messages::constants::header_constants::*;
+use crate::messages::constants::messages::MAX_PAYLOAD_SIZE;
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
-use crate::messages::constants::messages::MAX_PAYLOAD_SIZE;
 
 #[derive(Debug, Clone)]
 pub struct MessageHeader {
@@ -75,15 +75,41 @@ impl MessageHeader {
         MessageHeader::from_bytes(&header_buffer)
     }
 
-    fn validate_payload_size(&self) -> Result<(), io::Error>{
+    pub fn validate_header(&self) -> io::Result<()> {
+        let commands = vec![
+            GETHEADERS,
+            GETDATA,
+            BLOCK,
+            VERSION,
+            VERACK,
+            HEADERS,
+            UNKNOWN,
+            SENDCMPCT,
+            SENDHEADERS,
+            PING,
+            FEEFILTER,
+            ADDR,
+            INV,
+        ];
+        if commands.contains(&self.command_name.as_str()) {
+            return Ok(());
+        }
+
+        let err_str = format!("Invalid command name: {}", self.command_name);
+        Err(io::Error::new(io::ErrorKind::InvalidData, err_str)) // wrong error type
+    }
+
+    fn validate_payload_size(&self) -> Result<(), io::Error> {
         if self.payload_size > MAX_PAYLOAD_SIZE {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "Payload size {} exceeds maximum payload size {}",
-                    self.payload_size, MAX_PAYLOAD_SIZE
-                ),
-            ));
+            let err_str = format!(
+                "Payload size {} exceeds maximum payload size {} in command {}",
+                self.payload_size, MAX_PAYLOAD_SIZE, self.command_name
+            );
+            println!("{}", err_str);
+            // return Err(io::Error::new(
+            //     io::ErrorKind::InvalidData,
+            //     err_str
+            // ));
         }
         Ok(())
     }

@@ -5,20 +5,12 @@ use crate::utility::double_hash;
 use crate::utxo::{Utxo, UtxoId};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::collections::HashMap;
-use std::io::{Error, Read};
+use std::io::{Error, Read, ErrorKind};
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
     cursor.read_exact(&mut array)?;
     Ok(array)
-}
-
-fn remove_right_zero_bytes(bytes: &[u8]) -> &[u8] {
-    let last_non_zero_index = bytes
-        .iter()
-        .rposition(|&x| x != 0)
-        .unwrap_or(bytes.len() - 1);
-    &bytes[..=last_non_zero_index]
 }
 
 // https://developer.bitcoin.org/reference/transactions.html#compact_size-unsigned-integers
@@ -144,12 +136,43 @@ pub struct CoinBaseInput {
     _sequence: u32,
 }
 
+fn read_height(cursor: &mut Cursor<&[u8]>) -> io::Result<u32> {
+    let val = u8::from_le_stream(cursor)?;
+    if val != 0x03 {
+        let err_str = format!("Height unsupported: {}", val);
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            err_str.as_str(),
+        ));
+    }
+    let mut array = [0u8; 4];
+    array[0] = u8::from_le_stream(cursor)?;
+    array[1] = u8::from_le_stream(cursor)?;
+    array[2] = u8::from_le_stream(cursor)?;
+
+    Ok(u32::from_le_bytes(array))
+}
+
+fn serialize_height(height: u32) -> Vec<u8> {
+    let mut bytes = vec![];
+    bytes.push(0x03);
+    bytes.extend_from_slice(&height.to_le_bytes()[0..3]);
+    bytes
+}
+
 impl CoinBaseInput {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> io::Result<Self> {
         let _hash = read_hash(cursor)?;
         let _index = u32::from_le_stream(cursor)?;
         let _script_bytes = read_from_varint(cursor)?;
-        let _height = u32::from_le_stream(cursor)?;
+        let _height = match  read_height(cursor) {
+            Ok(height) => height,
+            Err(err) => {
+                println!("Invalid height, script bytes was set to {}", _script_bytes);
+                Err(err)?
+            },
+        };
+        
         let _coinbase_script = read_coinbase_script(cursor, (_script_bytes - 4) as usize)?;
         let _sequence = u32::from_le_stream(cursor)?;
 
@@ -170,7 +193,8 @@ impl CoinBaseInput {
         bytes.extend_from_slice(&self._hash);
         bytes.extend_from_slice(&self._index.to_le_bytes());
         bytes.extend_from_slice(&to_compact_size_bytes(self._script_bytes));
-        bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
+        // bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
+        bytes.extend_from_slice(&serialize_height(self._height));
         bytes.extend_from_slice(&self._coinbase_script);
         bytes.extend_from_slice(&self._sequence.to_le_bytes());
         bytes
