@@ -44,4 +44,5 @@ pub mod config {
     pub const PORT: u16 = 8333;
     pub const VERBOSE: &str = "VERBOSE";
     pub const QUIET: &str = "QUIET";
+    pub const MAGIC: [u8;4] = [0x0b, 0x11, 0x09, 0x07];
 }
