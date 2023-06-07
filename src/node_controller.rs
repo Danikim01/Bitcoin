@@ -32,7 +32,7 @@ impl NodeController {
             match Node::try_from_addr(node_addr, writer_end.clone(), sender.clone()) {
                 Ok(node) => {
                     nodes.push(node);
-                    break; // uncomment this to use a single node as peer
+                    // break; // uncomment this to use a single node as peer
                 }
                 Err(..) => continue,
             }
@@ -60,5 +60,21 @@ impl NodeController {
                 self.send_to_any(payload)
             }
         }
+    }
+
+    pub fn send_to_all(&mut self, payload: &Vec<u8>) -> io::Result<()> {
+        for node in self.nodes.iter_mut() {
+            match node.send(payload) {
+                Ok(k) => k,
+                Err(e) => {
+                    log(
+                        &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
+                        QUIET,
+                    );
+                    continue;
+                }
+            };
+        }
+        Ok(())
     }
 }

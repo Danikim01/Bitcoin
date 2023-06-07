@@ -113,7 +113,8 @@ impl NetworkController {
 
     fn request_headers(&mut self, header_hash: HashId) -> io::Result<()> {
         let getheader_message = GetHeader::from_last_header(header_hash);
-        self.nodes.send_to_any(&getheader_message.serialize()?)?;
+        // self.nodes.send_to_any(&getheader_message.serialize()?)?;
+        self.nodes.send_to_all(&getheader_message.serialize()?)?;
         Ok(())
     }
 
@@ -194,6 +195,11 @@ impl OuterNetworkController {
                         t_inner.lock().map_err(to_io_err)?.read_headers(headers)
                     }
                     Message::Block(block) => t_inner.lock().map_err(to_io_err)?.read_block(block),
+                    Message::Failure() => {
+                        println!("Node is notifying me of a failure, should resend last request");
+                        // aca deberiamos recibir el mensaje que fallo, y volver a enviarlo
+                        Ok(())
+                    }
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,
                         "Received unsupported message",

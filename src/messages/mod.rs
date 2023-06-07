@@ -85,6 +85,7 @@ pub enum Message {
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),
+    Failure(),
 }
 
 pub trait Hashable {
