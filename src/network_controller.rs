@@ -78,6 +78,10 @@ impl NetworkController {
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
         self.blocks.insert(block.hash(), block);
+
+        // request headers
+        
+
         Ok(())
     }
 

@@ -43,15 +43,22 @@ impl Listener {
         loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             if message_header.validate_header().is_err() {
-                println!("Invalid header: {:?}, shutting down header", message_header);
-                self.stream.shutdown(Shutdown::Both)?;
-                return Ok(());
+                println!("Invalid header: {:?}, ignoring message", message_header);
+                continue;
             }
 
             let payload = message_header.read_payload(&mut self.stream)?;
+
             let dyn_message: Message = match message_header.command_name.as_str() {
                 commands::HEADERS => Headers::deserialize(&payload)?,
-                commands::BLOCK => Block::deserialize(&payload)?,
+                commands::BLOCK => match Block::deserialize(&payload) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        println!("Invalid block payload: {:?}, ignoring message", e);
+                        // HERE WE MUST REQUEST THE BLOCK AGAIN!
+                        continue;
+                    }
+                },
                 _ => continue,
             };
             self.writer_channel.send(dyn_message).map_err(to_io_err)?;
