@@ -10,7 +10,7 @@ use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use std::collections::HashMap;
 use std::io;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 
 // gtk imports
@@ -31,7 +31,7 @@ pub struct NetworkController {
 impl NetworkController {
     pub fn new(
         ui_sender: Sender<GtkMessage>,
-        writer_end: Sender<Message>,
+        writer_end: mpsc::Sender<Message>,
     ) -> Result<Self, io::Error> {
         Ok(Self {
             headers: HashMap::new(),
@@ -150,7 +150,7 @@ pub struct OuterNetworkController {
 impl OuterNetworkController {
     pub fn new(
         ui_sender: Sender<GtkMessage>,
-        writer_end: Sender<Message>,
+        writer_end: mpsc::Sender<Message>,
     ) -> Result<Self, io::Error> {
         let inner = Arc::new(Mutex::new(NetworkController::new(ui_sender, writer_end)?));
         Ok(Self { inner })
@@ -180,7 +180,7 @@ impl OuterNetworkController {
         Ok(())
     }
 
-    fn recv_node_messages(&self, node_receiver: Receiver<Message>) -> io::Result<()> {
+    fn recv_node_messages(&self, node_receiver: mpsc::Receiver<Message>) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
@@ -206,7 +206,7 @@ impl OuterNetworkController {
 
     pub fn start_sync(
         &self,
-        node_receiver: Receiver<Message>,
+        node_receiver: mpsc::Receiver<Message>,
         ui_receiver: Receiver<ModelRequest>,
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver)?;
