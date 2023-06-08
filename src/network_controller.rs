@@ -110,18 +110,13 @@ impl NetworkController {
         // request more headers
         self.tallest_header = headers.last_header_hash(); // last to get doesn't have to be tallest -- check this
         if headers.is_paginated() {
-            // self.request_headers(self.tallest_header)?;
-
-            // MAKING THIS A RETURN MAKES IT SEQUENTIAL
-            // WE WONT GET ANY BLOCKS ANTY WE RECEIVE A PAGINATED
-            // HEADER RESPONSE -- NO BUENO
-            return self.request_headers(self.tallest_header);
+            self.request_headers(self.tallest_header)?;
         }
 
         // request blocks for headers after given date
         let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
         headers.trim_timestamp(init_tp_timestamp)?;
-        self.request_blocks()?;
+        self.request_blocks(headers)?;
         Ok(())
     }
 
@@ -132,8 +127,32 @@ impl NetworkController {
         Ok(())
     }
 
-    fn request_blocks(&mut self) -> io::Result<()> {
-        // trim headers to only include headers after init_tp_timestamp
+    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
+        if headers.count == 0 {
+            return Ok(());
+        }
+        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
+        for chunk in chunks {
+            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
+            self.nodes.send_to_any(&get_data.serialize()?)?;
+        }
+        log("Requesting blocks, sent GetData message.", VERBOSE);
+        Ok(())
+    }
+    pub fn start_sync(&mut self) -> io::Result<()> {
+        self.ui_sender
+            .send(GtkMessage::UpdateLabel((
+                "status_bar".to_string(),
+                "Connected to network, starting sync".to_string(),
+            )))
+            .map_err(to_io_err)?;
+
+        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
+            self.tallest_header = headers.last_header_hash();
+            self.headers = into_hashmap(headers.block_headers);
+        }
+
+        // START OF FIX
         let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
         let mut headers_trim = self.headers.clone();
         headers_trim = headers_trim
@@ -152,39 +171,13 @@ impl NetworkController {
         for header in headers_trim.values() {
             headers_trim_vec.push(header.clone());
         }
-
-        if headers_trim_vec.is_empty() {
-            println!("No blocks to request");
-            return Ok(());
-        }
-
         // send block requests
         let chunks = headers_trim_vec.chunks(16);
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_all(&get_data.serialize()?)?;
+            self.nodes.send_to_any(&get_data.serialize()?)?;
         }
-
-        let msg = &format!(
-            "Requesting {:?} blocks, sent GetData message.",
-            headers_trim.len()
-        ) as &str;
-        log(msg, VERBOSE);
-        Ok(())
-    }
-
-    pub fn start_sync(&mut self) -> io::Result<()> {
-        self.ui_sender
-            .send(GtkMessage::UpdateLabel((
-                "status_bar".to_string(),
-                "Connected to network, starting sync".to_string(),
-            )))
-            .map_err(to_io_err)?;
-
-        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
-            self.tallest_header = headers.last_header_hash();
-            self.headers = into_hashmap(headers.block_headers);
-        }
+        // END OF FIX
 
         self.request_headers(self.tallest_header)?;
 
