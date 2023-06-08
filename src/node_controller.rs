@@ -28,11 +28,16 @@ impl NodeController {
     ) -> Result<Self, io::Error> {
         let node_addresses = find_nodes()?;
         let mut nodes = Vec::new();
+        let mut peer_count = 0;
         for node_addr in node_addresses {
             match Node::try_from_addr(node_addr, writer_end.clone(), sender.clone()) {
                 Ok(node) => {
                     nodes.push(node);
                     // break; // uncomment this to use a single node as peer
+                    peer_count += 1;
+                    if peer_count == 8 {
+                        break;
+                    }
                 }
                 Err(..) => continue,
             }

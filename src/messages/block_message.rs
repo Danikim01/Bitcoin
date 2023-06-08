@@ -88,7 +88,7 @@ impl Block {
 
         match self.block_header.merkle_root_hash == root_hash.to_byte_array() {
             true => {
-                println!("Merkle root is valid!");
+                // println!("Merkle root is valid!");
                 Ok(())
             }
             false => {

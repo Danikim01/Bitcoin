@@ -8,6 +8,7 @@ use crate::messages::{
 use crate::node_controller::NodeController;
 use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -59,14 +60,24 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
+        let previous_block_count = self.blocks.len();
+
+        // validation does not yet include checks por UTXO spending, only checks proof of work
+        block.validate(&mut self.utxo_set)?;
+        self.blocks.insert(block.hash(), block);
+
+        if self.blocks.len() == previous_block_count {
+            return Ok(());
+        }
+
         // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
         // probably adding cur block to a vec of blocks pending validation
         if self.blocks.len() % 100 == 0 {
             let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
-            log(msg, QUIET);
+            // log(msg, QUIET);
         } else {
             let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
-            log(msg, VERBOSE);
+            // log(msg, VERBOSE);
             self.ui_sender
                 .send(GtkMessage::UpdateLabel((
                     "status_bar".to_string(),
@@ -74,18 +85,20 @@ impl NetworkController {
                 )))
                 .map_err(to_io_err)?;
         }
-
-        // validation does not yet include checks por UTXO spending, only checks proof of work
-        block.validate(&mut self.utxo_set)?;
-        self.blocks.insert(block.hash(), block);
-
-        // request headers
-        
-
         Ok(())
     }
 
     fn read_headers(&mut self, mut headers: Headers) -> io::Result<()> {
+        let previous_header_count = self.headers.len();
+
+        // store headers in hashmap
+        self.headers
+            .extend(into_hashmap(headers.block_headers.clone()));
+
+        if self.headers.len() == previous_header_count {
+            return Ok(());
+        }
+
         log(
             &format!(
                 "Received header. New header count: {:?}",
@@ -95,9 +108,14 @@ impl NetworkController {
         );
 
         // request more headers
-        self.tallest_header = headers.last_header_hash();
+        self.tallest_header = headers.last_header_hash(); // last to get doesn't have to be tallest -- check this
         if headers.is_paginated() {
-            self.request_headers(self.tallest_header)?;
+            // self.request_headers(self.tallest_header)?;
+
+            // MAKING THIS A RETURN MAKES IT SEQUENTIAL
+            // WE WONT GET ANY BLOCKS ANTY WE RECEIVE A PAGINATED
+            // HEADER RESPONSE -- NO BUENO
+            return self.request_headers(self.tallest_header);
         }
 
         // store headers in hashmap
@@ -107,7 +125,7 @@ impl NetworkController {
         // request blocks for headers after given date
         let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
         headers.trim_timestamp(init_tp_timestamp)?;
-        self.request_blocks(headers)?;
+        self.request_blocks()?;
         Ok(())
     }
 
@@ -118,16 +136,44 @@ impl NetworkController {
         Ok(())
     }
 
-    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
-        if headers.count == 0 {
+    fn request_blocks(&mut self) -> io::Result<()> {
+        // trim headers to only include headers after init_tp_timestamp
+        let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+        let mut headers_trim = self.headers.clone();
+        headers_trim = headers_trim
+            .into_iter()
+            .filter(|(_, v)| v.timestamp >= init_tp_timestamp)
+            .collect();
+
+        // now trim headers to only include the ones that are not in the blocks hashmap
+        headers_trim = headers_trim
+            .into_iter()
+            .filter(|(k, _)| !self.blocks.contains_key(k))
+            .collect();
+
+        // get all values from headers trim into a vec
+        let mut headers_trim_vec = Vec::new();
+        for header in headers_trim.values() {
+            headers_trim_vec.push(header.clone());
+        }
+
+        if headers_trim_vec.is_empty() {
+            println!("No blocks to request");
             return Ok(());
         }
-        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
+
+        // send block requests
+        let chunks = headers_trim_vec.chunks(16);
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_any(&get_data.serialize()?)?;
+            self.nodes.send_to_all(&get_data.serialize()?)?;
         }
-        log("Requesting blocks, sent GetData message.", VERBOSE);
+
+        let msg = &format!(
+            "Requesting {:?} blocks, sent GetData message.",
+            headers_trim.len()
+        ) as &str;
+        log(msg, VERBOSE);
         Ok(())
     }
 
@@ -143,7 +189,9 @@ impl NetworkController {
             self.tallest_header = headers.last_header_hash();
             self.headers = into_hashmap(headers.block_headers);
         }
+
         self.request_headers(self.tallest_header)?;
+
         Ok(())
     }
 }
