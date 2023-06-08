@@ -350,18 +350,34 @@ impl RawTransaction {
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
-        println!("read version: {}", version);
 
-        if version > 1 {
-            cursor.set_position(cursor.position() + 1);
+        let mut has_witness = false;
+
+        let mut tx_in_count = read_from_varint(cursor)?;
+        if tx_in_count == 0 {
+            let flag = u8::from_le_stream(cursor)?;
+            tx_in_count = read_from_varint(cursor)?;
+            has_witness = true;
         }
 
-        let tx_in_count = read_from_varint(cursor)?;
-        println!("read tx_in: {:?}", tx_in_count);
+        //let tx_in_count = read_from_varint(cursor)?;
         let tx_in = TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
 
         let tx_out_count = read_from_varint(cursor)?;
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
+
+        if has_witness == true {
+            let mut witnesses = Vec::new();
+            for _ in 0..tx_in_count {
+                let witness_len = read_from_varint(cursor)?;
+                for _ in 0..witness_len {
+                    let length = read_from_varint(cursor)?;
+                    let mut witness_data = vec![0u8; length as usize];
+                    cursor.read_exact(&mut witness_data).unwrap();
+                    witnesses.push(witness_data);
+                }
+            }
+        }
 
         let lock_time = u32::from_le_stream(cursor)?;
 
@@ -611,7 +627,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_transaction_read_balance() {
         // let transaction_bytes = b"020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500";
@@ -638,8 +653,56 @@ mod tests {
 
         let mut cursor: Cursor<&[u8]> = Cursor::new(transaction_bytes);
 
-        let transaction = RawTransaction::from_bytes(&mut cursor).unwrap();
-        let utxo = Utxo::_from_raw_transaction(&transaction).unwrap();
+        let version = u32::from_le_stream(&mut cursor).unwrap();
+        //assert!(version == 2);
+
+        let mut _empty_byte = [0u8; 1];
+        let mut _empty_byte2 = [0u8; 1];
+
+        cursor.read_exact(&mut _empty_byte); //marker
+        cursor.read_exact(&mut _empty_byte2); //flag
+        println!("marker: {:?}, flag: {:?}", _empty_byte, _empty_byte2);
+
+        assert!(_empty_byte[0] == 0);
+        assert!(_empty_byte2[0] == 1);
+        let tx_in_count = read_from_varint(&mut cursor).unwrap();
+
+        assert!(tx_in_count == 1);
+
+        let tx_in = TxInputType::TxInput(
+            TxInput::vec_from_bytes(&mut cursor, tx_in_count as usize).unwrap(),
+        );
+
+        let tx_out_count = read_from_varint(&mut cursor).unwrap();
+        println!("tx_out_count: {}", tx_out_count);
+        let tx_out = TxOutput::vec_from_bytes(&mut cursor, tx_out_count as usize).unwrap();
+        println!("tx_out: {:?}", tx_out);
+
+        let mut witnesses = Vec::new();
+        for _ in 0..tx_in_count {
+            let witness_len = read_from_varint(&mut cursor).unwrap(); //byte arrays
+            println!("witness_len: {}", witness_len);
+            for _ in 0..witness_len {
+                let length = read_from_varint(&mut cursor).unwrap();
+                println!("length: {}", length);
+                let mut witness_data = vec![0u8; length as usize];
+                cursor.read_exact(&mut witness_data).unwrap();
+                witnesses.push(witness_data);
+            }
+        }
+        println!("witnesses: {:?}", witnesses);
+        let lock_time = u32::from_le_stream(&mut cursor).unwrap();
+        println!("lock_time: {}", lock_time);
+        let raw_transaction = RawTransaction {
+            version,
+            tx_in_count,
+            tx_in,
+            tx_out_count,
+            tx_out,
+            lock_time,
+        };
+
+        let utxo = Utxo::_from_raw_transaction(&raw_transaction).unwrap();
 
         let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         let balance = utxo._get_wallet_balance(pk.to_vec()).unwrap();

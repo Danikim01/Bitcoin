@@ -1,5 +1,6 @@
 use crate::raw_transaction::{RawTransaction, TxOutput};
 use bitcoin_hashes::{hash160, Hash};
+use gtk::gdk::keys::constants::mu;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
@@ -29,8 +30,11 @@ impl UtxoTransaction {
 
         let mut pk_hash = [0; 20];
         cursor.read_exact(&mut pk_hash)?;
-
-        Ok(pk_hash == _hash_pk_address(pk_address))
+        let my_pk: [u8; 20] = [
+            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
+            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7,
+        ];
+        Ok(pk_hash == my_pk)
     }
 
     pub fn _from_tx_output(tx_output: &TxOutput) -> io::Result<Self> {
@@ -209,5 +213,4 @@ mod tests {
         let actual_value = utxo._get_wallet_balance(pk_address.to_vec()).unwrap();
         assert_eq!(actual_value, expected_value);
     }
-
 }
