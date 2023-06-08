@@ -61,6 +61,7 @@ pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
 
 pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
     let first_byte = u8::from_le_stream(cursor)?;
+
     match first_byte {
         0xff => Ok(u64::from_le_stream(cursor)?),
         0xfe => {

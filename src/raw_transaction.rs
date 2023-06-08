@@ -5,7 +5,7 @@ use crate::utility::double_hash;
 use crate::utxo::{Utxo, UtxoId};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::collections::HashMap;
-use std::io::{Error, Read, ErrorKind};
+use std::io::{Error, ErrorKind, Read};
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -140,10 +140,7 @@ fn read_height(cursor: &mut Cursor<&[u8]>) -> io::Result<u32> {
     let val = u8::from_le_stream(cursor)?;
     if val != 0x03 {
         let err_str = format!("Height unsupported: {}", val);
-        return Err(Error::new(
-            ErrorKind::Unsupported,
-            err_str.as_str(),
-        ));
+        return Err(Error::new(ErrorKind::Unsupported, err_str.as_str()));
     }
     let mut array = [0u8; 4];
     array[0] = u8::from_le_stream(cursor)?;
@@ -165,14 +162,14 @@ impl CoinBaseInput {
         let _hash = read_hash(cursor)?;
         let _index = u32::from_le_stream(cursor)?;
         let _script_bytes = read_from_varint(cursor)?;
-        let _height = match  read_height(cursor) {
+        let _height = match read_height(cursor) {
             Ok(height) => height,
             Err(err) => {
                 println!("Invalid height, script bytes was set to {}", _script_bytes);
                 Err(err)?
-            },
+            }
         };
-        
+
         let _coinbase_script = read_coinbase_script(cursor, (_script_bytes - 4) as usize)?;
         let _sequence = u32::from_le_stream(cursor)?;
 
@@ -353,8 +350,14 @@ impl RawTransaction {
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
+        println!("read version: {}", version);
+
+        if version > 1 {
+            cursor.set_position(cursor.position() + 1);
+        }
 
         let tx_in_count = read_from_varint(cursor)?;
+        println!("read tx_in: {:?}", tx_in_count);
         let tx_in = TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
 
         let tx_out_count = read_from_varint(cursor)?;
@@ -400,6 +403,7 @@ impl RawTransaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utxo;
     use std::fs;
 
     #[test]
@@ -521,7 +525,6 @@ mod tests {
                 Vec::new()
             }
         };
-        // let bytes: &[u8] = &fs::read("./tmp/block_message_payload.dat").unwrap();
 
         if !bytes.is_empty() {
             // create a cursor over the bytes
@@ -606,5 +609,42 @@ mod tests {
             // we compare the bytes
             assert_eq!(bytes[81..], serialized_txn_vec.concat());
         }
+    }
+
+
+    #[test]
+    fn test_transaction_read_balance() {
+        // let transaction_bytes = b"020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500";
+
+        let transaction_bytes = &[
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x12, 0x16, 0xd1, 0x0a, 0xe3, 0xaf, 0xe6,
+            0x11, 0x95, 0x29, 0xc0, 0xa0, 0x1a, 0xbe, 0x78, 0x33, 0x64, 0x1e, 0x0e, 0x9d, 0x37,
+            0xeb, 0x88, 0x0a, 0xe5, 0x54, 0x7c, 0xfb, 0x7c, 0x6c, 0x7b, 0xca, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0xfd, 0xff, 0xff, 0xff, 0x02, 0x46, 0xb3, 0x1b, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x19, 0x76, 0xa9, 0x14, 0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a,
+            0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, 0x88, 0xac, 0x73,
+            0x1f, 0x20, 0x01, 0x02, 0x00, 0x00, 0x00, 0x19, 0x76, 0xa9, 0x14, 0xd6, 0x17, 0x96,
+            0x6c, 0x3f, 0x29, 0xcf, 0xe5, 0x0f, 0x7d, 0x92, 0x78, 0xdd, 0x3e, 0x46, 0x0e, 0x3f,
+            0x08, 0x4b, 0x7b, 0x88, 0xac, 0x02, 0x47, 0x30, 0x44, 0x02, 0x20, 0x59, 0x57, 0x06,
+            0x81, 0xa7, 0x73, 0x74, 0x84, 0x25, 0xdd, 0xd5, 0x61, 0x56, 0xf6, 0xaf, 0x3a, 0x0a,
+            0x78, 0x1a, 0x33, 0xae, 0x3c, 0x42, 0xc7, 0x4f, 0xaf, 0xd6, 0xcc, 0x2b, 0xd0, 0xac,
+            0xbc, 0x02, 0x20, 0x0c, 0x45, 0x12, 0xc2, 0x50, 0xf8, 0x86, 0x53, 0xfa, 0xe4, 0xd7,
+            0x3e, 0x0c, 0xab, 0x41, 0x9f, 0xa2, 0xea, 0xd0, 0x1d, 0x6b, 0xa1, 0xc5, 0x4e, 0xde,
+            0xe6, 0x9e, 0x15, 0xc1, 0x61, 0x86, 0x38, 0x01, 0x21, 0x03, 0xe7, 0xd8, 0xe9, 0xb0,
+            0x95, 0x33, 0xae, 0x39, 0x0d, 0x0d, 0xb3, 0xad, 0x53, 0xcc, 0x05, 0x0a, 0x54, 0xf8,
+            0x9a, 0x98, 0x70, 0x94, 0xbf, 0xfa, 0xc2, 0x60, 0xf2, 0x59, 0x12, 0x88, 0x5b, 0x83,
+            0x4b, 0x2c, 0x25, 0x00,
+        ];
+
+        let mut cursor: Cursor<&[u8]> = Cursor::new(transaction_bytes);
+
+        let transaction = RawTransaction::from_bytes(&mut cursor).unwrap();
+        let utxo = Utxo::_from_raw_transaction(&transaction).unwrap();
+
+        let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        let balance = utxo._get_wallet_balance(pk.to_vec()).unwrap();
+
+        println!("balance: {}", balance);
+        assert!(balance > 0);
     }
 }

@@ -139,6 +139,7 @@ impl NetworkController {
         log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
+    
     pub fn start_sync(&mut self) -> io::Result<()> {
         self.ui_sender
             .send(GtkMessage::UpdateLabel((

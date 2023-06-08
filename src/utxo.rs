@@ -209,4 +209,5 @@ mod tests {
         let actual_value = utxo._get_wallet_balance(pk_address.to_vec()).unwrap();
         assert_eq!(actual_value, expected_value);
     }
+
 }
