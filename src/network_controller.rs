@@ -118,10 +118,6 @@ impl NetworkController {
             return self.request_headers(self.tallest_header);
         }
 
-        // store headers in hashmap
-        self.headers
-            .extend(into_hashmap(headers.block_headers.clone()));
-
         // request blocks for headers after given date
         let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
         headers.trim_timestamp(init_tp_timestamp)?;
