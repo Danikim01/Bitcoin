@@ -1,9 +1,9 @@
 use crate::messages::constants::commands::*;
+use crate::messages::constants::config::MAGIC;
 use crate::messages::constants::header_constants::*;
 use crate::messages::constants::messages::MAX_PAYLOAD_SIZE;
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
-use crate::messages::constants::config::MAGIC;
 
 #[derive(Debug, Clone)]
 pub struct MessageHeader {
@@ -73,8 +73,8 @@ impl MessageHeader {
         while magic_buffer != MAGIC {
             let _read = stream.read(&mut magic_buffer)?;
         }
-        
-        let mut header_buffer = [0_u8; HEADER_SIZE-START_STRING_SIZE];
+
+        let mut header_buffer = [0_u8; HEADER_SIZE - START_STRING_SIZE];
         let _read = stream.read(&mut header_buffer)?;
         MessageHeader::from_bytes(&header_buffer)
     }

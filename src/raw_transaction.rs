@@ -140,13 +140,15 @@ fn read_height(cursor: &mut Cursor<&[u8]>) -> io::Result<u32> {
     let val = u8::from_le_stream(cursor)?;
     if val != 0x03 {
         let err_str = format!("Height unsupported: {}", val);
+        println!("la altura es {}", val);
         return Err(Error::new(ErrorKind::Unsupported, err_str.as_str()));
     }
     let mut array = [0u8; 4];
     array[0] = u8::from_le_stream(cursor)?;
     array[1] = u8::from_le_stream(cursor)?;
     array[2] = u8::from_le_stream(cursor)?;
-
+    // let mut array = vec![0_u8; val as usize];
+    // cursor.read_exact(&mut array)?;
     Ok(u32::from_le_bytes(array))
 }
 
@@ -367,6 +369,7 @@ impl RawTransaction {
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
 
         if has_witness == true {
+            println!("es witness");
             let mut witnesses = Vec::new();
             for _ in 0..tx_in_count {
                 let witness_len = read_from_varint(cursor)?;
@@ -421,6 +424,66 @@ mod tests {
     use super::*;
     use crate::utxo;
     use std::fs;
+
+    #[test]
+    fn test_coinbase_input_deserialization() {
+        let raw_transaction_bytes: &[u8] = &[
+            0x01, 0x00, 0x00, 0x00, // version: 1
+            0x01, // tx_in_count: 1
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, // hash
+            0x1d, // script bytes - The height and coinbase script has 29 bytes.
+            0x03, 0x0f, 0x8d,
+            0x13, // height - 0x03-byte little-endian integer: 0x0f8d13 = 1281295
+            0x04, 0x9f, 0xaa, 0x80, 0x5a, 0x06, 0x35, 0x38, 0x70, 0x6f, 0x6f, 0x6c, 0x0c, 0x00,
+            0x01, 0x00, 0x00, 0xfe, 0x22, 0x03, 0x00, 0x00, 0x00, 0x00,
+            0x00, // coinbase script - Arbitrary data entered by the miner
+            0xff, 0xff, 0xff, 0xff, // sequence - End of this input
+            0x01, // tx_out_count - 1 transaction output
+            0x53, 0x41, 0xcb, 0x04, 0x00, 0x00, 0x00,
+            0x00, // value - Amount of the first output in little-endian integer
+            0x19, // script bytes - The pubkey script has 25 bytes
+            0x76, 0xa9, 0x14, 0xf1, 0x12, 0x98, 0xce, 0x77, 0x7c, 0xb5, 0xdb, 0x5c, 0x09, 0x25,
+            0x0c, 0xad, 0x4e, 0xb8, 0x56, 0xb1, 0xe3, 0x66, 0xef, 0x88,
+            0xac, // pubkey script - Represents the account address of the miner
+            0x00, 0x00, 0x00,
+            0x00, // lock_time - Block number or timestamp at which this transaction is unlocked
+        ];
+        let mut cursor = Cursor::new(raw_transaction_bytes);
+
+        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor).unwrap();
+
+        assert_eq!(coinbase_transaction.version, 1);
+        assert_eq!(coinbase_transaction.tx_in_count, 1);
+        if let TxInputType::CoinBaseInput(coinbase_input) = coinbase_transaction.tx_in {
+            assert_eq!(coinbase_input._hash, [0u8; 32]);
+            assert_eq!(coinbase_input._index, 0xffffffff);
+            assert_eq!(coinbase_input._script_bytes, 29);
+            assert_eq!(coinbase_input._height, 1281295);
+            assert_eq!(
+                coinbase_input._coinbase_script,
+                [
+                    0x04, 0x9f, 0xaa, 0x80, 0x5a, 0x06, 0x35, 0x38, 0x70, 0x6f, 0x6f, 0x6c, 0x0c,
+                    0x00, 0x01, 0x00, 0x00, 0xfe, 0x22, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00
+                ]
+            );
+            assert_eq!(coinbase_input._sequence, 0xffffffff);
+        } else {
+            panic!("Expected CoinBaseInput type for tx_in, found different variant.");
+        }
+        assert_eq!(coinbase_transaction.tx_out_count, 1);
+        assert_eq!(coinbase_transaction.tx_out[0].value, 80429395);
+        assert_eq!(coinbase_transaction.tx_out[0].pk_script_bytes, 25);
+        assert_eq!(
+            coinbase_transaction.tx_out[0].pk_script,
+            [
+                0x76, 0xa9, 0x14, 0xf1, 0x12, 0x98, 0xce, 0x77, 0x7c, 0xb5, 0xdb, 0x5c, 0x09, 0x25,
+                0x0c, 0xad, 0x4e, 0xb8, 0x56, 0xb1, 0xe3, 0x66, 0xef, 0x88, 0xac
+            ]
+        );
+        assert_eq!(coinbase_transaction.lock_time, 0);
+    }
 
     #[test]
     fn test_compactsize_serialization_u16() {
