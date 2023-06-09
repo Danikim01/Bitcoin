@@ -4,6 +4,7 @@ use gtk::gdk::keys::constants::mu;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
+use crate::utility::double_hash;
 
 fn _hash_pk_address(pk_address: Vec<u8>) -> [u8; 20] {
     hash160::Hash::hash(&pk_address).to_byte_array()
@@ -18,6 +19,20 @@ pub struct UtxoTransaction {
     _spent: bool,
 }
 
+pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> Vec<u8> {
+
+    let version_prefix: [u8; 1] = [0x6f];
+
+    let hash = double_hash(&[&version_prefix[..], &p2pkh[..]].concat());
+
+    let checksum = &hash[..4];
+
+    let input = [&version_prefix[..], &p2pkh[..], checksum].concat();
+
+     bs58::encode(input).into_vec()
+
+}
+
 impl UtxoTransaction {
     fn _has_wallet(&self, pk_address: Vec<u8>) -> io::Result<bool> {
         // iterate lock one byte at a time until 0x14 is found
@@ -30,11 +45,8 @@ impl UtxoTransaction {
 
         let mut pk_hash = [0; 20];
         cursor.read_exact(&mut pk_hash)?;
-        let my_pk: [u8; 20] = [
-            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
-            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7,
-        ];
-        Ok(pk_hash == my_pk)
+
+        Ok(p2pkh_to_address(pk_hash) == pk_address)
     }
 
     pub fn _from_tx_output(tx_output: &TxOutput) -> io::Result<Self> {
@@ -129,8 +141,7 @@ mod tests {
     fn test_utxo_transaction_get_pk_address_balance() {
         let lock_bytes: &[u8] = &[
             0x14, // push 20 bytes as data
-            0x93, 0xce, 0x48, 0x57, 0x0b, 0x55, 0xc4, 0x2c, 0x2a, 0xf8, 0x16, 0xae, 0xab, 0xa0,
-            0x6c, 0xfe, 0xe1, 0x22, 0x4f, 0xae, // Public key hash
+            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
         ];
 
         let expected_value = 100;
@@ -141,11 +152,8 @@ mod tests {
             _spent: false,
         };
 
-        let pk_address: &[u8] = &[
-            0x02, 0xb4, 0x63, 0x2d, 0x08, 0x48, 0x5f, 0xf1, 0xdf, 0x2d, 0xb5, 0x5b, 0x9d, 0xaf,
-            0xd2, 0x33, 0x47, 0xd1, 0xc4, 0x7a, 0x45, 0x70, 0x72, 0xa1, 0xe8, 0x7b, 0xe2, 0x68,
-            0x96, 0x54, 0x9a, 0x87, 0x37,
-        ];
+
+        let pk_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".as_bytes();
 
         let actual_value = utxo_transaction
             ._get_wallet_balance(pk_address.to_vec())
@@ -157,8 +165,7 @@ mod tests {
     fn test_utxo_get_pk_address_balance() {
         let lock_bytes: &[u8] = &[
             0x14, // push 20 bytes as data
-            0x93, 0xce, 0x48, 0x57, 0x0b, 0x55, 0xc4, 0x2c, 0x2a, 0xf8, 0x16, 0xae, 0xab, 0xa0,
-            0x6c, 0xfe, 0xe1, 0x22, 0x4f, 0xae, // Public key hash
+            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
         ];
 
         let lock_other_bytes: &[u8] = &[
@@ -204,11 +211,7 @@ mod tests {
             ],
         };
 
-        let pk_address: &[u8] = &[
-            0x02, 0xb4, 0x63, 0x2d, 0x08, 0x48, 0x5f, 0xf1, 0xdf, 0x2d, 0xb5, 0x5b, 0x9d, 0xaf,
-            0xd2, 0x33, 0x47, 0xd1, 0xc4, 0x7a, 0x45, 0x70, 0x72, 0xa1, 0xe8, 0x7b, 0xe2, 0x68,
-            0x96, 0x54, 0x9a, 0x87, 0x37,
-        ];
+        let pk_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".as_bytes();
 
         let actual_value = utxo._get_wallet_balance(pk_address.to_vec()).unwrap();
         assert_eq!(actual_value, expected_value);
