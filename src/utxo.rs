@@ -1,10 +1,10 @@
 use crate::raw_transaction::{RawTransaction, TxOutput};
-use bitcoin_hashes::{hash160, Hash};
+use crate::utility::double_hash;
+use bitcoin_hashes::{hash160, sha256, Hash};
 use gtk::gdk::keys::constants::mu;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
-use crate::utility::double_hash;
 
 fn _hash_pk_address(pk_address: Vec<u8>) -> [u8; 20] {
     hash160::Hash::hash(&pk_address).to_byte_array()
@@ -20,7 +20,6 @@ pub struct UtxoTransaction {
 }
 
 pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> Vec<u8> {
-
     let version_prefix: [u8; 1] = [0x6f];
 
     let hash = double_hash(&[&version_prefix[..], &p2pkh[..]].concat());
@@ -29,8 +28,7 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> Vec<u8> {
 
     let input = [&version_prefix[..], &p2pkh[..], checksum].concat();
 
-     bs58::encode(input).into_vec()
-
+    bs58::encode(input).into_vec()
 }
 
 impl UtxoTransaction {
@@ -141,7 +139,8 @@ mod tests {
     fn test_utxo_transaction_get_pk_address_balance() {
         let lock_bytes: &[u8] = &[
             0x14, // push 20 bytes as data
-            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
+            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
+            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
         ];
 
         let expected_value = 100;
@@ -151,7 +150,6 @@ mod tests {
             _lock: lock_bytes.to_vec(),
             _spent: false,
         };
-
 
         let pk_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".as_bytes();
 
@@ -165,7 +163,8 @@ mod tests {
     fn test_utxo_get_pk_address_balance() {
         let lock_bytes: &[u8] = &[
             0x14, // push 20 bytes as data
-            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
+            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
+            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
         ];
 
         let lock_other_bytes: &[u8] = &[

@@ -3,11 +3,11 @@ use crate::messages::utility::{read_from_varint, read_hash, StreamRead};
 
 use crate::utility::double_hash;
 use crate::utxo::{Utxo, UtxoId};
+use bitcoin_hashes::hash160;
 use bitcoin_hashes::{ripemd160, sha256, Hash};
+use bs58;
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind, Read};
-use bitcoin_hashes::hash160;
-use bs58;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -114,7 +114,7 @@ impl Outpoint {
 }
 
 #[derive(Debug, Clone)]
-enum TxInputType {
+pub enum TxInputType {
     CoinBaseInput(CoinBaseInput),
     TxInput(Vec<TxInput>),
 }
@@ -280,7 +280,7 @@ impl TxOutput {
 pub struct RawTransaction {
     version: u32,
     tx_in_count: u64,
-    tx_in: TxInputType,
+    pub tx_in: TxInputType,
     tx_out_count: u64,
     pub tx_out: Vec<TxOutput>,
     pub lock_time: u32,
@@ -347,6 +347,7 @@ impl RawTransaction {
         // self.validate_inputs(utxo_set)?; // unused function as of now
 
         // generate new utxos from the outputs
+
         self.generate_utxo(utxo_set)?;
 
         Ok(())
@@ -378,7 +379,7 @@ impl RawTransaction {
                 for _ in 0..witness_len {
                     let length = read_from_varint(cursor)?;
                     let mut witness_data = vec![0u8; length as usize];
-                    cursor.read_exact(&mut witness_data).unwrap();
+                    cursor.read_exact(&mut witness_data)?;
                     witnesses.push(witness_data);
                 }
             }
@@ -424,9 +425,9 @@ impl RawTransaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utility::{decode_hex, encode_hex};
     use crate::utxo;
     use std::fs;
-    use crate::utility::{decode_hex, encode_hex};
 
     #[test]
     fn test_coinbase_input_deserialization() {
@@ -727,7 +728,6 @@ mod tests {
 
         cursor.read_exact(&mut _empty_byte); //marker
         cursor.read_exact(&mut _empty_byte2); //flag
-        println!("marker: {:?}, flag: {:?}", _empty_byte, _empty_byte2);
 
         assert!(_empty_byte[0] == 0);
         assert!(_empty_byte2[0] == 1);
@@ -740,25 +740,19 @@ mod tests {
         );
 
         let tx_out_count = read_from_varint(&mut cursor).unwrap();
-        println!("tx_out_count: {}", tx_out_count);
         let tx_out = TxOutput::vec_from_bytes(&mut cursor, tx_out_count as usize).unwrap();
-        println!("tx_out: {:?}", tx_out);
 
         let mut witnesses = Vec::new();
         for _ in 0..tx_in_count {
             let witness_len = read_from_varint(&mut cursor).unwrap(); //byte arrays
-            println!("witness_len: {}", witness_len);
             for _ in 0..witness_len {
                 let length = read_from_varint(&mut cursor).unwrap();
-                println!("length: {}", length);
                 let mut witness_data = vec![0u8; length as usize];
                 cursor.read_exact(&mut witness_data).unwrap();
                 witnesses.push(witness_data);
             }
         }
-        println!("witnesses: {:?}", witnesses);
         let lock_time = u32::from_le_stream(&mut cursor).unwrap();
-        println!("lock_time: {}", lock_time);
         let raw_transaction = RawTransaction {
             version,
             tx_in_count,
@@ -800,6 +794,5 @@ mod tests {
 
         let expected_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         assert_eq!(address, expected_address);
-
     }
 }

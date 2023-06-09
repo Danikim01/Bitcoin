@@ -6,14 +6,16 @@ use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node_controller::NodeController;
-use crate::utility::{into_hashmap, to_io_err};
+use crate::utility::{double_hash, into_hashmap, to_io_err};
+use crate::utxo::Utxo;
 use crate::utxo::UtxoSet;
+use bitcoin_hashes::{sha256, Hash};
+use gtk::gio::Resolver;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
-
 // gtk imports
 use crate::interface::{GtkMessage, ModelRequest};
 use gtk::glib::Sender;
@@ -44,16 +46,36 @@ impl NetworkController {
         })
     }
 
+    fn reverse_byte_order(txid: &str) -> String {
+        let mut reversed = String::new();
+        let mut i = txid.len();
+        while i >= 2 {
+            reversed.push_str(&txid[i - 2..i]);
+            i -= 2;
+        }
+        reversed
+    }
+
     // HARDCODED NEEDS TO BE DYNAMIC
     fn _read_wallet_balance(&self) -> io::Result<i64> {
         let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         println!("Wallet address: {:?}", pk);
 
+        let my_txid = "109b232e4995fb6f60e2b188104fac4e527edbbc138a8c78ed7354a9a1681488";
+        let reverse_txid = Self::reverse_byte_order(my_txid);
+
+        let byte_array: &[u8] = &[
+            0x88, 0x14, 0x68, 0xa1, 0xa9, 0x54, 0x73, 0xed, 0x78, 0x8c, 0x8a, 0x13, 0xbc, 0xdb,
+            0x7e, 0x52, 0x4e, 0xac, 0x4f, 0x10, 0x88, 0xb1, 0xe2, 0x60, 0x6f, 0xfb, 0x95, 0x49,
+            0x2e, 0x23, 0x9b, 0x10,
+        ];
+        let hash = sha256::Hash::hash(my_txid.as_bytes());
+        println!("Hash: {:?}", hash);
+
         let mut balance = 0;
         for utxo in self.utxo_set.values() {
             balance += utxo._get_wallet_balance(pk.to_vec())?;
         }
-
         println!("Wallet balance: {:?}", balance);
 
         Ok(balance + 518)
@@ -61,6 +83,20 @@ impl NetworkController {
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
         let previous_block_count = self.blocks.len();
+        let my_txid_array: &[u8] = &[
+            0x88, 0x14, 0x68, 0xa1, 0xa9, 0x54, 0x73, 0xed, 0x78, 0x8c, 0x8a, 0x13, 0xbc, 0xdb,
+            0x7e, 0x52, 0x4e, 0xac, 0x4f, 0x10, 0x88, 0xb1, 0xe2, 0x60, 0x6f, 0xfb, 0x95, 0x49,
+            0x2e, 0x23, 0x9b, 0x10,
+        ];
+
+        for transaction in &block.txns {
+            let utxo = Utxo::_from_raw_transaction(&transaction)?;
+            let utxo_id = double_hash(&transaction.serialize()).to_byte_array();
+            if my_txid_array == utxo_id {
+                println!("SON IGUALEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEES");
+            }
+            self.utxo_set.insert(utxo_id, utxo);
+        }
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
@@ -139,7 +175,7 @@ impl NetworkController {
         log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
-    
+
     pub fn start_sync(&mut self) -> io::Result<()> {
         self.ui_sender
             .send(GtkMessage::UpdateLabel((
