@@ -426,6 +426,7 @@ mod tests {
     use super::*;
     use crate::utxo;
     use std::fs;
+    use crate::utility::{decode_hex, encode_hex};
 
     #[test]
     fn test_coinbase_input_deserialization() {
@@ -778,7 +779,8 @@ mod tests {
 
     #[test]
     fn test_pk_2_address() {
-        let pk_bytes = [0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7];
+        let pk = "c9bc003bf72ebdc53a9572f7ea792ef49a2858d7";
+        let pk_bytes = decode_hex(pk).unwrap();
 
         // 1. add address version byte
         let version_prefix: [u8; 1] = [0x6f];
@@ -788,7 +790,7 @@ mod tests {
 
         // 3. take first 4 bytes of hash, they are the checksum
         let checksum = &hash[..4];
-        //assert_eq!(encode_hex(checksum), "8fc12f84");
+        assert_eq!(encode_hex(checksum), "8fc12f84");
 
         // 4. append checksum to copy (version+hash+checksum)
         let input = [&version_prefix[..], &pk_bytes[..], checksum].concat();
