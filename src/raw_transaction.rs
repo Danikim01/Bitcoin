@@ -6,6 +6,8 @@ use crate::utxo::{Utxo, UtxoId};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind, Read};
+use bitcoin_hashes::hash160;
+use bs58;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -772,5 +774,30 @@ mod tests {
 
         println!("balance: {}", balance);
         assert!(balance > 0);
+    }
+
+    #[test]
+    fn test_pk_2_address() {
+        let pk_bytes = [0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7];
+
+        // 1. add address version byte
+        let version_prefix: [u8; 1] = [0x6f];
+
+        // 2. create copy of version+hash then hash it twice with sha256
+        let hash = double_hash(&[&version_prefix[..], &pk_bytes[..]].concat());
+
+        // 3. take first 4 bytes of hash, they are the checksum
+        let checksum = &hash[..4];
+        //assert_eq!(encode_hex(checksum), "8fc12f84");
+
+        // 4. append checksum to copy (version+hash+checksum)
+        let input = [&version_prefix[..], &pk_bytes[..], checksum].concat();
+
+        //    then base58 encode it
+        let address = bs58::encode(input).into_string();
+
+        let expected_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        assert_eq!(address, expected_address);
+
     }
 }
