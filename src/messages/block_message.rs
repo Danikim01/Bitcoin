@@ -7,9 +7,13 @@ use crate::utxo::{Utxo, UtxoId, UtxoSet};
 use bitcoin_hashes::{sha256, Hash};
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
-use std::thread;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use crate::utility::to_io_err;
 
 use super::Message;
+
+pub type BlockSet = HashMap<HashId, Block>;
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -133,18 +137,58 @@ impl Block {
         }
     }
 
-    pub fn save_to_file(&self) -> io::Result<()> {
-        let file_name = format!("block_{}.dat", encode_hex(&self.hash()));
-        let path = format!("tmp/blocks/{}", file_name);
+    pub fn all_from_file(file_name: &str) -> io::Result<BlockSet> {
+        let mut block_set: BlockSet = HashMap::new();
+
+        match std::fs::read(file_name) {
+            Ok(bytes) => {
+                // create cursor to read bytes
+                let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
+
+                let file_size = bytes.len() as u64;
+                while !cursor.position() < file_size {
+                    // read block size
+                    let block_size = read_from_varint(&mut cursor)?;
+
+                    // create buffer of block size
+                    let mut block_bytes = vec![0; block_size as usize];
+
+                    // read block bytes
+                    cursor.read_exact(&mut block_bytes)?;
+
+                    // deserialize block
+                    let block_msg = Block::deserialize(&block_bytes)?;
+
+                    if let Message::Block(block) = block_msg {
+                        block_set.insert(block.hash(), block);
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        }
+
+        Ok(block_set)
+    }
+
+    pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(file_name)
+            .map_err(to_io_err)?;
+
         let bytes = self.serialize()?;
-        std::fs::write(path, bytes)?;
+        let msg_len = to_compact_size_bytes(bytes.len() as u64);
+        let data = [msg_len, bytes].concat();
+
+        file.write_all(&data)?;
         Ok(())
     }
 
     pub fn get_days_old(&self) -> u64 {
         let current_time = Utc::now().timestamp();
         let block_time = self.block_header.timestamp as i64;
-        let age = (current_time - block_time) / 86400 ;
+        let age = (current_time - block_time) / 86400;
         age as u64
     }
 }

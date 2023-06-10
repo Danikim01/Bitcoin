@@ -3,15 +3,12 @@ use crate::logger::log;
 use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
+    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::utility::{double_hash, encode_hex, into_hashmap, to_io_err};
-use crate::utxo::Utxo;
 use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
-use gtk::gio::Resolver;
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -25,7 +22,7 @@ use std::thread;
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
-    blocks: HashMap<HashId, Block>,
+    blocks: BlockSet,
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
@@ -69,30 +66,20 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
+        if self.blocks.contains_key(&block.hash()) {
+            return Ok(());
+        }
+
         let ui_msg = format!("Reading blocks, {:?} days behind", block.get_days_old());
         self.ui_sender
-            .send(GtkMessage::UpdateLabel((
-                "status_bar".to_string(),
-                ui_msg,
-            )))
+            .send(GtkMessage::UpdateLabel(("status_bar".to_string(), ui_msg)))
             .map_err(to_io_err)?;
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
 
-        Ok(())
-    }
-
-
-    fn read_block_from_node(&mut self, block: Block) -> io::Result<()> {
-        self.read_block(block.clone())?;
-
-        // check if block is on disk, if not save it
-        let block_header = encode_hex(&block.block_header.hash());
-        let path = format!("tmp/blocks/block_{}.dat", block_header);
-        if std::fs::read(path).is_err() {
-            block.save_to_file()?;
-        }
+        block.save_to_file("tmp/blocks_backup.dat")?;
+        self.blocks.insert(block.hash(), block);
 
         Ok(())
     }
@@ -136,30 +123,12 @@ impl NetworkController {
         Ok(())
     }
 
-    /// attemps to read blocks from file, returning a vector of headers that were not found on disk
-    fn try_read_blocks_from_file(&mut self, headers: Headers) -> io::Result<Vec<BlockHeader>> {
-        // try to get blocks from disk first
-        let mut non_disk_blocks: Vec<BlockHeader> = Vec::new();
-        for header in headers.block_headers {
-            let file_name = format!("block_{}.dat", encode_hex(&header.hash()));
-            if let Ok(block) = Block::from_file(file_name) {
-                self.read_block(block)?;
-            } else {
-                non_disk_blocks.push(header);
-            }
-        }
-        Ok(non_disk_blocks)
-    }
-
     fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
         if headers.count == 0 {
             return Ok(());
         }
 
-        let non_disk_blocks = self.try_read_blocks_from_file(headers.clone())?;
-
-        // blocks not found on disk are requested to nodes
-        let chunks = non_disk_blocks.chunks(20); // request 20 blocks at a time
+        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
             self.nodes.send_to_any(&get_data.serialize()?)?;
@@ -176,14 +145,30 @@ impl NetworkController {
             )))
             .map_err(to_io_err)?;
 
-        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
-            let last_header_hash = headers.last_header_hash();
-            self.read_headers(headers)?;
-            self.request_headers(last_header_hash)?;
-        } else {
-            self.request_headers(self.tallest_header)?;
+        // first read blocks
+        if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
+            self.blocks = blocks;
         }
 
+        // check what block are missing from the headers backup file
+        let mut needed_blocks: Vec<BlockHeader> = vec![];
+        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
+            self.tallest_header = headers.last_header_hash();
+
+            for header in headers.block_headers.clone() {
+                if !self.blocks.contains_key(&header.hash()) {
+                    needed_blocks.push(header);
+                }
+            }
+
+            self.headers.extend(into_hashmap(headers.block_headers));
+        }
+
+        // if needed_blocks.len() > 0 {
+        //     self.request_blocks(Headers::from_block_headers(needed_blocks))?;
+        // }
+
+        self.request_headers(self.tallest_header)?;
         Ok(())
     }
 }
@@ -239,7 +224,7 @@ impl OuterNetworkController {
                     }
                     Message::Block(block) => {
                         // println!("Got lock on node receiver : read block");
-                        t_inner.lock().map_err(to_io_err)?.read_block_from_node(block)
+                        t_inner.lock().map_err(to_io_err)?.read_block(block)
                     }
                     Message::Failure() => {
                         // println!("Got lock on node receiver : read failure");

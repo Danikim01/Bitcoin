@@ -59,6 +59,13 @@ impl Headers {
         }
     }
 
+    pub fn from_block_headers(block_headers: Vec<BlockHeader>) -> Self {
+        Self {
+            count: block_headers.len(),
+            block_headers,
+        }
+    }
+
     pub fn _save_to_file(&self, file_name: &str) -> io::Result<()> {
         let headers_bytes = self.serialize()?;
         let mut save_stream = File::create(file_name)?;
