@@ -218,8 +218,9 @@ impl OuterNetworkController {
                 let t_inner = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
                     ModelRequest::GetWalletBalance => {
-                        println!("Received request for wallet balance");
+                        // println!("Received request for wallet balance");
                         let inner_lock = t_inner.lock().map_err(to_io_err)?;
+                        // println!("Got lock on ui receiver");
                         let val = inner_lock._read_wallet_balance()?;
                         inner_lock
                             .ui_sender
@@ -230,6 +231,7 @@ impl OuterNetworkController {
                             .map_err(to_io_err)
                     }
                 }?;
+                // println!("Freeing lock on ui receiver");
             }
         });
         Ok(())
@@ -242,12 +244,15 @@ impl OuterNetworkController {
                 let t_inner = inner.clone();
                 match node_receiver.recv().map_err(to_io_err)? {
                     Message::Headers(headers) => {
+                        // println!("Got lock on node receiver : read headers");
                         t_inner.lock().map_err(to_io_err)?.read_headers(headers)
                     }
                     Message::Block(block) => {
+                        // println!("Got lock on node receiver : read block");
                         t_inner.lock().map_err(to_io_err)?.read_block(block)
                     },
                     Message::Failure() => {
+                        // println!("Got lock on node receiver : read failure");
                         println!("Node is notifying me of a failure, should resend last request");
                         // aca deberiamos recibir el mensaje que fallo, y volver a enviarlo
                         Ok(())
@@ -257,6 +262,7 @@ impl OuterNetworkController {
                         "Received unsupported message",
                     )),
                 }?;
+                // println!("Freeing lock on node receiver");
             }
         });
         Ok(())

@@ -685,6 +685,31 @@ mod tests {
     }
 
     #[test]
+    fn test_pk_2_address() {
+        let pk = "c9bc003bf72ebdc53a9572f7ea792ef49a2858d7";
+        let pk_bytes = decode_hex(pk).unwrap();
+
+        // 1. add address version byte
+        let version_prefix: [u8; 1] = [0x6f];
+
+        // 2. create copy of version+hash then hash it twice with sha256
+        let hash = double_hash(&[&version_prefix[..], &pk_bytes[..]].concat());
+
+        // 3. take first 4 bytes of hash, they are the checksum
+        let checksum = &hash[..4];
+        assert_eq!(encode_hex(checksum), "8fc12f84");
+
+        // 4. append checksum to copy (version+hash+checksum)
+        let input = [&version_prefix[..], &pk_bytes[..], checksum].concat();
+
+        //    then base58 encode it
+        let address = bs58::encode(input).into_string();
+
+        let expected_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        assert_eq!(address, expected_address);
+    }
+
+    #[test]
     fn test_transaction_read_balance() {
         let transaction_bytes = &[
             0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x12, 0x16, 0xd1, 0x0a, 0xe3, 0xaf, 0xe6,
@@ -719,28 +744,4 @@ mod tests {
         assert!(balance > 0);
     }
 
-    #[test]
-    fn test_pk_2_address() {
-        let pk = "c9bc003bf72ebdc53a9572f7ea792ef49a2858d7";
-        let pk_bytes = decode_hex(pk).unwrap();
-
-        // 1. add address version byte
-        let version_prefix: [u8; 1] = [0x6f];
-
-        // 2. create copy of version+hash then hash it twice with sha256
-        let hash = double_hash(&[&version_prefix[..], &pk_bytes[..]].concat());
-
-        // 3. take first 4 bytes of hash, they are the checksum
-        let checksum = &hash[..4];
-        assert_eq!(encode_hex(checksum), "8fc12f84");
-
-        // 4. append checksum to copy (version+hash+checksum)
-        let input = [&version_prefix[..], &pk_bytes[..], checksum].concat();
-
-        //    then base58 encode it
-        let address = bs58::encode(input).into_string();
-
-        let expected_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-        assert_eq!(address, expected_address);
-    }
 }
