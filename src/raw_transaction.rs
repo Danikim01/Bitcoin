@@ -1,5 +1,5 @@
 use crate::io::{self, Cursor};
-use crate::messages::utility::{read_from_varint, read_hash, StreamRead};
+use crate::messages::utility::{read_from_varint, read_hash, StreamRead, to_compact_size_bytes};
 
 use crate::utility::double_hash;
 use crate::utxo::{Utxo, UtxoId, UtxoSet};
@@ -15,24 +15,7 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
     Ok(array)
 }
 
-// https://developer.bitcoin.org/reference/transactions.html#compact_size-unsigned-integers
-fn to_compact_size_bytes(compact_size: u64) -> Vec<u8> {
-    let mut bytes: Vec<u8> = vec![];
-    if compact_size <= 252 {
-        bytes.extend(compact_size.to_le_bytes()[..1].iter());
-    } else if compact_size <= 0xffff {
-        bytes.push(0xfd);
-        bytes.extend(compact_size.to_le_bytes()[..2].iter());
-    } else if compact_size <= 0xffffffff {
-        bytes.push(0xfe);
-        bytes.extend(compact_size.to_le_bytes()[..4].iter());
-    } else {
-        bytes.push(0xff);
-        bytes.extend(compact_size.to_le_bytes()[..8].iter());
-    }
 
-    bytes
-}
 
 #[derive(Debug, Clone)]
 pub struct TxInput {

@@ -2,10 +2,12 @@ use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::double_hash;
+use crate::utility::{double_hash, encode_hex};
 use crate::utxo::{Utxo, UtxoId, UtxoSet};
 use bitcoin_hashes::{sha256, Hash};
+use chrono::{Duration, Utc};
 use std::collections::HashMap;
+use std::thread;
 
 use super::Message;
 
@@ -19,7 +21,19 @@ pub struct Block {
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl Serialize for Block {
     fn serialize(&self) -> io::Result<Vec<u8>> {
-        Ok(vec![])
+        let mut bytes: Vec<u8> = vec![];
+
+        let header_bytes = self.block_header.serialize();
+        bytes.extend(header_bytes);
+        let txn_count_bytes = to_compact_size_bytes(self.txn_count as u64);
+        bytes.extend(txn_count_bytes);
+
+        for txn in self.txns.iter() {
+            let txn_bytes = txn.serialize();
+            bytes.extend(txn_bytes);
+        }
+
+        Ok(bytes)
     }
 
     fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
@@ -98,6 +112,40 @@ impl Block {
         *utxo_set = utxo_set_snapshot;
 
         Ok(())
+    }
+
+    pub fn from_file(file_name: String) -> io::Result<Self> {
+        let path = format!("tmp/blocks/{}", file_name);
+        match std::fs::read(path) {
+            Ok(bytes) => {
+                let message = Block::deserialize(&bytes)?;
+                if let Message::Block(block) = message {
+                    Ok(block)
+                } else {
+                    println!("found block file, but failed to deserialize");
+                    Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "Invalid block message",
+                    ))
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn save_to_file(&self) -> io::Result<()> {
+        let file_name = format!("block_{}.dat", encode_hex(&self.hash()));
+        let path = format!("tmp/blocks/{}", file_name);
+        let bytes = self.serialize()?;
+        std::fs::write(path, bytes)?;
+        Ok(())
+    }
+
+    pub fn get_days_old(&self) -> u64 {
+        let current_time = Utc::now().timestamp();
+        let block_time = self.block_header.timestamp as i64;
+        let age = (current_time - block_time) / 86400 ;
+        age as u64
     }
 }
 

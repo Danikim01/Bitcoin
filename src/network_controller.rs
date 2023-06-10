@@ -6,7 +6,7 @@ use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node_controller::NodeController;
-use crate::utility::{double_hash, into_hashmap, to_io_err};
+use crate::utility::{double_hash, encode_hex, into_hashmap, to_io_err};
 use crate::utxo::Utxo;
 use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
@@ -69,34 +69,27 @@ impl NetworkController {
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
-        println!("Reading block: {:?}", block.block_header.timestamp);
-        let previous_block_count = self.blocks.len();
+        let ui_msg = format!("Reading blocks, {:?} days behind", block.get_days_old());
+        self.ui_sender
+            .send(GtkMessage::UpdateLabel((
+                "status_bar".to_string(),
+                ui_msg,
+            )))
+            .map_err(to_io_err)?;
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
 
         // self.blocks.insert(block.hash(), block);
-        println!("New utxo set size: {:?}", self.utxo_set.len());
+        // println!("New utxo set size: {:?}", self.utxo_set.len());
 
-        if self.blocks.len() == previous_block_count {
-            return Ok(());
+        // check if block is on disk, if not save it
+        let block_header = encode_hex(&block.block_header.hash());
+        let path = format!("tmp/blocks/block_{}.dat", block_header);
+        if std::fs::read(path).is_err() {
+            block.save_to_file()?;
         }
 
-        // if prev_block_hash points to unvalidated block, validation should wait for the prev block,
-        // probably adding cur block to a vec of blocks pending validation
-        if self.blocks.len() % 100 == 0 {
-            let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
-            // log(msg, QUIET);
-        } else {
-            let msg = &format!("Received block. New block count: {:?}", self.blocks.len()) as &str;
-            // log(msg, VERBOSE);
-            self.ui_sender
-                .send(GtkMessage::UpdateLabel((
-                    "status_bar".to_string(),
-                    msg.to_string(),
-                )))
-                .map_err(to_io_err)?;
-        }
         Ok(())
     }
 
@@ -143,7 +136,20 @@ impl NetworkController {
         if headers.count == 0 {
             return Ok(());
         }
-        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
+
+        // try to get blocks from disk first
+        let mut non_disk_blocks: Vec<BlockHeader> = Vec::new();
+        for header in headers.block_headers {
+            let file_name = format!("block_{}.dat", encode_hex(&header.hash()));
+            if let Ok(block) = Block::from_file(file_name) {
+                self.read_block(block)?;
+            } else {
+                non_disk_blocks.push(header);
+            }
+        }
+
+        // blocks not found on disk are requested to nodes
+        let chunks = non_disk_blocks.chunks(20); // request 20 blocks at a time
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
             self.nodes.send_to_any(&get_data.serialize()?)?;
