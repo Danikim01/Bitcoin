@@ -136,11 +136,8 @@ impl NetworkController {
         Ok(())
     }
 
-    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
-        if headers.count == 0 {
-            return Ok(());
-        }
-
+    /// attemps to read blocks from file, returning a vector of headers that were not found on disk
+    fn try_read_blocks_from_file(&mut self, headers: Headers) -> io::Result<Vec<BlockHeader>> {
         // try to get blocks from disk first
         let mut non_disk_blocks: Vec<BlockHeader> = Vec::new();
         for header in headers.block_headers {
@@ -151,6 +148,15 @@ impl NetworkController {
                 non_disk_blocks.push(header);
             }
         }
+        Ok(non_disk_blocks)
+    }
+
+    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
+        if headers.count == 0 {
+            return Ok(());
+        }
+
+        let non_disk_blocks = self.try_read_blocks_from_file(headers.clone())?;
 
         // blocks not found on disk are requested to nodes
         let chunks = non_disk_blocks.chunks(20); // request 20 blocks at a time
