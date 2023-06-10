@@ -80,8 +80,12 @@ impl NetworkController {
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
 
-        // self.blocks.insert(block.hash(), block);
-        // println!("New utxo set size: {:?}", self.utxo_set.len());
+        Ok(())
+    }
+
+
+    fn read_block_from_node(&mut self, block: Block) -> io::Result<()> {
+        self.read_block(block.clone())?;
 
         // check if block is on disk, if not save it
         let block_header = encode_hex(&block.block_header.hash());
@@ -229,7 +233,7 @@ impl OuterNetworkController {
                     }
                     Message::Block(block) => {
                         // println!("Got lock on node receiver : read block");
-                        t_inner.lock().map_err(to_io_err)?.read_block(block)
+                        t_inner.lock().map_err(to_io_err)?.read_block_from_node(block)
                     }
                     Message::Failure() => {
                         // println!("Got lock on node receiver : read failure");
