@@ -51,7 +51,7 @@ impl NetworkController {
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
         let mut balance = 0;
-        
+
         match self.utxo_set.get(address) {
             Some(utxos) => {
                 for (_, utxo) in utxos.into_iter() {
@@ -161,38 +161,12 @@ impl NetworkController {
             .map_err(to_io_err)?;
 
         if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
-            self.tallest_header = headers.last_header_hash();
-            self.headers = into_hashmap(headers.block_headers);
+            let last_header_hash = headers.last_header_hash();
+            self.read_headers(headers)?;
+            self.request_headers(last_header_hash)?;
+        } else {
+            self.request_headers(self.tallest_header)?;
         }
-
-        // START OF FIX
-        let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-        let mut headers_trim = self.headers.clone();
-        headers_trim = headers_trim
-            .into_iter()
-            .filter(|(_, v)| v.timestamp >= init_tp_timestamp)
-            .collect();
-
-        // now trim headers to only include the ones that are not in the blocks hashmap
-        headers_trim = headers_trim
-            .into_iter()
-            .filter(|(k, _)| !self.blocks.contains_key(k))
-            .collect();
-
-        // get all values from headers trim into a vec
-        let mut headers_trim_vec = Vec::new();
-        for header in headers_trim.values() {
-            headers_trim_vec.push(header.clone());
-        }
-        // send block requests
-        let chunks = headers_trim_vec.chunks(16);
-        for chunk in chunks {
-            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_any(&get_data.serialize()?)?;
-        }
-        // END OF FIX
-
-        self.request_headers(self.tallest_header)?;
 
         Ok(())
     }
@@ -250,7 +224,7 @@ impl OuterNetworkController {
                     Message::Block(block) => {
                         // println!("Got lock on node receiver : read block");
                         t_inner.lock().map_err(to_io_err)?.read_block(block)
-                    },
+                    }
                     Message::Failure() => {
                         // println!("Got lock on node receiver : read failure");
                         println!("Node is notifying me of a failure, should resend last request");
@@ -270,9 +244,7 @@ impl OuterNetworkController {
 
     fn sync(&self) -> io::Result<()> {
         let inner = self.inner.clone();
-        thread::spawn(move || -> io::Result<()> {
-            inner.lock().map_err(to_io_err)?.start_sync()
-        });
+        thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() });
         Ok(())
     }
 
