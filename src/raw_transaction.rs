@@ -2,7 +2,7 @@ use crate::io::{self, Cursor};
 use crate::messages::utility::{read_from_varint, read_hash, StreamRead};
 
 use crate::utility::double_hash;
-use crate::utxo::{Utxo, UtxoId};
+use crate::utxo::{Utxo, UtxoId, UtxoSet};
 use bitcoin_hashes::hash160;
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use bs58;
@@ -307,42 +307,32 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    /// Unused function as of now, the whole utxo set doesn't need to be validated
-    fn _validate_inputs(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
-        // iterate over the inputs and check if they are in the utxo set
-        match self.tx_in {
-            TxInputType::CoinBaseInput(_) => {
-                // what should we do in this case?
-            }
-            TxInputType::TxInput(ref tx_inputs) => {
-                for txin in tx_inputs {
-                    // check if the input exists in the hashmap
-                    let utxo = utxo_set.get(&txin.previous_output._hash);
-                    match utxo {
-                        Some(utxo) => {
-                            println!("\x1b[92mTransaction found on utxo set!\x1b[0m");
-                            let index = txin.previous_output._index as usize;
-                            utxo._validate_spend(index)?;
-                        }
-                        None => {
-                            println!("\x1b[93mTransaction not found on utxo set!\x1b[0m");
-                        }
-                    }
+    pub fn generate_utxo(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+        let new_id = double_hash(&self.serialize()).to_byte_array();
+        let new_utxo = Utxo::from_raw_transaction(self)?;
+
+        for transaction in &new_utxo.transactions {
+            let tx_address = match transaction.get_address() {
+                Ok(val) => val,
+                Err(_) => "no_address".to_string(),
+            };
+
+            match utxo_set.get_mut(&tx_address) {
+                Some(val) => {
+                    val.insert(new_id, transaction.clone());
+                }
+                None => {
+                    let mut map = HashMap::new();
+                    map.insert(new_id, transaction.clone());
+                    utxo_set.insert(tx_address, map);
                 }
             }
         }
+
         Ok(())
     }
 
-    fn generate_utxo(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
-        let new_id = double_hash(&self.serialize()).to_byte_array();
-        let new_utxo = Utxo::_from_raw_transaction(self)?;
-
-        utxo_set.insert(new_id, new_utxo);
-        Ok(())
-    }
-
-    pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+    pub fn _validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         // check the inputs and mark them as spent
         // self.validate_inputs(utxo_set)?; // unused function as of now
 
@@ -426,7 +416,7 @@ impl RawTransaction {
 mod tests {
     use super::*;
     use crate::utility::{decode_hex, encode_hex};
-    use crate::utxo;
+    use crate::{raw_transaction, utxo};
     use std::fs;
 
     #[test]
@@ -696,8 +686,6 @@ mod tests {
 
     #[test]
     fn test_transaction_read_balance() {
-        // let transaction_bytes = b"020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500";
-
         let transaction_bytes = &[
             0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x12, 0x16, 0xd1, 0x0a, 0xe3, 0xaf, 0xe6,
             0x11, 0x95, 0x29, 0xc0, 0xa0, 0x1a, 0xbe, 0x78, 0x33, 0x64, 0x1e, 0x0e, 0x9d, 0x37,
@@ -720,52 +708,12 @@ mod tests {
 
         let mut cursor: Cursor<&[u8]> = Cursor::new(transaction_bytes);
 
-        let version = u32::from_le_stream(&mut cursor).unwrap();
-        //assert!(version == 2);
+        let raw_transaction = RawTransaction::from_bytes(&mut cursor).unwrap();
 
-        let mut _empty_byte = [0u8; 1];
-        let mut _empty_byte2 = [0u8; 1];
+        let utxo = Utxo::from_raw_transaction(&raw_transaction).unwrap();
 
-        cursor.read_exact(&mut _empty_byte); //marker
-        cursor.read_exact(&mut _empty_byte2); //flag
-
-        assert!(_empty_byte[0] == 0);
-        assert!(_empty_byte2[0] == 1);
-        let tx_in_count = read_from_varint(&mut cursor).unwrap();
-
-        assert!(tx_in_count == 1);
-
-        let tx_in = TxInputType::TxInput(
-            TxInput::vec_from_bytes(&mut cursor, tx_in_count as usize).unwrap(),
-        );
-
-        let tx_out_count = read_from_varint(&mut cursor).unwrap();
-        let tx_out = TxOutput::vec_from_bytes(&mut cursor, tx_out_count as usize).unwrap();
-
-        let mut witnesses = Vec::new();
-        for _ in 0..tx_in_count {
-            let witness_len = read_from_varint(&mut cursor).unwrap(); //byte arrays
-            for _ in 0..witness_len {
-                let length = read_from_varint(&mut cursor).unwrap();
-                let mut witness_data = vec![0u8; length as usize];
-                cursor.read_exact(&mut witness_data).unwrap();
-                witnesses.push(witness_data);
-            }
-        }
-        let lock_time = u32::from_le_stream(&mut cursor).unwrap();
-        let raw_transaction = RawTransaction {
-            version,
-            tx_in_count,
-            tx_in,
-            tx_out_count,
-            tx_out,
-            lock_time,
-        };
-
-        let utxo = Utxo::_from_raw_transaction(&raw_transaction).unwrap();
-
-        let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-        let balance = utxo._get_wallet_balance(pk.to_vec()).unwrap();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        let balance = utxo._get_wallet_balance(address).unwrap();
 
         println!("balance: {}", balance);
         assert!(balance > 0);

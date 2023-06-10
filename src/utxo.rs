@@ -1,4 +1,5 @@
 use crate::raw_transaction::{RawTransaction, TxOutput};
+use crate::utility::decode_hex;
 use crate::utility::double_hash;
 use bitcoin_hashes::{hash160, sha256, Hash};
 use gtk::gdk::keys::constants::mu;
@@ -10,16 +11,17 @@ fn _hash_pk_address(pk_address: Vec<u8>) -> [u8; 20] {
     hash160::Hash::hash(&pk_address).to_byte_array()
 }
 
-pub type UtxoSet = HashMap<UtxoId, Utxo>;
+// pub type UtxoSet = HashMap<UtxoId, Utxo>;
+pub type UtxoSet = HashMap<String, HashMap<UtxoId,UtxoTransaction>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UtxoTransaction {
-    _value: i64,
+    pub _value: i64,
     _lock: Vec<u8>,
     _spent: bool,
 }
 
-pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> Vec<u8> {
+pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
     let version_prefix: [u8; 1] = [0x6f];
 
     let hash = double_hash(&[&version_prefix[..], &p2pkh[..]].concat());
@@ -28,11 +30,11 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> Vec<u8> {
 
     let input = [&version_prefix[..], &p2pkh[..], checksum].concat();
 
-    bs58::encode(input).into_vec()
+    bs58::encode(input).into_string()
 }
 
 impl UtxoTransaction {
-    fn _has_wallet(&self, pk_address: Vec<u8>) -> io::Result<bool> {
+    fn _has_wallet(&self, address: &str) -> io::Result<bool> {
         // iterate lock one byte at a time until 0x14 is found
         let mut cursor = Cursor::new(self._lock.clone());
 
@@ -44,10 +46,26 @@ impl UtxoTransaction {
         let mut pk_hash = [0; 20];
         cursor.read_exact(&mut pk_hash)?;
 
-        Ok(p2pkh_to_address(pk_hash) == pk_address)
+        let pk2addr = p2pkh_to_address(pk_hash);
+        Ok(pk2addr == address)
     }
 
-    pub fn _from_tx_output(tx_output: &TxOutput) -> io::Result<Self> {
+    pub fn get_address(&self) -> io::Result<String> {
+        // iterate lock one byte at a time until 0x14 is found
+        let mut cursor = Cursor::new(self._lock.clone());
+
+        let buf = &mut [0; 1];
+        while buf[0] != 0x14 {
+            cursor.read_exact(buf)?;
+        }
+
+        let mut pk_hash = [0; 20];
+        cursor.read_exact(&mut pk_hash)?;
+
+        Ok(p2pkh_to_address(pk_hash))
+    }
+
+    pub fn from_tx_output(tx_output: &TxOutput) -> io::Result<Self> {
         let value = tx_output.value;
         let lock = tx_output.pk_script.clone();
         Ok(Self {
@@ -57,10 +75,10 @@ impl UtxoTransaction {
         })
     }
 
-    pub fn _get_wallet_balance(&self, pk_address: Vec<u8>) -> io::Result<i64> {
+    pub fn _get_wallet_balance(&self, address: &str) -> io::Result<i64> {
         // if desired pk_adress is the same as the adress held
         // and the transaction is not spent, return the value
-        if self._has_wallet(pk_address)? && !self._spent {
+        if self._has_wallet(address)? && !self._spent {
             return Ok(self._value);
         }
         Ok(0)
@@ -71,17 +89,17 @@ pub type UtxoId = [u8; 32];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Utxo {
-    transactions: Vec<UtxoTransaction>,
+    pub transactions: Vec<UtxoTransaction>,
 }
 
 impl Utxo {
-    pub fn _from_raw_transaction(raw_transaction: &RawTransaction) -> io::Result<Utxo> {
+    pub fn from_raw_transaction(raw_transaction: &RawTransaction) -> io::Result<Utxo> {
         let mut utxo = Utxo {
             transactions: Vec::new(),
         };
 
         for tx_output in &raw_transaction.tx_out {
-            let utxo_transaction = UtxoTransaction::_from_tx_output(tx_output)?;
+            let utxo_transaction = UtxoTransaction::from_tx_output(tx_output)?;
             utxo.transactions.push(utxo_transaction);
         }
         Ok(utxo)
@@ -104,10 +122,10 @@ impl Utxo {
         Ok(())
     }
 
-    pub fn _get_wallet_balance(&self, pk_address: Vec<u8>) -> io::Result<i64> {
+    pub fn _get_wallet_balance(&self, address: &str) -> io::Result<i64> {
         let mut balance = 0;
         for transaction in &self.transactions {
-            balance += transaction._get_wallet_balance(pk_address.clone())?;
+            balance += transaction._get_wallet_balance(&address)?;
         }
         Ok(balance)
     }
@@ -151,11 +169,9 @@ mod tests {
             _spent: false,
         };
 
-        let pk_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".as_bytes();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
-        let actual_value = utxo_transaction
-            ._get_wallet_balance(pk_address.to_vec())
-            .unwrap();
+        let actual_value = utxo_transaction._get_wallet_balance(address).unwrap();
         assert_eq!(actual_value, expected_value);
     }
 
@@ -210,9 +226,9 @@ mod tests {
             ],
         };
 
-        let pk_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".as_bytes();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
-        let actual_value = utxo._get_wallet_balance(pk_address.to_vec()).unwrap();
+        let actual_value = utxo._get_wallet_balance(address).unwrap();
         assert_eq!(actual_value, expected_value);
     }
 }

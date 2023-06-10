@@ -46,61 +46,37 @@ impl NetworkController {
         })
     }
 
-    fn reverse_byte_order(txid: &str) -> String {
-        let mut reversed = String::new();
-        let mut i = txid.len();
-        while i >= 2 {
-            reversed.push_str(&txid[i - 2..i]);
-            i -= 2;
-        }
-        reversed
-    }
-
     // HARDCODED NEEDS TO BE DYNAMIC
     fn _read_wallet_balance(&self) -> io::Result<i64> {
-        let pk = b"myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-        println!("Wallet address: {:?}", pk);
-
-        let my_txid = "109b232e4995fb6f60e2b188104fac4e527edbbc138a8c78ed7354a9a1681488";
-        let reverse_txid = Self::reverse_byte_order(my_txid);
-
-        let byte_array: &[u8] = &[
-            0x88, 0x14, 0x68, 0xa1, 0xa9, 0x54, 0x73, 0xed, 0x78, 0x8c, 0x8a, 0x13, 0xbc, 0xdb,
-            0x7e, 0x52, 0x4e, 0xac, 0x4f, 0x10, 0x88, 0xb1, 0xe2, 0x60, 0x6f, 0xfb, 0x95, 0x49,
-            0x2e, 0x23, 0x9b, 0x10,
-        ];
-        let hash = sha256::Hash::hash(my_txid.as_bytes());
-        println!("Hash: {:?}", hash);
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
         let mut balance = 0;
-        for utxo in self.utxo_set.values() {
-            balance += utxo._get_wallet_balance(pk.to_vec())?;
+        
+        match self.utxo_set.get(address) {
+            Some(utxos) => {
+                for (_, utxo) in utxos.into_iter() {
+                    balance += utxo._value;
+                }
+            }
+            None => {
+                return Ok(balance);
+            }
         }
+
         println!("Wallet balance: {:?}", balance);
 
-        Ok(balance + 518)
+        Ok(balance)
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
+        println!("Reading block: {:?}", block.block_header.timestamp);
         let previous_block_count = self.blocks.len();
-        let my_txid_array: &[u8] = &[
-            0x88, 0x14, 0x68, 0xa1, 0xa9, 0x54, 0x73, 0xed, 0x78, 0x8c, 0x8a, 0x13, 0xbc, 0xdb,
-            0x7e, 0x52, 0x4e, 0xac, 0x4f, 0x10, 0x88, 0xb1, 0xe2, 0x60, 0x6f, 0xfb, 0x95, 0x49,
-            0x2e, 0x23, 0x9b, 0x10,
-        ];
-
-        for transaction in &block.txns {
-            let utxo = Utxo::_from_raw_transaction(&transaction)?;
-            let utxo_id = double_hash(&transaction.serialize()).to_byte_array();
-            if my_txid_array == utxo_id {
-                println!("SON IGUALEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEES");
-            }
-            self.utxo_set.insert(utxo_id, utxo);
-        }
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
-        self.blocks.insert(block.hash(), block);
+
+        // self.blocks.insert(block.hash(), block);
+        println!("New utxo set size: {:?}", self.utxo_set.len());
 
         if self.blocks.len() == previous_block_count {
             return Ok(());
@@ -158,8 +134,8 @@ impl NetworkController {
 
     fn request_headers(&mut self, header_hash: HashId) -> io::Result<()> {
         let getheader_message = GetHeader::from_last_header(header_hash);
-        // self.nodes.send_to_any(&getheader_message.serialize()?)?;
-        self.nodes.send_to_all(&getheader_message.serialize()?)?;
+        self.nodes.send_to_any(&getheader_message.serialize()?)?;
+        // self.nodes.send_to_all(&getheader_message.serialize()?)?;
         Ok(())
     }
 
@@ -268,7 +244,9 @@ impl OuterNetworkController {
                     Message::Headers(headers) => {
                         t_inner.lock().map_err(to_io_err)?.read_headers(headers)
                     }
-                    Message::Block(block) => t_inner.lock().map_err(to_io_err)?.read_block(block),
+                    Message::Block(block) => {
+                        t_inner.lock().map_err(to_io_err)?.read_block(block)
+                    },
                     Message::Failure() => {
                         println!("Node is notifying me of a failure, should resend last request");
                         // aca deberiamos recibir el mensaje que fallo, y volver a enviarlo
@@ -285,7 +263,11 @@ impl OuterNetworkController {
     }
 
     fn sync(&self) -> io::Result<()> {
-        self.inner.lock().map_err(to_io_err)?.start_sync()
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> {
+            inner.lock().map_err(to_io_err)?.start_sync()
+        });
+        Ok(())
     }
 
     pub fn start_sync(
@@ -294,8 +276,8 @@ impl OuterNetworkController {
         ui_receiver: Receiver<ModelRequest>,
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver)?;
-        self.sync()?;
         self.recv_node_messages(node_receiver)?;
+        self.sync()?;
 
         Ok(())
     }
