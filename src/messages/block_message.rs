@@ -2,10 +2,10 @@ use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::{double_hash, encode_hex};
-use crate::utxo::{Utxo, UtxoId, UtxoSet};
+use crate::utility::{double_hash};
+use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -119,23 +119,16 @@ impl Block {
         Ok(())
     }
 
-    pub fn from_file(file_name: String) -> io::Result<Self> {
-        let path = format!("tmp/blocks/{}", file_name);
-        match std::fs::read(path) {
-            Ok(bytes) => {
-                let message = Block::deserialize(&bytes)?;
-                if let Message::Block(block) = message {
-                    Ok(block)
-                } else {
-                    println!("found block file, but failed to deserialize");
-                    Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Invalid block message",
-                    ))
-                }
-            }
-            Err(e) => Err(e),
+    pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+
+        for txn in self.txns.iter() {
+            txn.generate_utxo(utxo_set)?;
         }
+
+        self.block_header.validate_proof_of_work()?;
+        self.validate_merkle_root()?;
+
+        Ok(())
     }
 
     pub fn all_from_file(file_name: &str) -> io::Result<BlockSet> {

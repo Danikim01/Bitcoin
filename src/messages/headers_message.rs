@@ -3,7 +3,7 @@ use crate::messages::utility::{read_from_varint, read_hash, to_varint, StreamRea
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use crate::utility::to_io_err;
 use std::fs;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{self, Cursor, Error, Read, Write};
 
 use super::utility::to_compact_size_bytes;

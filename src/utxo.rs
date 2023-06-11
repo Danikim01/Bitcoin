@@ -1,8 +1,6 @@
 use crate::raw_transaction::{RawTransaction, TxOutput};
-use crate::utility::decode_hex;
 use crate::utility::double_hash;
-use bitcoin_hashes::{hash160, sha256, Hash};
-use gtk::gdk::keys::constants::mu;
+use bitcoin_hashes::{hash160, Hash};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
@@ -125,7 +123,7 @@ impl Utxo {
     pub fn _get_wallet_balance(&self, address: &str) -> io::Result<i64> {
         let mut balance = 0;
         for transaction in &self.transactions {
-            balance += transaction._get_wallet_balance(&address)?;
+            balance += transaction._get_wallet_balance(address)?;
         }
         Ok(balance)
     }

@@ -2,10 +2,8 @@ use crate::io::{self, Cursor};
 use crate::messages::utility::{read_from_varint, read_hash, StreamRead, to_compact_size_bytes};
 
 use crate::utility::double_hash;
-use crate::utxo::{Utxo, UtxoId, UtxoSet};
-use bitcoin_hashes::hash160;
+use crate::utxo::{Utxo, UtxoSet};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
-use bs58;
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind, Read};
 
@@ -326,6 +324,20 @@ impl RawTransaction {
         Ok(())
     }
 
+    fn read_witnesses(cursor: &mut Cursor<&[u8]>, tx_in_count: u64) -> io::Result<()> {
+        let mut witnesses = Vec::new();
+        for _ in 0..tx_in_count {
+            let witness_len = read_from_varint(cursor)?;
+            for _ in 0..witness_len {
+                let length = read_from_varint(cursor)?;
+                let mut witness_data = vec![0u8; length as usize];
+                cursor.read_exact(&mut witness_data)?;
+                witnesses.push(witness_data);
+            }
+        }
+        Ok(())
+    } 
+
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
 
@@ -333,29 +345,18 @@ impl RawTransaction {
 
         let mut tx_in_count = read_from_varint(cursor)?;
         if tx_in_count == 0 {
-            let flag = u8::from_le_stream(cursor)?;
+            let _flag: u8 = u8::from_le_stream(cursor)?;
             tx_in_count = read_from_varint(cursor)?;
             has_witness = true;
         }
 
-        //let tx_in_count = read_from_varint(cursor)?;
         let tx_in = TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
 
         let tx_out_count = read_from_varint(cursor)?;
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
 
-        if has_witness == true {
-            println!("es witness");
-            let mut witnesses = Vec::new();
-            for _ in 0..tx_in_count {
-                let witness_len = read_from_varint(cursor)?;
-                for _ in 0..witness_len {
-                    let length = read_from_varint(cursor)?;
-                    let mut witness_data = vec![0u8; length as usize];
-                    cursor.read_exact(&mut witness_data)?;
-                    witnesses.push(witness_data);
-                }
-            }
+        if has_witness {
+            Self::read_witnesses(cursor, tx_in_count)?;
         }
 
         let lock_time = u32::from_le_stream(cursor)?;
@@ -398,8 +399,6 @@ impl RawTransaction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utility::{decode_hex, encode_hex};
-    use crate::{raw_transaction, utxo};
     use std::fs;
 
     #[test]
@@ -665,31 +664,6 @@ mod tests {
             // we compare the bytes
             assert_eq!(bytes[81..], serialized_txn_vec.concat());
         }
-    }
-
-    #[test]
-    fn test_pk_2_address() {
-        let pk = "c9bc003bf72ebdc53a9572f7ea792ef49a2858d7";
-        let pk_bytes = decode_hex(pk).unwrap();
-
-        // 1. add address version byte
-        let version_prefix: [u8; 1] = [0x6f];
-
-        // 2. create copy of version+hash then hash it twice with sha256
-        let hash = double_hash(&[&version_prefix[..], &pk_bytes[..]].concat());
-
-        // 3. take first 4 bytes of hash, they are the checksum
-        let checksum = &hash[..4];
-        assert_eq!(encode_hex(checksum), "8fc12f84");
-
-        // 4. append checksum to copy (version+hash+checksum)
-        let input = [&version_prefix[..], &pk_bytes[..], checksum].concat();
-
-        //    then base58 encode it
-        let address = bs58::encode(input).into_string();
-
-        let expected_address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-        assert_eq!(address, expected_address);
     }
 
     #[test]

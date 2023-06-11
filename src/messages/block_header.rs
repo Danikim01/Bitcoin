@@ -1,6 +1,4 @@
 use crate::io::Cursor;
-use crate::logger::log;
-use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::{utility::*, Hashable};
 use crate::utility::double_hash;
 use std::io::ErrorKind::InvalidData;

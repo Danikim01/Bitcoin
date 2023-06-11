@@ -62,7 +62,7 @@ impl NodeController {
         }
     }
 
-    pub fn send_to_all(&mut self, payload: &Vec<u8>) -> io::Result<()> {
+    pub fn _send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
         for node in self.nodes.iter_mut() {
             match node.send(payload) {
                 Ok(k) => k,

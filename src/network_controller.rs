@@ -1,14 +1,13 @@
 use crate::config::Config;
 use crate::logger::log;
-use crate::messages::constants::config::{QUIET, VERBOSE};
+use crate::messages::constants::config::VERBOSE;
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
     Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
 };
 use crate::node_controller::NodeController;
-use crate::utility::{double_hash, encode_hex, into_hashmap, to_io_err};
+use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
-use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -43,24 +42,37 @@ impl NetworkController {
         })
     }
 
+    pub fn update_status_bar(&self, msg: String) -> io::Result<()> {
+        self.ui_sender
+            .send(GtkMessage::UpdateLabel(("status_bar".to_string(), msg)))
+            .map_err(to_io_err)
+    }
+
     // HARDCODED NEEDS TO BE DYNAMIC
-    fn _read_wallet_balance(&self) -> io::Result<i64> {
+    fn read_wallet_balance(&self) -> io::Result<i64> {
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
         let mut balance = 0;
 
         match self.utxo_set.get(address) {
             Some(utxos) => {
-                for (_, utxo) in utxos.into_iter() {
+                for (_, utxo) in utxos.iter() {
                     balance += utxo._value;
                 }
             }
             None => {
+                println!("Adress not found!");
                 return Ok(balance);
             }
         }
 
         println!("Wallet balance: {:?}", balance);
+        self.ui_sender
+            .send(GtkMessage::UpdateLabel((
+                "balance_available_val".to_string(),
+                format!("{:?}", balance),
+            )))
+            .map_err(to_io_err)?;
 
         Ok(balance)
     }
@@ -70,17 +82,57 @@ impl NetworkController {
             return Ok(());
         }
 
-        let ui_msg = format!("Reading blocks, {:?} days behind", block.get_days_old());
-        self.ui_sender
-            .send(GtkMessage::UpdateLabel(("status_bar".to_string(), ui_msg)))
-            .map_err(to_io_err)?;
+        let days_old = block.get_days_old();
+        if days_old > 0 {
+            self.update_status_bar(format!(
+                "Reading blocks, {:?} days behind",
+                block.get_days_old()
+            ))?;
+        }
+        else {
+            self.update_status_bar("Up to date".to_string())?;
+        }
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
 
+        Ok(())
+    }
+
+    fn read_block_unsafe(&mut self, block: Block) -> io::Result<()> {
+        if self.blocks.contains_key(&block.hash()) {
+            return Ok(());
+        }
+
+        self.update_status_bar("Reading backup blocks".to_string())?;
+
+        // validation does not yet include checks por UTXO spending, only checks proof of work
+        block.validate_unsafe(&mut self.utxo_set)?;
+        self.blocks.insert(block.hash(), block);
+
+        Ok(())
+    }
+
+    fn read_block_from_node(&mut self, block: Block) -> io::Result<()> {
+        self.read_block(block.clone())?;
+
         block.save_to_file("tmp/blocks_backup.dat")?;
         self.blocks.insert(block.hash(), block);
 
+        Ok(())
+    }
+
+    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
+        if headers.count == 0 {
+            return Ok(());
+        }
+
+        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
+        for chunk in chunks {
+            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
+            self.nodes.send_to_any(&get_data.serialize()?)?;
+        }
+        log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
 
@@ -97,20 +149,6 @@ impl NetworkController {
         }
 
         self.request_blocks(Headers::from_block_headers(needed_blocks))?;
-        Ok(())
-    }
-
-    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
-        if headers.count == 0 {
-            return Ok(());
-        }
-
-        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
-        for chunk in chunks {
-            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_any(&get_data.serialize()?)?;
-        }
-        log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
 
@@ -143,8 +181,8 @@ impl NetworkController {
         headers.save_to_file("tmp/headers_backup.dat")?;
 
         // request blocks
-        // let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-        // self.request_blocks_from(headers.clone(), init_tp_timestamp)?;
+        let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+        self.request_blocks_from(headers.clone(), init_tp_timestamp)?;
 
         Ok(())
     }
@@ -156,20 +194,50 @@ impl NetworkController {
         Ok(())
     }
 
-    pub fn start_sync(&mut self) -> io::Result<()> {
-        // first read blocks
-        if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
-            self.blocks = blocks;
+    fn get_missing_headers(&self, headers: &Headers) -> io::Result<Vec<BlockHeader>> {
+        let mut missing_headers = Vec::new();
+
+        for header in headers.clone().block_headers {
+            if !self.blocks.contains_key(&header.hash()) {
+                missing_headers.push(header);
+            }
         }
 
-        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
+        Ok(missing_headers)
+    }
+
+    pub fn start_sync(&mut self) -> io::Result<()> {
+        // attempt to read blocks from backup file
+        if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
+            self.update_status_bar("Found blocks backup file, reading blocks...".to_string())?;
+            for (_, block) in blocks.into_iter() {
+                self.read_block_unsafe(block)?;
+            }
+            self.update_status_bar("Read blocks from backup file.".to_string())?;
+        }
+
+        // attempt to read headers from backup file
+        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
+            self.update_status_bar("Reading headers from backup file...".to_string())?;
             self.tallest_header = headers.last_header_hash();
             self.headers
                 .extend(into_hashmap(headers.block_headers.clone()));
             self.read_headers(&headers)?;
 
+            // find missing headers in blocks and then request them
             let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-            self.request_blocks_from(headers, init_tp_timestamp)?;
+            headers.trim_timestamp(init_tp_timestamp)?;
+            let missing_headers = self.get_missing_headers(&headers)?;
+            
+            if !missing_headers.is_empty() {
+                self.update_status_bar(format!(
+                    "Found {} missing blocks in backup file, requesting them...",
+                    missing_headers.len()
+                ))?;
+                self.request_blocks(Headers::from_block_headers(missing_headers))?;
+            }
+
+            self.update_status_bar("Read headers from backup file.".to_string())?;
         } // else init ibd
 
         self.request_headers(self.tallest_header)?; // with ibd this goes on the else clause
@@ -201,14 +269,7 @@ impl OuterNetworkController {
                         // println!("Received request for wallet balance");
                         let inner_lock = t_inner.lock().map_err(to_io_err)?;
                         // println!("Got lock on ui receiver");
-                        let val = inner_lock._read_wallet_balance()?;
-                        inner_lock
-                            .ui_sender
-                            .send(GtkMessage::UpdateLabel((
-                                "balance_available_val".to_string(),
-                                format!("{:?}", val),
-                            )))
-                            .map_err(to_io_err)
+                        inner_lock.read_wallet_balance()
                     }
                 }?;
                 // println!("Freeing lock on ui receiver");
@@ -229,7 +290,10 @@ impl OuterNetworkController {
                     }
                     Message::Block(block) => {
                         // println!("Got lock on node receiver : read block");
-                        t_inner.lock().map_err(to_io_err)?.read_block(block)
+                        t_inner
+                            .lock()
+                            .map_err(to_io_err)?
+                            .read_block_from_node(block)
                     }
                     Message::Failure() => {
                         // println!("Got lock on node receiver : read failure");

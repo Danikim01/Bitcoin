@@ -5,7 +5,7 @@ use crate::messages::{
 };
 use crate::utility::to_io_err;
 use std::io::{self, Write};
-use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -54,7 +54,7 @@ impl Listener {
                 commands::HEADERS => match Headers::deserialize(&payload) {
                     Ok(m) => m,
                     Err(e) => {
-                        // println!("Invalid headers payload: {:?}, ignoring message", e);
+                        println!("Invalid headers payload: {:?}, ignoring message", e);
                         // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
                         Message::Failure()
                     }
@@ -62,9 +62,9 @@ impl Listener {
                 commands::BLOCK => match Block::deserialize(&payload) {
                     Ok(m) => m,
                     Err(e) => {
-                        // println!("Invalid block payload: {:?}, ignoring message", e);
+                        println!("Invalid block payload: {:?}, ignoring message", e);
                         // HERE WE MUST REQUEST THE BLOCK AGAIN!
-                        Message::Failure() 
+                        Message::Failure()
                     }
                 },
                 _ => continue,
