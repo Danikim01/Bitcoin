@@ -59,6 +59,7 @@ impl Serialize for Block {
             txn_count: txn_count as usize,
             txns,
         };
+
         Ok(Message::Block(block))
     }
 }
@@ -144,12 +145,13 @@ impl Block {
             Ok(bytes) => {
                 // create cursor to read bytes
                 let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
-
                 let file_size = bytes.len() as u64;
-                while !cursor.position() < file_size {
+
+                println!("file size: {}", file_size);
+                println!("cursor position: {}", cursor.position());
+                while cursor.position() < file_size {
                     // read block size
                     let block_size = read_from_varint(&mut cursor)?;
-
                     // create buffer of block size
                     let mut block_bytes = vec![0; block_size as usize];
 

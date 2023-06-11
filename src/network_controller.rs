@@ -84,7 +84,7 @@ impl NetworkController {
         Ok(())
     }
 
-    fn read_headers(&mut self, mut headers: Headers) -> io::Result<()> {
+    fn read_headers(&mut self, mut headers: &Headers) -> io::Result<()> {
         let previous_header_count = self.headers.len();
 
         // store headers in hashmap
@@ -108,11 +108,6 @@ impl NetworkController {
         if headers.is_paginated() {
             self.request_headers(self.tallest_header)?;
         }
-
-        // request blocks for headers after given date
-        let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-        headers.trim_timestamp(init_tp_timestamp)?;
-        self.request_blocks(headers)?;
         Ok(())
     }
 
@@ -137,39 +132,48 @@ impl NetworkController {
         Ok(())
     }
 
+    fn request_blocks_except(&mut self, headers: Headers) -> io::Result<()> {
+        // request blocks for headers after given date
+
+        let mut needed_blocks = Vec::new();
+
+        for header in headers.block_headers.clone() {
+            if !self.blocks.contains_key(&header.hash()) {
+                println!("Requesting block :D");
+                needed_blocks.push(header);
+            }
+        }
+
+
+        self.request_blocks(Headers::from_block_headers(needed_blocks))?;
+        Ok(())
+    }
+
     pub fn start_sync(&mut self) -> io::Result<()> {
-        self.ui_sender
-            .send(GtkMessage::UpdateLabel((
-                "status_bar".to_string(),
-                "Connected to network, starting sync".to_string(),
-            )))
-            .map_err(to_io_err)?;
 
         // first read blocks
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
             self.blocks = blocks;
         }
 
-        // check what block are missing from the headers backup file
-        let mut needed_blocks: Vec<BlockHeader> = vec![];
-        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
+        println!("Blocks: {:?}", self.blocks.len());
+
+        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.tallest_header = headers.last_header_hash();
+            self.read_headers(&headers)?;
 
-            for header in headers.block_headers.clone() {
-                if !self.blocks.contains_key(&header.hash()) {
-                    needed_blocks.push(header);
-                }
-            }
+            let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+            headers.trim_timestamp(init_tp_timestamp)?;
 
-            self.headers.extend(into_hashmap(headers.block_headers));
+            self.request_blocks_except(headers)?;
+
         }
-
-        // if needed_blocks.len() > 0 {
-        //     self.request_blocks(Headers::from_block_headers(needed_blocks))?;
-        // }
-
         self.request_headers(self.tallest_header)?;
+
         Ok(())
+
+
+
     }
 }
 
@@ -220,7 +224,7 @@ impl OuterNetworkController {
                 match node_receiver.recv().map_err(to_io_err)? {
                     Message::Headers(headers) => {
                         // println!("Got lock on node receiver : read headers");
-                        t_inner.lock().map_err(to_io_err)?.read_headers(headers)
+                        t_inner.lock().map_err(to_io_err)?.read_headers(&headers)
                     }
                     Message::Block(block) => {
                         // println!("Got lock on node receiver : read block");
