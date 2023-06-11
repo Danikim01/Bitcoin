@@ -84,7 +84,37 @@ impl NetworkController {
         Ok(())
     }
 
-    fn read_headers(&mut self, mut headers: &Headers) -> io::Result<()> {
+    /// requests block for headers after given timestamp
+    fn request_blocks_from(&mut self, mut headers: Headers, timestamp: u32) -> io::Result<()> {
+        headers.trim_timestamp(timestamp)?;
+
+        let mut needed_blocks = Vec::new();
+
+        for header in headers.block_headers.clone() {
+            if !self.blocks.contains_key(&header.hash()) {
+                needed_blocks.push(header);
+            }
+        }
+
+        self.request_blocks(Headers::from_block_headers(needed_blocks))?;
+        Ok(())
+    }
+
+    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
+        if headers.count == 0 {
+            return Ok(());
+        }
+
+        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
+        for chunk in chunks {
+            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
+            self.nodes.send_to_any(&get_data.serialize()?)?;
+        }
+        log("Requesting blocks, sent GetData message.", VERBOSE);
+        Ok(())
+    }
+
+    fn read_headers(&mut self, headers: &Headers) -> io::Result<()> {
         let previous_header_count = self.headers.len();
 
         // store headers in hashmap
@@ -108,6 +138,14 @@ impl NetworkController {
         if headers.is_paginated() {
             self.request_headers(self.tallest_header)?;
         }
+
+        // save headers to file
+        headers.save_to_file("tmp/headers_backup.dat")?;
+
+        // request blocks
+        // let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+        // self.request_blocks_from(headers.clone(), init_tp_timestamp)?;
+
         Ok(())
     }
 
@@ -118,62 +156,25 @@ impl NetworkController {
         Ok(())
     }
 
-    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
-        if headers.count == 0 {
-            return Ok(());
-        }
-
-        let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
-        for chunk in chunks {
-            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_any(&get_data.serialize()?)?;
-        }
-        log("Requesting blocks, sent GetData message.", VERBOSE);
-        Ok(())
-    }
-
-    fn request_blocks_except(&mut self, headers: Headers) -> io::Result<()> {
-        // request blocks for headers after given date
-
-        let mut needed_blocks = Vec::new();
-
-        for header in headers.block_headers.clone() {
-            if !self.blocks.contains_key(&header.hash()) {
-                println!("Requesting block :D");
-                needed_blocks.push(header);
-            }
-        }
-
-
-        self.request_blocks(Headers::from_block_headers(needed_blocks))?;
-        Ok(())
-    }
-
     pub fn start_sync(&mut self) -> io::Result<()> {
-
         // first read blocks
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
             self.blocks = blocks;
         }
 
-        println!("Blocks: {:?}", self.blocks.len());
-
-        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
+        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.tallest_header = headers.last_header_hash();
+            self.headers
+                .extend(into_hashmap(headers.block_headers.clone()));
             self.read_headers(&headers)?;
 
             let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-            headers.trim_timestamp(init_tp_timestamp)?;
+            self.request_blocks_from(headers, init_tp_timestamp)?;
+        } // else init ibd
 
-            self.request_blocks_except(headers)?;
-
-        }
-        self.request_headers(self.tallest_header)?;
+        self.request_headers(self.tallest_header)?; // with ibd this goes on the else clause
 
         Ok(())
-
-
-
     }
 }
 

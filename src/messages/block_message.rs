@@ -147,8 +147,6 @@ impl Block {
                 let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
                 let file_size = bytes.len() as u64;
 
-                println!("file size: {}", file_size);
-                println!("cursor position: {}", cursor.position());
                 while cursor.position() < file_size {
                     // read block size
                     let block_size = read_from_varint(&mut cursor)?;
@@ -176,6 +174,7 @@ impl Block {
         let mut file = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(file_name)
             .map_err(to_io_err)?;
 
