@@ -1,8 +1,10 @@
 use gtk::glib;
-use gtk::glib::Receiver;
+use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
 use gtk::prelude::*;
 use std::io;
 use std::sync::mpsc::Sender;
+
+use crate::utility::to_io_err;
 
 mod components;
 
@@ -14,7 +16,12 @@ pub enum ModelRequest {
     GetWalletBalance,
 }
 
-fn attach_rcv(receiver: Receiver<GtkMessage>, builder: gtk::Builder) {
+/// called from the model, to update the text of a specific label
+pub fn update_ui_label(sender: GtkSender<GtkMessage>, label: String, text: String) -> io::Result<()> {
+    sender.send(GtkMessage::UpdateLabel((label, text))).map_err(to_io_err)
+}
+
+fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
         match msg {
             GtkMessage::UpdateLabel((label, text)) => {
@@ -30,7 +37,7 @@ fn attach_rcv(receiver: Receiver<GtkMessage>, builder: gtk::Builder) {
     });
 }
 
-pub fn init(receiver: Receiver<GtkMessage>, sender: Sender<ModelRequest>) -> io::Result<()> {
+pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> io::Result<()> {
     if gtk::init().is_err() {
         println!("Failed to initialize GTK.");
         return Err(io::Error::new(

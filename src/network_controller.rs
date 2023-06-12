@@ -13,7 +13,7 @@ use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
-use crate::interface::{GtkMessage, ModelRequest};
+use crate::interface::{update_ui_label, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::sync::Arc;
 use std::thread;
@@ -42,10 +42,8 @@ impl NetworkController {
         })
     }
 
-    pub fn update_status_bar(&self, msg: String) -> io::Result<()> {
-        self.ui_sender
-            .send(GtkMessage::UpdateLabel(("status_bar".to_string(), msg)))
-            .map_err(to_io_err)
+    pub fn update_ui_status_bar(&self, msg: String) -> io::Result<()> {
+        update_ui_label(self.ui_sender.clone(), "status_bar".to_string(), msg)
     }
 
     // HARDCODED NEEDS TO BE DYNAMIC
@@ -84,13 +82,12 @@ impl NetworkController {
 
         let days_old = block.get_days_old();
         if days_old > 0 {
-            self.update_status_bar(format!(
+            self.update_ui_status_bar(format!(
                 "Reading blocks, {:?} days behind",
                 block.get_days_old()
             ))?;
-        }
-        else {
-            self.update_status_bar("Up to date".to_string())?;
+        } else {
+            self.update_ui_status_bar("Up to date".to_string())?;
         }
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
@@ -104,7 +101,7 @@ impl NetworkController {
             return Ok(());
         }
 
-        self.update_status_bar("Reading backup blocks".to_string())?;
+        self.update_ui_status_bar("Reading backup blocks...".to_string())?;
 
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate_unsafe(&mut self.utxo_set)?;
@@ -209,16 +206,16 @@ impl NetworkController {
     pub fn start_sync(&mut self) -> io::Result<()> {
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
-            self.update_status_bar("Found blocks backup file, reading blocks...".to_string())?;
+            self.update_ui_status_bar("Found blocks backup file, reading blocks...".to_string())?;
             for (_, block) in blocks.into_iter() {
                 self.read_block_unsafe(block)?;
             }
-            self.update_status_bar("Read blocks from backup file.".to_string())?;
+            self.update_ui_status_bar("Read blocks from backup file.".to_string())?;
         }
 
         // attempt to read headers from backup file
         if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
-            self.update_status_bar("Reading headers from backup file...".to_string())?;
+            self.update_ui_status_bar("Reading headers from backup file...".to_string())?;
             self.tallest_header = headers.last_header_hash();
             self.headers
                 .extend(into_hashmap(headers.block_headers.clone()));
@@ -228,16 +225,16 @@ impl NetworkController {
             let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
             headers.trim_timestamp(init_tp_timestamp)?;
             let missing_headers = self.get_missing_headers(&headers)?;
-            
+
             if !missing_headers.is_empty() {
-                self.update_status_bar(format!(
+                self.update_ui_status_bar(format!(
                     "Found {} missing blocks in backup file, requesting them...",
                     missing_headers.len()
                 ))?;
                 self.request_blocks(Headers::from_block_headers(missing_headers))?;
             }
 
-            self.update_status_bar("Read headers from backup file.".to_string())?;
+            self.update_ui_status_bar("Read headers from backup file.".to_string())?;
         } // else init ibd
 
         self.request_headers(self.tallest_header)?; // with ibd this goes on the else clause
