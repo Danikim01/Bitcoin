@@ -1,9 +1,7 @@
 use crate::io::Cursor;
-use crate::logger::log;
 use crate::messages::{utility::*, Hashable};
 use crate::utility::double_hash;
 use std::io::ErrorKind::InvalidData;
-use crate::messages::constants::config::{QUIET, VERBOSE};
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -80,16 +78,16 @@ impl BlockHeader {
         match Self::compare_target_threshold_and_hash(&target_threshold, &block_header_hash) {
             std::cmp::Ordering::Less => {
                 // The block header hash is lower than the target threshold
-                log("Proof of work is valid!",VERBOSE);
+                // log("Proof of work is valid!",VERBOSE);
             }
             std::cmp::Ordering::Greater => {
                 // The block header hash is higher than the target threshold
-                log("Proof of work is invalid!",QUIET);
+                // log("Proof of work is invalid!",QUIET);
                 return Err(std::io::Error::new(InvalidData, "Invalid Proof of Work"));
             }
             std::cmp::Ordering::Equal => {
                 // The block header hash is equal to the target threshold
-                log("Proof of work is valid!",VERBOSE);
+                // log("Proof of work is valid!",VERBOSE);
             }
         }
         Ok(())

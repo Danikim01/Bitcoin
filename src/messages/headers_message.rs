@@ -1,9 +1,12 @@
 use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, read_hash, to_varint, StreamRead};
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
+use crate::utility::to_io_err;
 use std::fs;
-use std::fs::File;
-use std::io::{self, Cursor, Error, Write};
+use std::fs::OpenOptions;
+use std::io::{self, Cursor, Error, Read, Write};
+
+use super::utility::to_compact_size_bytes;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
@@ -49,20 +52,54 @@ impl Headers {
     }
 
     pub fn from_file(file_name: &str) -> io::Result<Headers> {
-        let headers_bytes = fs::read(file_name)?;
-        match Headers::deserialize(&headers_bytes)? {
-            Message::Headers(headers) => Ok(headers),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Found invalid headers message while reading from file",
-            )),
+        let bytes = fs::read(file_name)?;
+        let file_size = bytes.len() as u64;
+        let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
+
+        let mut headers = Headers::_default();
+        // while cursor has more data
+        while cursor.position() < file_size {
+            // read header size
+            let header_size = read_from_varint(&mut cursor)?;
+
+            // create buffer of header size
+            let mut header_bytes = vec![0; header_size as usize];
+
+            // read header bytes
+            cursor.read_exact(&mut header_bytes)?;
+
+            // deserialize header
+            let header = Headers::deserialize(&header_bytes)?;
+
+            if let Message::Headers(header) = header {
+                headers.count += header.count;
+                headers.block_headers.extend(header.block_headers);
+            }
+        }
+
+        Ok(headers)
+    }
+
+    pub fn from_block_headers(block_headers: Vec<BlockHeader>) -> Self {
+        Self {
+            count: block_headers.len(),
+            block_headers,
         }
     }
 
-    pub fn _save_to_file(&self, file_name: &str) -> io::Result<()> {
-        let headers_bytes = self.serialize()?;
-        let mut save_stream = File::create(file_name)?;
-        save_stream.write_all(&headers_bytes)?;
+    pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(file_name)
+            .map_err(to_io_err)?; //
+
+        let bytes = self.serialize()?;
+        let byte_count = to_compact_size_bytes(bytes.len() as u64);
+        let data = [byte_count, bytes].concat();
+
+        file.write_all(&data)?;
         Ok(())
     }
 }

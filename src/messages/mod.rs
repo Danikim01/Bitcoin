@@ -20,6 +20,7 @@ pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use verack_message::VerAck;
 pub use version_message::Version;
+pub use block_message::BlockSet;
 
 pub type HashId = [u8; 32];
 
@@ -85,6 +86,7 @@ pub enum Message {
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),
+    Failure(),
 }
 
 pub trait Hashable {

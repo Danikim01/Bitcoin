@@ -2,12 +2,18 @@ use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::double_hash;
-use crate::utxo::{Utxo, UtxoId};
+use crate::utility::{double_hash};
+use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
+use chrono::Utc;
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::{Read, Write};
+use crate::utility::to_io_err;
 
 use super::Message;
+
+pub type BlockSet = HashMap<HashId, Block>;
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -19,7 +25,19 @@ pub struct Block {
 // https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
 impl Serialize for Block {
     fn serialize(&self) -> io::Result<Vec<u8>> {
-        Ok(vec![])
+        let mut bytes: Vec<u8> = vec![];
+
+        let header_bytes = self.block_header.serialize();
+        bytes.extend(header_bytes);
+        let txn_count_bytes = to_compact_size_bytes(self.txn_count as u64);
+        bytes.extend(txn_count_bytes);
+
+        for txn in self.txns.iter() {
+            let txn_bytes = txn.serialize();
+            bytes.extend(txn_bytes);
+        }
+
+        Ok(bytes)
     }
 
     fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
@@ -41,6 +59,7 @@ impl Serialize for Block {
             txn_count: txn_count as usize,
             txns,
         };
+
         Ok(Message::Block(block))
     }
 }
@@ -70,25 +89,9 @@ impl Block {
         let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes); // clone txn_hashes if merkle proofing
         let root_hash = merkle_tree.get_root();
 
-        // check proof of inclusion for each transaction - not really needed
-        // for hash in txn_hashes {
-        //     let proof = merkle_tree._generate_proof(hash)?;
-        //     let root_from_proof = proof._generate_merkle_root();
-        //     let equal = root_hash == root_from_proof;
-        //     match equal {
-        //         true => (),
-        //         false => {
-        //             return Err(io::Error::new(
-        //                 io::ErrorKind::InvalidData,
-        //                 "Transaction failed proof of inclusion",
-        //             ))
-        //         }
-        //     }
-        // }
-
         match self.block_header.merkle_root_hash == root_hash.to_byte_array() {
             true => {
-                println!("Merkle root is valid!");
+                // println!("Merkle root is valid!");
                 Ok(())
             }
             false => {
@@ -101,17 +104,86 @@ impl Block {
         }
     }
 
-    pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+    pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         let mut utxo_set_snapshot = utxo_set.clone();
-        // check for double spending
+
         for txn in self.txns.iter() {
-            txn.validate(&mut utxo_set_snapshot)?;
+            txn.generate_utxo(&mut utxo_set_snapshot)?;
+        }
+
+        self.block_header.validate_proof_of_work()?;
+        self.validate_merkle_root()?;
+
+        *utxo_set = utxo_set_snapshot;
+
+        Ok(())
+    }
+
+    pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+
+        for txn in self.txns.iter() {
+            txn.generate_utxo(utxo_set)?;
         }
 
         self.block_header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
 
         Ok(())
+    }
+
+    pub fn all_from_file(file_name: &str) -> io::Result<BlockSet> {
+        let mut block_set: BlockSet = HashMap::new();
+
+        match std::fs::read(file_name) {
+            Ok(bytes) => {
+                // create cursor to read bytes
+                let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
+                let file_size = bytes.len() as u64;
+
+                while cursor.position() < file_size {
+                    // read block size
+                    let block_size = read_from_varint(&mut cursor)?;
+                    // create buffer of block size
+                    let mut block_bytes = vec![0; block_size as usize];
+
+                    // read block bytes
+                    cursor.read_exact(&mut block_bytes)?;
+
+                    // deserialize block
+                    let block_msg = Block::deserialize(&block_bytes)?;
+
+                    if let Message::Block(block) = block_msg {
+                        block_set.insert(block.hash(), block);
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        }
+
+        Ok(block_set)
+    }
+
+    pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open(file_name)
+            .map_err(to_io_err)?;
+
+        let bytes = self.serialize()?;
+        let msg_len = to_compact_size_bytes(bytes.len() as u64);
+        let data = [msg_len, bytes].concat();
+
+        file.write_all(&data)?;
+        Ok(())
+    }
+
+    pub fn get_days_old(&self) -> u64 {
+        let current_time = Utc::now().timestamp();
+        let block_time = self.block_header.timestamp as i64;
+        let age = (current_time - block_time) / 86400;
+        age as u64
     }
 }
 
@@ -134,7 +206,7 @@ mod tests {
 
         if !bytes.is_empty() {
             let message = Block::deserialize(&bytes).unwrap();
-            let mut utxo_set = HashMap::new();
+            let mut utxo_set: UtxoSet = HashMap::new();
             if let Message::Block(block) = message {
                 block.validate(&mut utxo_set)?;
                 assert_eq!(block.txn_count, block.txns.len());

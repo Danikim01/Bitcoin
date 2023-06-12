@@ -1,11 +1,11 @@
 use crate::io::{self, Cursor};
-use crate::messages::utility::{read_from_varint, read_hash, StreamRead};
+use crate::messages::utility::{read_from_varint, read_hash, StreamRead, to_compact_size_bytes};
 
 use crate::utility::double_hash;
-use crate::utxo::{Utxo, UtxoId};
+use crate::utxo::{Utxo, UtxoSet};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::collections::HashMap;
-use std::io::{Error, Read};
+use std::io::{Error, ErrorKind, Read};
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -13,32 +13,7 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
     Ok(array)
 }
 
-fn remove_right_zero_bytes(bytes: &[u8]) -> &[u8] {
-    let last_non_zero_index = bytes
-        .iter()
-        .rposition(|&x| x != 0)
-        .unwrap_or(bytes.len() - 1);
-    &bytes[..=last_non_zero_index]
-}
 
-// https://developer.bitcoin.org/reference/transactions.html#compact_size-unsigned-integers
-fn to_compact_size_bytes(compact_size: u64) -> Vec<u8> {
-    let mut bytes: Vec<u8> = vec![];
-    if compact_size <= 252 {
-        bytes.extend(compact_size.to_le_bytes()[..1].iter());
-    } else if compact_size <= 0xffff {
-        bytes.push(0xfd);
-        bytes.extend(compact_size.to_le_bytes()[..2].iter());
-    } else if compact_size <= 0xffffffff {
-        bytes.push(0xfe);
-        bytes.extend(compact_size.to_le_bytes()[..4].iter());
-    } else {
-        bytes.push(0xff);
-        bytes.extend(compact_size.to_le_bytes()[..8].iter());
-    }
-
-    bytes
-}
 
 #[derive(Debug, Clone)]
 pub struct TxInput {
@@ -120,7 +95,7 @@ impl Outpoint {
 }
 
 #[derive(Debug, Clone)]
-enum TxInputType {
+pub enum TxInputType {
     CoinBaseInput(CoinBaseInput),
     TxInput(Vec<TxInput>),
 }
@@ -144,12 +119,42 @@ pub struct CoinBaseInput {
     _sequence: u32,
 }
 
+fn read_height(cursor: &mut Cursor<&[u8]>) -> io::Result<u32> {
+    let val = u8::from_le_stream(cursor)?;
+    if val != 0x03 {
+        let err_str = format!("Height unsupported: {}", val);
+        println!("la altura es {}", val);
+        return Err(Error::new(ErrorKind::Unsupported, err_str.as_str()));
+    }
+    let mut array = [0u8; 4];
+    array[0] = u8::from_le_stream(cursor)?;
+    array[1] = u8::from_le_stream(cursor)?;
+    array[2] = u8::from_le_stream(cursor)?;
+    // let mut array = vec![0_u8; val as usize];
+    // cursor.read_exact(&mut array)?;
+    Ok(u32::from_le_bytes(array))
+}
+
+fn serialize_height(height: u32) -> Vec<u8> {
+    let mut bytes = vec![];
+    bytes.push(0x03);
+    bytes.extend_from_slice(&height.to_le_bytes()[0..3]);
+    bytes
+}
+
 impl CoinBaseInput {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> io::Result<Self> {
         let _hash = read_hash(cursor)?;
         let _index = u32::from_le_stream(cursor)?;
         let _script_bytes = read_from_varint(cursor)?;
-        let _height = u32::from_le_stream(cursor)?;
+        let _height = match read_height(cursor) {
+            Ok(height) => height,
+            Err(err) => {
+                println!("Invalid height, script bytes was set to {}", _script_bytes);
+                Err(err)?
+            }
+        };
+
         let _coinbase_script = read_coinbase_script(cursor, (_script_bytes - 4) as usize)?;
         let _sequence = u32::from_le_stream(cursor)?;
 
@@ -170,7 +175,8 @@ impl CoinBaseInput {
         bytes.extend_from_slice(&self._hash);
         bytes.extend_from_slice(&self._index.to_le_bytes());
         bytes.extend_from_slice(&to_compact_size_bytes(self._script_bytes));
-        bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
+        // bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
+        bytes.extend_from_slice(&serialize_height(self._height));
         bytes.extend_from_slice(&self._coinbase_script);
         bytes.extend_from_slice(&self._sequence.to_le_bytes());
         bytes
@@ -255,7 +261,7 @@ impl TxOutput {
 pub struct RawTransaction {
     version: u32,
     tx_in_count: u64,
-    tx_in: TxInputType,
+    pub tx_in: TxInputType,
     tx_out_count: u64,
     pub tx_out: Vec<TxOutput>,
     pub lock_time: u32,
@@ -282,59 +288,76 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    /// Unused function as of now, the whole utxo set doesn't need to be validated
-    fn _validate_inputs(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
-        // iterate over the inputs and check if they are in the utxo set
-        match self.tx_in {
-            TxInputType::CoinBaseInput(_) => {
-                // what should we do in this case?
-            }
-            TxInputType::TxInput(ref tx_inputs) => {
-                for txin in tx_inputs {
-                    // check if the input exists in the hashmap
-                    let utxo = utxo_set.get(&txin.previous_output._hash);
-                    match utxo {
-                        Some(utxo) => {
-                            println!("\x1b[92mTransaction found on utxo set!\x1b[0m");
-                            let index = txin.previous_output._index as usize;
-                            utxo._validate_spend(index)?;
-                        }
-                        None => {
-                            println!("\x1b[93mTransaction not found on utxo set!\x1b[0m");
-                        }
-                    }
+    pub fn generate_utxo(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+        let new_id = double_hash(&self.serialize()).to_byte_array();
+        let new_utxo = Utxo::from_raw_transaction(self)?;
+
+        for transaction in &new_utxo.transactions {
+            let tx_address = match transaction.get_address() {
+                Ok(val) => val,
+                Err(_) => "no_address".to_string(),
+            };
+
+            match utxo_set.get_mut(&tx_address) {
+                Some(val) => {
+                    val.insert(new_id, transaction.clone());
+                }
+                None => {
+                    let mut map = HashMap::new();
+                    map.insert(new_id, transaction.clone());
+                    utxo_set.insert(tx_address, map);
                 }
             }
         }
+
         Ok(())
     }
 
-    fn generate_utxo(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
-        let new_id = double_hash(&self.serialize()).to_byte_array();
-        let new_utxo = Utxo::_from_raw_transaction(self)?;
-
-        utxo_set.insert(new_id, new_utxo);
-        Ok(())
-    }
-
-    pub fn validate(&self, utxo_set: &mut HashMap<UtxoId, Utxo>) -> io::Result<()> {
+    pub fn _validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         // check the inputs and mark them as spent
         // self.validate_inputs(utxo_set)?; // unused function as of now
 
         // generate new utxos from the outputs
+
         self.generate_utxo(utxo_set)?;
 
         Ok(())
     }
 
+    fn read_witnesses(cursor: &mut Cursor<&[u8]>, tx_in_count: u64) -> io::Result<()> {
+        let mut witnesses = Vec::new();
+        for _ in 0..tx_in_count {
+            let witness_len = read_from_varint(cursor)?;
+            for _ in 0..witness_len {
+                let length = read_from_varint(cursor)?;
+                let mut witness_data = vec![0u8; length as usize];
+                cursor.read_exact(&mut witness_data)?;
+                witnesses.push(witness_data);
+            }
+        }
+        Ok(())
+    } 
+
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
 
-        let tx_in_count = read_from_varint(cursor)?;
+        let mut has_witness = false;
+
+        let mut tx_in_count = read_from_varint(cursor)?;
+        if tx_in_count == 0 {
+            let _flag: u8 = u8::from_le_stream(cursor)?;
+            tx_in_count = read_from_varint(cursor)?;
+            has_witness = true;
+        }
+
         let tx_in = TxInputType::TxInput(TxInput::vec_from_bytes(cursor, tx_in_count as usize)?);
 
         let tx_out_count = read_from_varint(cursor)?;
         let tx_out = TxOutput::vec_from_bytes(cursor, tx_out_count as usize)?;
+
+        if has_witness {
+            Self::read_witnesses(cursor, tx_in_count)?;
+        }
 
         let lock_time = u32::from_le_stream(cursor)?;
 
@@ -377,6 +400,66 @@ impl RawTransaction {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn test_coinbase_input_deserialization() {
+        let raw_transaction_bytes: &[u8] = &[
+            0x01, 0x00, 0x00, 0x00, // version: 1
+            0x01, // tx_in_count: 1
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, // hash
+            0x1d, // script bytes - The height and coinbase script has 29 bytes.
+            0x03, 0x0f, 0x8d,
+            0x13, // height - 0x03-byte little-endian integer: 0x0f8d13 = 1281295
+            0x04, 0x9f, 0xaa, 0x80, 0x5a, 0x06, 0x35, 0x38, 0x70, 0x6f, 0x6f, 0x6c, 0x0c, 0x00,
+            0x01, 0x00, 0x00, 0xfe, 0x22, 0x03, 0x00, 0x00, 0x00, 0x00,
+            0x00, // coinbase script - Arbitrary data entered by the miner
+            0xff, 0xff, 0xff, 0xff, // sequence - End of this input
+            0x01, // tx_out_count - 1 transaction output
+            0x53, 0x41, 0xcb, 0x04, 0x00, 0x00, 0x00,
+            0x00, // value - Amount of the first output in little-endian integer
+            0x19, // script bytes - The pubkey script has 25 bytes
+            0x76, 0xa9, 0x14, 0xf1, 0x12, 0x98, 0xce, 0x77, 0x7c, 0xb5, 0xdb, 0x5c, 0x09, 0x25,
+            0x0c, 0xad, 0x4e, 0xb8, 0x56, 0xb1, 0xe3, 0x66, 0xef, 0x88,
+            0xac, // pubkey script - Represents the account address of the miner
+            0x00, 0x00, 0x00,
+            0x00, // lock_time - Block number or timestamp at which this transaction is unlocked
+        ];
+        let mut cursor = Cursor::new(raw_transaction_bytes);
+
+        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor).unwrap();
+
+        assert_eq!(coinbase_transaction.version, 1);
+        assert_eq!(coinbase_transaction.tx_in_count, 1);
+        if let TxInputType::CoinBaseInput(coinbase_input) = coinbase_transaction.tx_in {
+            assert_eq!(coinbase_input._hash, [0u8; 32]);
+            assert_eq!(coinbase_input._index, 0xffffffff);
+            assert_eq!(coinbase_input._script_bytes, 29);
+            assert_eq!(coinbase_input._height, 1281295);
+            assert_eq!(
+                coinbase_input._coinbase_script,
+                [
+                    0x04, 0x9f, 0xaa, 0x80, 0x5a, 0x06, 0x35, 0x38, 0x70, 0x6f, 0x6f, 0x6c, 0x0c,
+                    0x00, 0x01, 0x00, 0x00, 0xfe, 0x22, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00
+                ]
+            );
+            assert_eq!(coinbase_input._sequence, 0xffffffff);
+        } else {
+            panic!("Expected CoinBaseInput type for tx_in, found different variant.");
+        }
+        assert_eq!(coinbase_transaction.tx_out_count, 1);
+        assert_eq!(coinbase_transaction.tx_out[0].value, 80429395);
+        assert_eq!(coinbase_transaction.tx_out[0].pk_script_bytes, 25);
+        assert_eq!(
+            coinbase_transaction.tx_out[0].pk_script,
+            [
+                0x76, 0xa9, 0x14, 0xf1, 0x12, 0x98, 0xce, 0x77, 0x7c, 0xb5, 0xdb, 0x5c, 0x09, 0x25,
+                0x0c, 0xad, 0x4e, 0xb8, 0x56, 0xb1, 0xe3, 0x66, 0xef, 0x88, 0xac
+            ]
+        );
+        assert_eq!(coinbase_transaction.lock_time, 0);
+    }
 
     #[test]
     fn test_compactsize_serialization_u16() {
@@ -497,7 +580,6 @@ mod tests {
                 Vec::new()
             }
         };
-        // let bytes: &[u8] = &fs::read("./tmp/block_message_payload.dat").unwrap();
 
         if !bytes.is_empty() {
             // create a cursor over the bytes
@@ -583,4 +665,40 @@ mod tests {
             assert_eq!(bytes[81..], serialized_txn_vec.concat());
         }
     }
+
+    #[test]
+    fn test_transaction_read_balance() {
+        let transaction_bytes = &[
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x12, 0x16, 0xd1, 0x0a, 0xe3, 0xaf, 0xe6,
+            0x11, 0x95, 0x29, 0xc0, 0xa0, 0x1a, 0xbe, 0x78, 0x33, 0x64, 0x1e, 0x0e, 0x9d, 0x37,
+            0xeb, 0x88, 0x0a, 0xe5, 0x54, 0x7c, 0xfb, 0x7c, 0x6c, 0x7b, 0xca, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0xfd, 0xff, 0xff, 0xff, 0x02, 0x46, 0xb3, 0x1b, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x19, 0x76, 0xa9, 0x14, 0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a,
+            0x95, 0x72, 0xf7, 0xea, 0x79, 0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, 0x88, 0xac, 0x73,
+            0x1f, 0x20, 0x01, 0x02, 0x00, 0x00, 0x00, 0x19, 0x76, 0xa9, 0x14, 0xd6, 0x17, 0x96,
+            0x6c, 0x3f, 0x29, 0xcf, 0xe5, 0x0f, 0x7d, 0x92, 0x78, 0xdd, 0x3e, 0x46, 0x0e, 0x3f,
+            0x08, 0x4b, 0x7b, 0x88, 0xac, 0x02, 0x47, 0x30, 0x44, 0x02, 0x20, 0x59, 0x57, 0x06,
+            0x81, 0xa7, 0x73, 0x74, 0x84, 0x25, 0xdd, 0xd5, 0x61, 0x56, 0xf6, 0xaf, 0x3a, 0x0a,
+            0x78, 0x1a, 0x33, 0xae, 0x3c, 0x42, 0xc7, 0x4f, 0xaf, 0xd6, 0xcc, 0x2b, 0xd0, 0xac,
+            0xbc, 0x02, 0x20, 0x0c, 0x45, 0x12, 0xc2, 0x50, 0xf8, 0x86, 0x53, 0xfa, 0xe4, 0xd7,
+            0x3e, 0x0c, 0xab, 0x41, 0x9f, 0xa2, 0xea, 0xd0, 0x1d, 0x6b, 0xa1, 0xc5, 0x4e, 0xde,
+            0xe6, 0x9e, 0x15, 0xc1, 0x61, 0x86, 0x38, 0x01, 0x21, 0x03, 0xe7, 0xd8, 0xe9, 0xb0,
+            0x95, 0x33, 0xae, 0x39, 0x0d, 0x0d, 0xb3, 0xad, 0x53, 0xcc, 0x05, 0x0a, 0x54, 0xf8,
+            0x9a, 0x98, 0x70, 0x94, 0xbf, 0xfa, 0xc2, 0x60, 0xf2, 0x59, 0x12, 0x88, 0x5b, 0x83,
+            0x4b, 0x2c, 0x25, 0x00,
+        ];
+
+        let mut cursor: Cursor<&[u8]> = Cursor::new(transaction_bytes);
+
+        let raw_transaction = RawTransaction::from_bytes(&mut cursor).unwrap();
+
+        let utxo = Utxo::from_raw_transaction(&raw_transaction).unwrap();
+
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        let balance = utxo._get_wallet_balance(address).unwrap();
+
+        println!("balance: {}", balance);
+        assert!(balance > 0);
+    }
+
 }

@@ -11,7 +11,7 @@ pub mod header_constants {
 pub mod messages {
     use super::super::HashId;
     pub const _MAX_INV_SIZE: usize = 50000;
-    pub const MAX_PAYLOAD_SIZE: u32 = 1000000;
+    pub const MAX_PAYLOAD_SIZE: u32 = 500 * 1024 * 1024; // 500 MB
     pub const GENESIS_HASHID: HashId = [
         0x6f, 0xe2, 0x8c, 0x0a, 0xb6, 0xf1, 0xb3, 0x72, 0xc1, 0xa6, 0xa2, 0x46, 0xae, 0x63, 0xf7,
         0x4f, 0x93, 0x1e, 0x83, 0x65, 0xe1, 0x5a, 0x08, 0x9c, 0x68, 0xd6, 0x19, 0x00, 0x00, 0x00,
@@ -27,6 +27,12 @@ pub mod commands {
     pub const VERACK: &str = "verack\0\0\0\0\0\0";
     pub const HEADERS: &str = "headers\0\0\0\0\0";
     pub const UNKNOWN: &str = "no_command\0\0";
+    pub const SENDCMPCT: &str = "sendcmpct\0\0\0";
+    pub const SENDHEADERS: &str = "sendheaders\0";
+    pub const PING: &str = "ping\0\0\0\0\0\0\0\0";
+    pub const FEEFILTER: &str = "feefilter\0\0\0";
+    pub const ADDR: &str = "addr\0\0\0\0\0\0\0\0";
+    pub const INV: &str = "inv\0\0\0\0\0\0\0\0\0";
 }
 
 pub mod version_constants {
@@ -38,4 +44,5 @@ pub mod config {
     pub const PORT: u16 = 8333;
     pub const VERBOSE: &str = "VERBOSE";
     pub const QUIET: &str = "QUIET";
+    pub const MAGIC: [u8;4] = [0x0b, 0x11, 0x09, 0x07];
 }

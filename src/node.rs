@@ -34,6 +34,7 @@ impl Listener {
             Err(e) => {
                 log(&format!("{:?}", e) as &str, VERBOSE);
                 log(&format!("connection: {:?}", self.stream) as &str, VERBOSE);
+                // self.listen()
                 Err(e)
             }
         }
@@ -42,10 +43,30 @@ impl Listener {
     fn listen(&mut self) -> io::Result<()> {
         loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
+            if message_header.validate_header().is_err() {
+                // println!("Invalid header: {:?}, ignoring message", message_header);
+                continue;
+            }
+
             let payload = message_header.read_payload(&mut self.stream)?;
+
             let dyn_message: Message = match message_header.command_name.as_str() {
-                commands::HEADERS => Headers::deserialize(&payload)?,
-                commands::BLOCK => Block::deserialize(&payload)?,
+                commands::HEADERS => match Headers::deserialize(&payload) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        println!("Invalid headers payload: {:?}, ignoring message", e);
+                        // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
+                        Message::Failure()
+                    }
+                },
+                commands::BLOCK => match Block::deserialize(&payload) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        println!("Invalid block payload: {:?}, ignoring message", e);
+                        // HERE WE MUST REQUEST THE BLOCK AGAIN!
+                        Message::Failure()
+                    }
+                },
                 _ => continue,
             };
             self.writer_channel.send(dyn_message).map_err(to_io_err)?;

@@ -61,6 +61,7 @@ pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
 
 pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
     let first_byte = u8::from_le_stream(cursor)?;
+
     match first_byte {
         0xff => Ok(u64::from_le_stream(cursor)?),
         0xfe => {
@@ -77,6 +78,25 @@ pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
         }
         _ => Ok(first_byte as u64),
     }
+}
+
+// https://developer.bitcoin.org/reference/transactions.html#compact_size-unsigned-integers
+pub fn to_compact_size_bytes(compact_size: u64) -> Vec<u8> {
+    let mut bytes: Vec<u8> = vec![];
+    if compact_size <= 252 {
+        bytes.extend(compact_size.to_le_bytes()[..1].iter());
+    } else if compact_size <= 0xffff {
+        bytes.push(0xfd);
+        bytes.extend(compact_size.to_le_bytes()[..2].iter());
+    } else if compact_size <= 0xffffffff {
+        bytes.push(0xfe);
+        bytes.extend(compact_size.to_le_bytes()[..4].iter());
+    } else {
+        bytes.push(0xff);
+        bytes.extend(compact_size.to_le_bytes()[..8].iter());
+    }
+
+    bytes
 }
 
 #[cfg(test)]
