@@ -8,6 +8,7 @@ use crate::messages::{
 use crate::node_controller::NodeController;
 use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
+use crate::wallet::Wallet;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -25,6 +26,7 @@ pub struct NetworkController {
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
+    wallet: Wallet,
 }
 
 impl NetworkController {
@@ -36,9 +38,10 @@ impl NetworkController {
             headers: HashMap::new(),
             tallest_header: GENESIS_HASHID,
             blocks: HashMap::new(),
-            utxo_set: HashMap::new(),
+            utxo_set: (HashMap::new(), Vec::new()),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone())?,
             ui_sender,
+            wallet: Wallet::login()?,
         })
     }
 
@@ -49,22 +52,22 @@ impl NetworkController {
     }
 
     // HARDCODED NEEDS TO BE DYNAMIC
-    fn read_wallet_balance(&self) -> io::Result<i64> {
+    fn read_wallet_balance(&self) -> io::Result<u64> {
         // let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-        let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u";
+        // let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u";
 
-        let mut balance = 0;
-        match self.utxo_set.get(address) {
-            Some(utxos) => {
-                for (_, utxo) in utxos.iter() {
-                    balance += utxo._value;
-                }
-            }
-            None => {
-                println!("Address not found");
-                return Ok(balance);
-            }
-        }
+        let balance = Wallet::get_balance(&self.wallet, &self.utxo_set);
+        // match self.utxo_set.0.get(address) {
+        //     Some(utxos) => {
+        //         for (_, utxo) in utxos.iter() {
+        //             balance += utxo._value;
+        //         }
+        //     }
+        //     None => {
+        //         println!("Address not found");
+        //         return Ok(balance);
+        //     }
+        // }
 
         println!("Wallet balance: {:?}", balance);
         self.ui_sender
@@ -206,6 +209,7 @@ impl NetworkController {
     }
 
     pub fn start_sync(&mut self) -> io::Result<()> {
+        println!("Starting sync...");
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
             self.update_status_bar("Found blocks backup file, reading blocks...".to_string())?;

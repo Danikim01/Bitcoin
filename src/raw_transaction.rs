@@ -2,7 +2,7 @@ use crate::io::{self, Cursor};
 use crate::messages::utility::{read_from_varint, read_hash, to_compact_size_bytes, StreamRead};
 
 use crate::utility::double_hash;
-use crate::utxo::{Utxo, UtxoSet};
+use crate::utxo::{Utxo, UtxoId, UtxoSet};
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind, Read};
@@ -50,7 +50,7 @@ impl TxInput {
 
     pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
-        bytes.extend_from_slice(&self.previous_output._hash);
+        bytes.extend_from_slice(&self.previous_output.hash);
         bytes.extend_from_slice(&self.previous_output._index.to_le_bytes());
 
         // this is needed in case the script bytes is 0
@@ -79,15 +79,15 @@ impl TxInput {
 
 #[derive(Debug, Clone)]
 pub struct Outpoint {
-    pub _hash: [u8; 32],
+    pub hash: [u8; 32],
     pub _index: u32,
 }
 
 impl Outpoint {
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
-        let _hash = read_hash(cursor)?;
+        let hash = read_hash(cursor)?;
         let _index = u32::from_le_stream(cursor)?;
-        let outpoint = Outpoint { _hash, _index };
+        let outpoint = Outpoint { hash, _index };
         Ok(outpoint)
     }
 }
@@ -286,24 +286,44 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
+    fn get_spent_utxos(&self) -> Vec<UtxoId> {
+        let mut spent_utxos: Vec<UtxoId> = vec![];
+
+        match &self.tx_in {
+            TxInputType::CoinBaseInput(_) => {}
+            TxInputType::TxInput(inputs) => {
+                for input in inputs {
+                    spent_utxos.push(input.previous_output.hash);
+                }
+            }
+        }
+
+        spent_utxos
+    }
+
     pub fn generate_utxo(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         let new_id = double_hash(&self.serialize()).to_byte_array();
-        let new_utxo = Utxo::from_raw_transaction(self)?;
 
+        // add spent utxos
+        let spent_utxos: Vec<UtxoId> = self.get_spent_utxos();
+        utxo_set.1.extend(spent_utxos);
+
+        // add generated utxos
+        let new_utxo = Utxo::from_raw_transaction(self)?;
         for transaction in &new_utxo.transactions {
             let tx_address = match transaction.get_address() {
                 Ok(val) => val,
                 Err(_) => "no_address".to_string(),
             };
 
-            match utxo_set.get_mut(&tx_address) {
+            match utxo_set.0.get_mut(&tx_address) {
                 Some(val) => {
                     val.insert(new_id, transaction.clone());
                 }
                 None => {
                     let mut map = HashMap::new();
                     map.insert(new_id, transaction.clone());
-                    utxo_set.insert(tx_address, map);
+                    utxo_set.0.insert(tx_address, map);
                 }
             }
         }

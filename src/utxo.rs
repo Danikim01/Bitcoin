@@ -9,8 +9,12 @@ fn _hash_pk_address(pk_address: Vec<u8>) -> [u8; 20] {
     hash160::Hash::hash(&pk_address).to_byte_array()
 }
 
-// pub type UtxoSet = HashMap<UtxoId, Utxo>;
-pub type UtxoSet = HashMap<String, HashMap<UtxoId, UtxoTransaction>>;
+pub type UtxoId = [u8; 32];
+pub type WalletUtxo = HashMap<UtxoId, UtxoTransaction>;
+type Address = String;
+pub type UtxoSpent = Vec<UtxoId>;
+pub type UtxoSet = (HashMap<Address, WalletUtxo>, UtxoSpent);
+// pub type UtxoSet = HashMap<String, HashMap<UtxoId, UtxoTransaction>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UtxoTransaction {
@@ -83,8 +87,6 @@ impl UtxoTransaction {
     }
 }
 
-pub type UtxoId = [u8; 32];
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Utxo {
     pub transactions: Vec<UtxoTransaction>,
@@ -103,22 +105,6 @@ impl Utxo {
         Ok(utxo)
     }
 
-    /// Validate that the transaction of index in txid can be spent
-    /// and mark it as spent
-    pub fn _validate_spend(&self, index: usize) -> io::Result<()> {
-        // first check that it exists
-        if index >= self.transactions.len() {
-            println!("Utxo index out of bounds!");
-            // return Err(io::Error::new(
-            //     io::ErrorKind::InvalidInput,
-            //     "Index out of bounds",
-            // ));
-        }
-
-        // then check the lock (research how to do this)
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
