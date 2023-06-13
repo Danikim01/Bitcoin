@@ -16,7 +16,7 @@ pub type UtxoSet = HashMap<String, HashMap<UtxoId, UtxoTransaction>>;
 pub struct UtxoTransaction {
     pub _value: i64,
     _lock: Vec<u8>,
-    _spent: bool,
+    pub _spent: bool,
 }
 
 pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {

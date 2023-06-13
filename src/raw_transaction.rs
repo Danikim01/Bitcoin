@@ -15,10 +15,10 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
 
 #[derive(Debug, Clone)]
 pub struct TxInput {
-    previous_output: Outpoint,
-    script_bytes: u64,
-    script_sig: Vec<u8>,
-    sequence: u32,
+    pub previous_output: Outpoint,
+    pub script_bytes: u64,
+    pub script_sig: Vec<u8>,
+    pub sequence: u32,
 }
 
 impl TxInput {
@@ -665,5 +665,4 @@ mod tests {
             assert_eq!(bytes[81..], serialized_txn_vec.concat());
         }
     }
-
 }
