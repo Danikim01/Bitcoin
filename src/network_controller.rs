@@ -50,10 +50,10 @@ impl NetworkController {
 
     // HARDCODED NEEDS TO BE DYNAMIC
     fn read_wallet_balance(&self) -> io::Result<i64> {
-        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        // let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u";
 
         let mut balance = 0;
-
         match self.utxo_set.get(address) {
             Some(utxos) => {
                 for (_, utxo) in utxos.iter() {
@@ -61,7 +61,7 @@ impl NetworkController {
                 }
             }
             None => {
-                println!("Adress not found!");
+                println!("Address not found");
                 return Ok(balance);
             }
         }
@@ -88,8 +88,7 @@ impl NetworkController {
                 "Reading blocks, {:?} days behind",
                 block.get_days_old()
             ))?;
-        }
-        else {
+        } else {
             self.update_status_bar("Up to date".to_string())?;
         }
 
@@ -228,7 +227,7 @@ impl NetworkController {
             let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
             headers.trim_timestamp(init_tp_timestamp)?;
             let missing_headers = self.get_missing_headers(&headers)?;
-            
+
             if !missing_headers.is_empty() {
                 self.update_status_bar(format!(
                     "Found {} missing blocks in backup file, requesting them...",

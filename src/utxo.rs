@@ -10,7 +10,7 @@ fn _hash_pk_address(pk_address: Vec<u8>) -> [u8; 20] {
 }
 
 // pub type UtxoSet = HashMap<UtxoId, Utxo>;
-pub type UtxoSet = HashMap<String, HashMap<UtxoId,UtxoTransaction>>;
+pub type UtxoSet = HashMap<String, HashMap<UtxoId, UtxoTransaction>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UtxoTransaction {
@@ -119,14 +119,6 @@ impl Utxo {
 
         Ok(())
     }
-
-    pub fn _get_wallet_balance(&self, address: &str) -> io::Result<i64> {
-        let mut balance = 0;
-        for transaction in &self.transactions {
-            balance += transaction._get_wallet_balance(address)?;
-        }
-        Ok(balance)
-    }
 }
 
 #[cfg(test)]
@@ -174,59 +166,13 @@ mod tests {
     }
 
     #[test]
-    fn test_utxo_get_pk_address_balance() {
-        let lock_bytes: &[u8] = &[
-            0x14, // push 20 bytes as data
-            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
-            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
+    fn test_get_address_test_from_p2pkh() {
+        let p2pkh: [u8; 20] = [
+            0x7a, 0xa8, 0x18, 0x46, 0x85, 0xca, 0x1f, 0x06, 0xf5, 0x43, 0xb6, 0x4a, 0x50, 0x2e,
+            0xb3, 0xb6, 0x13, 0x5d, 0x67, 0x20,
         ];
-
-        let lock_other_bytes: &[u8] = &[
-            0x14, // push 20 bytes as data
-            0xff, 0xff, 0x48, 0x57, 0x0b, 0x55, 0xc4, 0x2c, 0x2a, 0xf8, 0x16, 0xae, 0xab, 0xa0,
-            0x6c, 0xfe, 0xe1, 0x22, 0x4f, 0xae, // Public key hash
-        ];
-
-        let val1 = 100;
-        let val2 = 200;
-        let expected_value = val1 + val2;
-
-        let utxo_transaction1 = UtxoTransaction {
-            _value: val1,
-            _lock: lock_bytes.to_vec(),
-            _spent: false,
-        };
-
-        let utxo_transaction2 = UtxoTransaction {
-            _value: 150,
-            _lock: lock_other_bytes.to_vec(),
-            _spent: false,
-        };
-
-        let utxo_transaction3 = UtxoTransaction {
-            _value: val2,
-            _lock: lock_bytes.to_vec(),
-            _spent: false,
-        };
-
-        let utxo_transaction4 = UtxoTransaction {
-            _value: 150,
-            _lock: lock_bytes.to_vec(),
-            _spent: true,
-        };
-
-        let utxo = Utxo {
-            transactions: vec![
-                utxo_transaction1,
-                utxo_transaction2,
-                utxo_transaction3,
-                utxo_transaction4,
-            ],
-        };
-
-        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-
-        let actual_value = utxo._get_wallet_balance(address).unwrap();
-        assert_eq!(actual_value, expected_value);
+        let actual = p2pkh_to_address(p2pkh);
+        let expected = "mrhW6tcF2LDetj3kJvaDTvatrVxNK64NXk".to_string();
+        assert_eq!(actual, expected)
     }
 }
