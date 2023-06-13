@@ -2,14 +2,14 @@ use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::{double_hash};
+use crate::utility::double_hash;
+use crate::utility::to_io_err;
 use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use crate::utility::to_io_err;
 
 use super::Message;
 
@@ -120,7 +120,6 @@ impl Block {
     }
 
     pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
-
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set)?;
         }

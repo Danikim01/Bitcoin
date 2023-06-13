@@ -14,13 +14,13 @@ mod version_message;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;
+pub use block_message::BlockSet;
 pub use getdata_message::{GetData, InvType, Inventory};
 pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use verack_message::VerAck;
 pub use version_message::Version;
-pub use block_message::BlockSet;
 
 pub type HashId = [u8; 32];
 

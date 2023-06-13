@@ -1,6 +1,8 @@
+use bitcoin_hashes::{ripemd160, sha256, Hash};
+use bs58;
 use rand::rngs::OsRng;
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
-use std::io;
+use std::{arch::x86_64::_CMP_LT_OQ, io};
 
 use crate::{
     raw_transaction::{Outpoint, RawTransaction, TxInput, TxInputType, TxOutput},
@@ -131,6 +133,42 @@ impl Wallet {
         }
     }
 
+    //ver https://developer.bitcoin.org/devguide/wallets.html#public-key-formats
+    fn hash_public_key(public_key: &PublicKey) -> io::Result<Vec<u8>> {
+        let serialized_key = public_key.serialize();
+        let raw_bytes = if serialized_key[0] == 0x04 {
+            // Uncompressed public key
+            &serialized_key[1..]
+        } else if serialized_key[0] == 0x03 || serialized_key[0] == 0x02 {
+            // Compressed public key
+            &serialized_key[0..]
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Invalid public key format",
+            ));
+        };
+
+        // First hash with SHA256
+        let sha_hash = sha256::Hash::hash(&raw_bytes).to_byte_array();
+
+        // Second hash with RIPEMD160
+        let ripemd_hash = ripemd160::Hash::hash(&sha_hash);
+
+        Ok(ripemd_hash.to_byte_array().to_vec())
+    }
+
+    pub fn construct_p2pkh_script(hashed_pk: Vec<u8>) -> Vec<u8> {
+        let mut pk_script = Vec::new();
+        pk_script.push(0x76); // OP_DUP
+        pk_script.push(0xa9); // OP_HASH160
+        pk_script.push(0x14); // Push 20 bytes
+        pk_script.extend_from_slice(&hashed_pk);
+        pk_script.push(0x88); // OP_EQUALVERIFY
+        pk_script.push(0xac); // OP_CHECKSIG
+        pk_script
+    }
+
     pub fn generate_transaction(
         &self,
         utxo_set: &mut UtxoSet,
@@ -148,12 +186,22 @@ impl Wallet {
         // Iterar sobre el UtxoSet
         Self::fill_txins(utxo_set, amount, &mut balance, &mut txin, vec_transactions);
 
-        let txout: Vec<TxOutput> = vec![TxOutput {
-            value: 0 as i64,
-            pk_script_bytes: 0 as u64,
-            pk_script: vec![0; 1],
+        //Construct the P2PKH locking script
+        let hashed_pk = Self::hash_public_key(&recv_addr)?;
+        let pk_script = Self::construct_p2pkh_script(hashed_pk);
+        let mut txout: Vec<TxOutput> = vec![TxOutput {
+            value: amount as i64,
+            pk_script_bytes: pk_script.len() as u64,
+            pk_script: pk_script.clone(),
         }];
 
+        let txout_change = TxOutput {
+            value: (balance as u64 - amount) as i64,
+            pk_script_bytes: pk_script.len() as u64,
+            pk_script,
+        };
+
+        txout.push(txout_change);
         //  the first txout is destined for the receiver
         //  the other txout is our "change"
 
