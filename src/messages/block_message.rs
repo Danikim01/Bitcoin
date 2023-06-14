@@ -205,7 +205,7 @@ mod tests {
 
         if !bytes.is_empty() {
             let message = Block::deserialize(&bytes).unwrap();
-            let mut utxo_set: UtxoSet = (HashMap::new(), Vec::new());
+            let mut utxo_set: UtxoSet = UtxoSet::new();
             if let Message::Block(block) = message {
                 block.validate(&mut utxo_set)?;
                 assert_eq!(block.txn_count, block.txns.len());
