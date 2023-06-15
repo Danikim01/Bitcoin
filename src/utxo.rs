@@ -30,13 +30,13 @@ impl UtxoSet {
     }
 
     /// returns available utxos for a given address
-    pub fn get_wallet_available_utxos(&self, address: &str) -> io::Result<Vec<UtxoTransaction>> {
-        let mut available_utxos: Vec<UtxoTransaction> = Vec::new();
+    pub fn get_wallet_available_utxos(&self, address: &str) -> io::Result<Vec<(UtxoId, UtxoTransaction)>> {
+        let mut available_utxos: Vec<(UtxoId, UtxoTransaction)> = Vec::new();
 
         if let Some(utxos) = self.set.get(address) {
             for (txid, utxo_transaction) in utxos {
                 if !self.utxo_spent(txid, utxo_transaction) {
-                    available_utxos.push(utxo_transaction.clone());
+                    available_utxos.push((txid.clone(), utxo_transaction.clone()));
                 }
             }
         }

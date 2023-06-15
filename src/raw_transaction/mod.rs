@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io::{Error, Read};
 
 pub mod tx_input;
-use tx_input::{TxInput, TxInputType, CoinBaseInput};
+use tx_input::{CoinBaseInput, TxInput, TxInputType};
 pub mod tx_output;
 use tx_output::TxOutput;
 
@@ -188,6 +188,8 @@ impl RawTransaction {
 
 #[cfg(test)]
 mod tests {
+    use crate::utility::decode_hex;
+
     use super::*;
     use std::fs;
 
@@ -336,5 +338,13 @@ mod tests {
             // we compare the bytes
             assert_eq!(bytes[81..], serialized_txn_vec.concat());
         }
+    }
+
+    #[test]
+    fn test_raw_transaction_deserial_and_serial() {
+        let bytes = decode_hex("01000000011acd5fe758ab56da34a0973c9c5dda0b63dcd79fe5860950813a366db1c92585010000006a4730440220046dc82c7c2e72665938c0aa7e10a135496d2467c2d1d105daa4ed1bab436898022064d9e36334d87c56454f7447c9da2c2eeb56cb77d3e9431feeac45649a23d9b901210387d7265c4973b153830aa72486d2488f964d194d2de869236fb87cc907d83971ffffffff0240420f00000000001976a9149144fda38182db2d26e5de88456accf241c898eb88aca0860100000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac00000000").unwrap();
+        let raw_transaction = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
+        let serialized_raw_transaction = raw_transaction.serialize();
+        assert_eq!(bytes, serialized_raw_transaction);
     }
 }

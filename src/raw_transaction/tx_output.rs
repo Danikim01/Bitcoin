@@ -79,6 +79,8 @@ impl TxOutput {
 
 #[cfg(test)]
 mod tests {
+    use crate::utility::decode_hex;
+
     use super::*;
     
     #[test]
@@ -107,5 +109,13 @@ mod tests {
         assert_eq!(bytes[0..8], serialized_txou[0..8]); // value bytes
         assert_eq!(bytes[8], serialized_txou[8]); // pk_script_bytes
         assert_eq!(bytes[9..], serialized_txou[9..]); // pk_script
+    }
+
+    #[test]
+    fn test_deseareal_and_sereal() {
+        let bytes = decode_hex("b7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac").unwrap();
+        let txou = TxOutput::from_bytes(&mut Cursor::new(&bytes)).unwrap();
+        let serialized_txou = txou._serialize();
+        assert_eq!(bytes, serialized_txou);
     }
 }
