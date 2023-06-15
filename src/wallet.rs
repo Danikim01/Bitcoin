@@ -34,7 +34,7 @@ fn build_p2pkh_script(hashed_pk: Vec<u8>) -> Vec<u8> {
     let mut pk_script = Vec::new();
     pk_script.push(0x76); // OP_DUP
     pk_script.push(0xa9); // OP_HASH160
-                          //pk_script.push(0x14); // Push 20 bytes
+    pk_script.push(0x14); // Push 20 bytes
     pk_script.extend_from_slice(&hashed_pk);
     pk_script.push(0x88); // OP_EQUALVERIFY
     pk_script.push(0xac); // OP_CHECKSIG
@@ -250,6 +250,7 @@ mod tests {
         let mut pk_script = Vec::new();
         pk_script.push(0x76); // OP_DUP
         pk_script.push(0xa9); // OP_HASH160
+        pk_script.push(0x14); // Push 20 bytes
         pk_script.extend_from_slice(&hashed_pk);
         pk_script.push(0x88); // OP_EQUALVERIFY
         pk_script.push(0xac); // OP_CHECKSIG
