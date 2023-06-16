@@ -1,3 +1,4 @@
+use crate::messages::utility::to_varint;
 use crate::utxo::UtxoId;
 use crate::{
     raw_transaction::{
@@ -13,9 +14,13 @@ use crate::{
     utxo::{UtxoSet, WalletUtxo},
 };
 use bitcoin_hashes::{hash160, ripemd160, sha256, Hash};
+use bs58::decode;
+use gtk::builders::SearchEntryBuilder;
 use rand::rngs::OsRng;
-use secp256k1::{Message, Secp256k1, SecretKey};
+use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+use std::convert::TryInto;
 use std::{io, str::FromStr};
+const SIGHASH_ALL: u32 = 0x01;
 
 //ver https://developer.bitcoin.org/devguide/wallets.html#public-key-formats
 fn hash_address(address: String) -> io::Result<Vec<u8>> {
@@ -41,6 +46,86 @@ fn build_p2pkh_script(hashed_pk: Vec<u8>) -> Vec<u8> {
     pk_script
 }
 
+fn decode_base58(s: &str) -> Result<Vec<u8>, String> {
+    let bytes = bs58::decode(s).into_vec().map_err(|err| err.to_string())?;
+    Ok(bytes)
+}
+
+fn sig_hash(tx: &RawTransaction, input_index: usize) -> [u8; 32] {
+    let mut s = Vec::new();
+    s.extend(&(tx.version as u32).to_le_bytes());
+    s.extend(to_varint(tx.tx_in_count as u64));
+
+    match &tx.tx_in {
+        TxInputType::CoinBaseInput(coinbase_input) => {
+            println!("Handle CoinBaseInput");
+            s.extend(coinbase_input._serialize());
+        }
+        TxInputType::TxInput(inputs) => {
+            println!("Handle TxInputs");
+            for (i, tx_in) in inputs.iter().enumerate() {
+                println!("foo");
+                if i == input_index {
+                    s.extend(tx_in._serialize());
+                } else {
+                    s.extend_from_slice(&tx_in.previous_output.hash);
+                    s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
+                    s.extend_from_slice(&tx_in.sequence.to_le_bytes());
+                }
+            }
+        }
+    }
+
+    s.extend(to_varint(tx.tx_out_count as u64));
+
+    for tx_out in tx.tx_out.iter() {
+        s.extend(tx_out._serialize());
+        s.extend(&(tx.lock_time as u32).to_le_bytes());
+        s.extend(&SIGHASH_ALL.to_le_bytes());
+    }
+
+    let h256 = sha256::Hash::hash(&s);
+    let bytes: [u8; 32] = *h256.as_ref();
+    let mut be_bytes = [0u8; 32];
+    for i in 0..32 {
+        be_bytes[i] = bytes[31 - i];
+    }
+    be_bytes
+}
+
+fn sign_transaction(transaction: &mut RawTransaction, private_key_str: String) {
+    let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
+
+    // Calculate the message hash
+    let z = sig_hash(&transaction, 0);
+    // Sign the hash with the private key
+    let message = &z;
+
+    let message_slice: &[u8] = message;
+    let message_slice = Message::from_slice(message_slice).unwrap();
+    let private_key = SecretKey::from_str(&private_key_str).unwrap();
+    let mut signature = secp.sign_ecdsa(&message_slice, &private_key);
+
+    // Convert the DER-encoded signature to bytes
+    let der = signature.serialize_der().to_vec();
+    let sig = [&der[..], &[0x01]].concat(); // Append SIGHASH_ALL (0x01) byte
+
+    // Get the SEC format public key
+    let public_key = PublicKey::from_secret_key(&secp, &private_key);
+    let sec = public_key.serialize();
+
+    // Create the script_sig using the signature and public key
+    let script_sig = [&sig[..], &sec[..]].concat();
+
+    // Set the script_sig of the transaction input
+    if let TxInputType::TxInput(inputs) = &mut transaction.tx_in {
+        if let Some(input) = inputs.first_mut() {
+            input.script_bytes = script_sig.len() as u64;
+            input.script_sig = script_sig;
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Wallet {
     pub secret_key: String,
@@ -49,7 +134,8 @@ pub struct Wallet {
 
 impl Wallet {
     pub fn login() -> Self {
-        let secret_key = "cVMDbb3HdL5Bo8hirbAjNnKgKPCcdU9vFmnKasQX3zSvXgCkbbFi".to_string();
+        let secret_key =
+            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string();
         // let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         // let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u";
@@ -130,7 +216,7 @@ impl Wallet {
 
         //  the first txout is destined for the receiver
         let recv_hashed_pk = hash_address(recv_addr.clone())?;
-        let pk_script = build_p2pkh_script(recv_hashed_pk);
+        let pk_script = build_p2pkh_script(recv_hashed_pk[1..21].to_vec());
         txout.push(TxOutput {
             value: amount,
             pk_script_bytes: pk_script.len() as u64,
@@ -139,7 +225,7 @@ impl Wallet {
 
         //  the other txout is our "change"
         let self_hashed_pk = hash_address(self.address.clone())?;
-        let pk_script = build_p2pkh_script(self_hashed_pk);
+        let pk_script = build_p2pkh_script(self_hashed_pk[1..21].to_vec());
         txout.push(TxOutput {
             value: used_balance - amount,
             pk_script_bytes: pk_script.len() as u64,
@@ -162,16 +248,18 @@ impl Wallet {
         }
 
         let (txin, used_balance) = self.fill_txins(utxo_set, amount, recv_addr.clone())?;
+        println!("tx in len: {}", txin.len());
         let txout = self.fill_txouts(amount, used_balance, recv_addr)?;
-
-        Ok(RawTransaction {
+        let mut transaction = RawTransaction {
             version: 1,
             tx_in_count: txin.len() as u64,
             tx_in: TxInputType::TxInput(txin),
             tx_out_count: txout.len() as u64,
             tx_out: txout,
             lock_time: 0 as u32,
-        })
+        };
+        sign_transaction(&mut transaction, self.secret_key.clone());
+        Ok(transaction)
     }
 }
 
@@ -182,9 +270,9 @@ mod tests {
     use super::*;
     use crate::messages::utility::read_hash;
     use bs58::decode;
-    use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+    use bs58::encode;
+    use rand::{thread_rng, Rng};
     use std::io::Cursor;
-
     #[test]
     fn test_login() {
         let res = Wallet::login();
@@ -231,19 +319,13 @@ mod tests {
 
         let bytes = raw_transaction.serialize();
         let res = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
-
+        println!("{:?}", res);
         assert_eq!(res.tx_in_count, 1);
         assert_eq!(res.tx_out_count, 2);
         assert_eq!(res.tx_out[0].value, 1);
         assert_eq!(res.tx_out[1].value, 1815365);
         // EL TEST NO ES SOLO QUE PASE ESTO, LUEGO HAY QUE DESEAREALIZARLA Y VER QUE ESTE TODO BIEN
-
         println!("{}", _encode_hex(&bytes))
-    }
-
-    fn decode_base58(s: &str) -> Result<Vec<u8>, bs58::decode::Error> {
-        let bytes = decode(s);
-        Ok(bytes.into_vec().unwrap())
     }
 
     fn build_p2pkh_script(hashed_pk: Vec<u8>) -> Vec<u8> {
@@ -255,47 +337,6 @@ mod tests {
         pk_script.push(0x88); // OP_EQUALVERIFY
         pk_script.push(0xac); // OP_CHECKSIG
         pk_script
-    }
-
-    fn sign_transaction(
-        transaction: &mut RawTransaction,
-        private_key: &SecretKey,
-        public_key: &PublicKey,
-    ) {
-        let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
-        //this should be the same as z = transaction.sig_hash(0)??
-        let z = transaction.serialize();
-        let hash = double_hash(&z);
-
-        // Sign the hash with the private key
-        let message = hash.to_byte_array();
-        let mut message_slice: &[u8] = &message;
-        let message_slice = Message::from_slice(message_slice).unwrap();
-
-        let mut signature = secp.sign_ecdsa(&message_slice, &private_key);
-        assert_eq!(
-            secp.verify_ecdsa(&message_slice, &signature, &public_key),
-            Ok(())
-        );
-
-        // Convert the DER-encoded signature to bytes
-        let der = signature.serialize_der().to_vec();
-        let sig = [&der[..], &[0x01]].concat(); // Append SIGHASH_ALL (0x01) byte
-
-        // Get the SEC format public key
-        let public_key = PublicKey::from_secret_key(&secp, private_key);
-        let sec = public_key.serialize();
-
-        // Create the script_sig using the signature and public key
-        let script_sig = [&sig[..], &sec[..]].concat();
-
-        // Set the script_sig of the transaction input
-        if let TxInputType::TxInput(inputs) = &mut transaction.tx_in {
-            if let Some(input) = inputs.first_mut() {
-                input.script_bytes = script_sig.len() as u64;
-                input.script_sig = script_sig;
-            }
-        }
     }
 
     #[test]
@@ -322,7 +363,7 @@ mod tests {
         let change_h160_hash = &change_h160[1..21]; // Extract the 20-byte hash
 
         let change_amount = 0.33 * 100_000_000.0;
-        let change_script = build_p2pkh_script(change_h160_hash.to_vec());
+        let change_script = build_p2pkh_script(change_h160.to_vec());
         let change_output = TxOutput {
             value: change_amount as u64,
             pk_script_bytes: change_script.len() as u64,
@@ -335,7 +376,7 @@ mod tests {
 
         let target_amount = 0.1 * 100_000_000.0;
         let target_h160 = decoded_address.clone();
-        let target_script = build_p2pkh_script(hash_bytes.to_vec());
+        let target_script = build_p2pkh_script(decoded_address.to_vec());
         let target_output = TxOutput {
             value: target_amount as u64,
             pk_script_bytes: target_script.len() as u64,
@@ -357,13 +398,10 @@ mod tests {
             0x21, 0x31, 0x11, 0x01,
         ];
 
-        let private_key = SecretKey::from_slice(&private_key_bytes).unwrap();
-        let secp = Secp256k1::new();
-        let public_key = PublicKey::from_secret_key(&secp, &private_key);
+        let string = _encode_hex(&private_key_bytes);
+        sign_transaction(&mut tx_obj, string);
 
-        sign_transaction(&mut tx_obj, &private_key, &public_key);
-
-        //println!("{:?}", tx_obj);
+        println!("{:?}", tx_obj);
         let tx_bytes = tx_obj.serialize();
         println!("{}", _encode_hex(&tx_bytes));
     }
