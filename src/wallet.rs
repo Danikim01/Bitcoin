@@ -129,10 +129,6 @@ impl Wallet {
 
         //  the other txout is our "change"
         let self_hashed_pk = hash_address(&self.address)?;
-        println!(
-            "self_hashed_pk: {:?}",
-            _encode_hex(&self_hashed_pk[1..21].to_vec())
-        );
         let second_pk_script = build_p2pkh_script(self_hashed_pk[1..21].to_vec());
         txout.push(TxOutput {
             value: used_balance - amount,
@@ -174,7 +170,10 @@ impl Wallet {
 
 #[cfg(test)]
 mod tests {
-    use crate::{raw_transaction::RawTransaction, utility::{_encode_hex, decode_hex}};
+    use crate::{
+        raw_transaction::RawTransaction,
+        utility::{_encode_hex, decode_hex},
+    };
 
     use super::*;
     use std::io::Cursor;
