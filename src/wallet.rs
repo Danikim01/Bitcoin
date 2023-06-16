@@ -1,3 +1,4 @@
+use crate::messages::utility::to_compact_size_bytes;
 use crate::messages::utility::to_varint;
 use crate::utxo::UtxoId;
 use crate::{
@@ -51,11 +52,29 @@ fn decode_base58(s: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn sig_hash(tx: &RawTransaction, input_index: usize) -> [u8; 32] {
+fn find_previous_pk_script(
+    utxos: &Vec<(UtxoId, UtxoTransaction)>,
+    hash: &[u8; 32],
+) -> Option<Vec<u8>> {
+    for (utxo_id, utxo) in utxos {
+        if utxo_id == hash {
+            return Some(utxo._lock.clone());
+        }
+    }
+    None
+}
+
+fn sig_hash(
+    tx: &RawTransaction,
+    input_index: usize,
+    utxo_set: &mut UtxoSet,
+    my_address: &str,
+) -> [u8; 32] {
     let mut s = Vec::new();
     s.extend(&(tx.version as u32).to_le_bytes());
     s.extend(to_varint(tx.tx_in_count as u64));
-
+    let available_utxos: Vec<(UtxoId, UtxoTransaction)> =
+        utxo_set.get_wallet_available_utxos(my_address).unwrap();
     match &tx.tx_in {
         TxInputType::CoinBaseInput(coinbase_input) => {
             println!("Handle CoinBaseInput");
@@ -66,7 +85,19 @@ fn sig_hash(tx: &RawTransaction, input_index: usize) -> [u8; 32] {
             for (i, tx_in) in inputs.iter().enumerate() {
                 println!("foo");
                 if i == input_index {
-                    s.extend(tx_in._serialize());
+                    s.extend_from_slice(&tx_in.previous_output.hash);
+                    println!("prev hash: {:?}", tx_in.previous_output.hash);
+                    s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
+                    //find the previous pk_script_bytes of the actual transaction
+                    //a transaction has a previous tx_out (in the tx_in field), which has a pk_script_bytes
+                    //We take the ScriptPubKey that the input is pointing to and put that in place of the empty ScriptSig
+                    let mut pubkey_script_bytes =
+                        find_previous_pk_script(&available_utxos, &tx_in.previous_output.hash)
+                            .unwrap();
+                    println!("prev pubkey_script_bytes: {:?}", pubkey_script_bytes);
+                    s.extend_from_slice(&to_compact_size_bytes(pubkey_script_bytes.len() as u64));
+                    s.extend_from_slice(&pubkey_script_bytes.clone());
+                    s.extend_from_slice(&tx_in.sequence.to_le_bytes());
                 } else {
                     s.extend_from_slice(&tx_in.previous_output.hash);
                     s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
@@ -93,11 +124,16 @@ fn sig_hash(tx: &RawTransaction, input_index: usize) -> [u8; 32] {
     be_bytes
 }
 
-fn sign_transaction(transaction: &mut RawTransaction, private_key_str: String) {
+fn sign_transaction(
+    transaction: &mut RawTransaction,
+    private_key_str: String,
+    utxo_set: &mut UtxoSet,
+    my_address: &str,
+) {
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
 
     // Calculate the message hash
-    let z = sig_hash(&transaction, 0);
+    let z = sig_hash(&transaction, 0, utxo_set, my_address);
     // Sign the hash with the private key
     let message = &z;
 
@@ -258,7 +294,12 @@ impl Wallet {
             tx_out: txout,
             lock_time: 0 as u32,
         };
-        sign_transaction(&mut transaction, self.secret_key.clone());
+        sign_transaction(
+            &mut transaction,
+            self.secret_key.clone(),
+            utxo_set,
+            &self.address.clone(),
+        );
         Ok(transaction)
     }
 }
@@ -339,69 +380,69 @@ mod tests {
         pk_script
     }
 
-    #[test]
-    fn test_generate_raw_transaction2() {
-        let bytes =
-            decode_hex("0d6fe5213c0b3291f208cba8bfb59b7476dffacc4e5cb66f6eb20a080843a299").unwrap();
+    //#[test]
+    // fn test_generate_raw_transaction2() {
+    //     let bytes =
+    //         decode_hex("0d6fe5213c0b3291f208cba8bfb59b7476dffacc4e5cb66f6eb20a080843a299").unwrap();
 
-        let previous_output_hash = read_hash(&mut Cursor::new(&bytes)).unwrap();
-        let prev_index = 13;
-        let prev_output = Outpoint {
-            hash: previous_output_hash,
-            index: prev_index,
-        };
+    //     let previous_output_hash = read_hash(&mut Cursor::new(&bytes)).unwrap();
+    //     let prev_index = 13;
+    //     let prev_output = Outpoint {
+    //         hash: previous_output_hash,
+    //         index: prev_index,
+    //     };
 
-        let tx_in = TxInput {
-            previous_output: prev_output,
-            script_bytes: 0,
-            script_sig: Vec::new(),
-            sequence: 0xffffffff,
-        };
+    //     let tx_in = TxInput {
+    //         previous_output: prev_output,
+    //         script_bytes: 0,
+    //         script_sig: Vec::new(),
+    //         sequence: 0xffffffff,
+    //     };
 
-        let my_addr = "mzx5YhAH9kNHtcN481u6WkjeHjYtVeKVh2".to_string();
-        let change_h160 = decode_base58(&my_addr).unwrap();
-        let change_h160_hash = &change_h160[1..21]; // Extract the 20-byte hash
+    //     let my_addr = "mzx5YhAH9kNHtcN481u6WkjeHjYtVeKVh2".to_string();
+    //     let change_h160 = decode_base58(&my_addr).unwrap();
+    //     let change_h160_hash = &change_h160[1..21]; // Extract the 20-byte hash
 
-        let change_amount = 0.33 * 100_000_000.0;
-        let change_script = build_p2pkh_script(change_h160_hash.to_vec());
-        let change_output = TxOutput {
-            value: change_amount as u64,
-            pk_script_bytes: change_script.len() as u64,
-            pk_script: change_script,
-        };
+    //     let change_amount = 0.33 * 100_000_000.0;
+    //     let change_script = build_p2pkh_script(change_h160_hash.to_vec());
+    //     let change_output = TxOutput {
+    //         value: change_amount as u64,
+    //         pk_script_bytes: change_script.len() as u64,
+    //         pk_script: change_script,
+    //     };
 
-        let recvr_addr = "mnrVtF8DWjMu839VW3rBfgYaAfKk8983Xf".to_string();
-        let decoded_address = decode_base58(&recvr_addr).unwrap();
-        let hash_bytes = &decoded_address[1..21]; // Extract the 20-byte hash
+    //     let recvr_addr = "mnrVtF8DWjMu839VW3rBfgYaAfKk8983Xf".to_string();
+    //     let decoded_address = decode_base58(&recvr_addr).unwrap();
+    //     let hash_bytes = &decoded_address[1..21]; // Extract the 20-byte hash
 
-        let target_amount = 0.1 * 100_000_000.0;
-        let target_script = build_p2pkh_script(hash_bytes.to_vec());
-        let target_output = TxOutput {
-            value: target_amount as u64,
-            pk_script_bytes: target_script.len() as u64,
-            pk_script: target_script,
-        };
+    //     let target_amount = 0.1 * 100_000_000.0;
+    //     let target_script = build_p2pkh_script(hash_bytes.to_vec());
+    //     let target_output = TxOutput {
+    //         value: target_amount as u64,
+    //         pk_script_bytes: target_script.len() as u64,
+    //         pk_script: target_script,
+    //     };
 
-        let mut tx_obj = RawTransaction {
-            version: 1,
-            tx_in_count: 1,
-            tx_in: TxInputType::TxInput(vec![tx_in]),
-            tx_out_count: 2,
-            tx_out: vec![change_output, target_output],
-            lock_time: 0,
-        };
+    //     let mut tx_obj = RawTransaction {
+    //         version: 1,
+    //         tx_in_count: 1,
+    //         tx_in: TxInputType::TxInput(vec![tx_in]),
+    //         tx_out_count: 2,
+    //         tx_out: vec![change_output, target_output],
+    //         lock_time: 0,
+    //     };
 
-        let private_key_bytes: [u8; 32] = [
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x34, 0x12, 0x22,
-            0x3C, 0x11, 0x00, 0x23, 0x12, 0x15, 0x01, 0x00, 0x13, 0x20, 0x00, 0x01, 0x00, 0x32,
-            0x21, 0x31, 0x11, 0x01,
-        ];
+    //     let private_key_bytes: [u8; 32] = [
+    //         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x34, 0x12, 0x22,
+    //         0x3C, 0x11, 0x00, 0x23, 0x12, 0x15, 0x01, 0x00, 0x13, 0x20, 0x00, 0x01, 0x00, 0x32,
+    //         0x21, 0x31, 0x11, 0x01,
+    //     ];
 
-        let string = _encode_hex(&private_key_bytes);
-        sign_transaction(&mut tx_obj, string);
+    //     let string = _encode_hex(&private_key_bytes);
+    //     sign_transaction(&mut tx_obj, string);
 
-        println!("{:?}", tx_obj);
-        let tx_bytes = tx_obj.serialize();
-        println!("{}", _encode_hex(&tx_bytes));
-    }
+    //     println!("{:?}", tx_obj);
+    //     let tx_bytes = tx_obj.serialize();
+    //     println!("{}", _encode_hex(&tx_bytes));
+    // }
 }

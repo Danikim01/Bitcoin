@@ -26,11 +26,15 @@ impl UtxoSet {
 
     fn utxo_spent(&self, txid: &[u8; 32], utxo: &UtxoTransaction) -> bool {
         let vout = utxo.index.to_le_bytes();
-        self.spent.contains(&generate_txid_vout_bytes(txid.clone(), vout))
+        self.spent
+            .contains(&generate_txid_vout_bytes(txid.clone(), vout))
     }
 
     /// returns available utxos for a given address
-    pub fn get_wallet_available_utxos(&self, address: &str) -> io::Result<Vec<(UtxoId, UtxoTransaction)>> {
+    pub fn get_wallet_available_utxos(
+        &self,
+        address: &str,
+    ) -> io::Result<Vec<(UtxoId, UtxoTransaction)>> {
         let mut available_utxos: Vec<(UtxoId, UtxoTransaction)> = Vec::new();
 
         if let Some(utxos) = self.set.get(address) {
@@ -63,7 +67,7 @@ impl UtxoSet {
 pub struct UtxoTransaction {
     pub index: u32,
     pub value: u64,
-    _lock: Vec<u8>,
+    pub _lock: Vec<u8>,
 }
 
 pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
