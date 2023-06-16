@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
 
+pub type Lock = Vec<u8>;
 pub type UtxoId = [u8; 32];
 pub type WalletUtxo = HashMap<UtxoId, UtxoTransaction>;
 type Address = String;
@@ -67,7 +68,7 @@ impl UtxoSet {
 pub struct UtxoTransaction {
     pub index: u32,
     pub value: u64,
-    pub _lock: Vec<u8>,
+    pub lock: Lock,
 }
 
 pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
@@ -85,7 +86,7 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
 impl UtxoTransaction {
     fn _has_wallet(&self, address: &str) -> io::Result<bool> {
         // iterate lock one byte at a time until 0x14 is found
-        let mut cursor = Cursor::new(self._lock.clone());
+        let mut cursor = Cursor::new(self.lock.clone());
 
         let buf = &mut [0; 1];
         while buf[0] != 0x14 {
@@ -101,7 +102,7 @@ impl UtxoTransaction {
 
     pub fn get_address(&self) -> io::Result<String> {
         // iterate lock one byte at a time until 0x14 is found
-        let mut cursor = Cursor::new(self._lock.clone());
+        let mut cursor = Cursor::new(self.lock.clone());
 
         let buf = &mut [0; 1];
         while buf[0] != 0x14 {
@@ -120,7 +121,7 @@ impl UtxoTransaction {
         Ok(Self {
             index,
             value,
-            _lock: lock,
+            lock,
         })
     }
 }

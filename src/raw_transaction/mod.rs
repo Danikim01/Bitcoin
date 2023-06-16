@@ -1,16 +1,24 @@
 use crate::io::{self, Cursor};
-use crate::messages::utility::{read_from_varint, read_hash, to_compact_size_bytes, StreamRead};
+use crate::messages::utility::{
+    read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
+};
 
-use crate::utility::double_hash;
+use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Utxo, UtxoSet};
-use bitcoin_hashes::Hash;
+use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
-use std::io::{Error, Read};
+use std::{
+    io::{Error, Read},
+    str::FromStr,
+};
 
 pub mod tx_input;
 use tx_input::{CoinBaseInput, TxInput, TxInputType};
 pub mod tx_output;
 use tx_output::TxOutput;
+
+use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+const SIGHASH_ALL: u32 = 0x01;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -25,6 +33,26 @@ pub fn generate_txid_vout_bytes(txid: [u8; 32], vout: [u8; 4]) -> [u8; 36] {
     bytes
 }
 
+fn sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
+    let message = &z;
+
+    let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
+    let message_slice: &[u8] = message;
+    let message_slice = Message::from_slice(message_slice).map_err(to_io_err)?;
+    let private_key = SecretKey::from_str(&private_key).map_err(to_io_err)?;
+    let signature = secp.sign_ecdsa(&message_slice, &private_key);
+
+    // Convert the DER-encoded signature to bytes
+    Ok(signature.serialize_der().to_vec())
+}
+
+fn sec_with_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
+    let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
+    let private_key = SecretKey::from_str(&private_key).map_err(to_io_err)?;
+    let public_key = PublicKey::from_secret_key(&secp, &private_key);
+    Ok(public_key.serialize().to_vec())
+}
+
 #[derive(Debug, Clone)]
 pub struct RawTransaction {
     pub version: u32,
@@ -36,6 +64,75 @@ pub struct RawTransaction {
 }
 
 impl RawTransaction {
+    fn sig_hash(&self, prev_pk_script: Vec<u8>, index: usize) -> io::Result<[u8; 32]> {
+        let mut s = Vec::new();
+        s.extend((self.version as u32).to_le_bytes());
+        s.extend(to_varint(self.tx_in_count as u64));
+        match &self.tx_in {
+            TxInputType::CoinBaseInput(_) => {}
+            TxInputType::TxInput(tx_ins) => {
+                for (i, tx_in) in tx_ins.iter().enumerate() {
+                    // get only the tx_in desired
+                    if i == index {
+                        s.extend_from_slice(&tx_in.previous_output.hash);
+                        s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
+                        let pubkey_script_bytes = prev_pk_script.clone();
+                        s.extend_from_slice(&to_compact_size_bytes(
+                            pubkey_script_bytes.len() as u64
+                        ));
+                        s.extend_from_slice(&pubkey_script_bytes.clone());
+                        s.extend_from_slice(&tx_in.sequence.to_le_bytes());
+                    } else {
+                        s.extend_from_slice(&tx_in.previous_output.hash);
+                        s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
+                        s.extend_from_slice(&tx_in.sequence.to_le_bytes());
+                    }
+                }
+            }
+        }
+
+        s.extend(to_varint(self.tx_out_count as u64));
+
+        for tx_out in self.tx_out.iter() {
+            s.extend(tx_out._serialize());
+            s.extend(&(self.lock_time as u32).to_le_bytes());
+            s.extend(&SIGHASH_ALL.to_le_bytes());
+        }
+
+        let h256 = sha256::Hash::hash(&s);
+        let bytes: [u8; 32] = *h256.as_ref();
+        let mut be_bytes = [0u8; 32];
+        for i in 0..32 {
+            be_bytes[i] = bytes[31 - i];
+        }
+        Ok(be_bytes)
+    }
+
+    pub fn sign_input(
+        &mut self,
+        secret_key: &str,
+        prev_pk_script: Vec<u8>,
+        index: usize,
+    ) -> io::Result<()> {
+        let z = self.sig_hash(prev_pk_script, index)?;
+        let der = sign_with_priv_key(&z, secret_key)?;
+        let sig = [&der[..], &[0x01]].concat(); // Append SIGHASH_ALL (0x01) byte
+        let sec = sec_with_priv_key(secret_key)?;
+
+        let script_sig = [&sig[..], &sec[..]].concat();
+
+        // change script sig of index
+        match self.tx_in {
+            TxInputType::CoinBaseInput(_) => {}
+            TxInputType::TxInput(ref mut inputs) => {
+                inputs[index].script_bytes = script_sig.len() as u64;
+                inputs[index].script_sig = script_sig;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;
@@ -104,11 +201,6 @@ impl RawTransaction {
     }
 
     pub fn _validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
-        // check the inputs and mark them as spent
-        // self.validate_inputs(utxo_set)?; // unused function as of now
-
-        // generate new utxos from the outputs
-
         self.generate_utxo(utxo_set)?;
 
         Ok(())
