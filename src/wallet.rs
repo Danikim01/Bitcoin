@@ -363,7 +363,7 @@ mod tests {
         let change_h160_hash = &change_h160[1..21]; // Extract the 20-byte hash
 
         let change_amount = 0.33 * 100_000_000.0;
-        let change_script = build_p2pkh_script(change_h160.to_vec());
+        let change_script = build_p2pkh_script(change_h160_hash.to_vec());
         let change_output = TxOutput {
             value: change_amount as u64,
             pk_script_bytes: change_script.len() as u64,
@@ -375,8 +375,7 @@ mod tests {
         let hash_bytes = &decoded_address[1..21]; // Extract the 20-byte hash
 
         let target_amount = 0.1 * 100_000_000.0;
-        let target_h160 = decoded_address.clone();
-        let target_script = build_p2pkh_script(decoded_address.to_vec());
+        let target_script = build_p2pkh_script(hash_bytes.to_vec());
         let target_output = TxOutput {
             value: target_amount as u64,
             pk_script_bytes: target_script.len() as u64,
