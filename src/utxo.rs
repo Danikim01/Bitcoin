@@ -89,22 +89,6 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
 }
 
 impl UtxoTransaction {
-    // fn has_wallet(&self, address: &str) -> io::Result<bool> {
-    //     // iterate lock one byte at a time until 0x14 is found
-    //     let mut cursor = Cursor::new(self.lock.clone());
-
-    //     let buf = &mut [0; 1];
-    //     while buf[0] != 0x14 {
-    //         cursor.read_exact(buf)?;
-    //     }
-
-    //     let mut pk_hash = [0; 20];
-    //     cursor.read_exact(&mut pk_hash)?;
-
-    //     let pk2addr = p2pkh_to_address(pk_hash);
-    //     Ok(pk2addr == address)
-    // } // EVAL DELETE
-
     pub fn get_address(&self) -> io::Result<String> {
         // iterate lock one byte at a time until 0x14 is found
         let mut cursor = Cursor::new(self.lock.clone());

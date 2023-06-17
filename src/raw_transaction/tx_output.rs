@@ -1,7 +1,8 @@
 use crate::messages::utility::StreamRead;
 use crate::raw_transaction::{read_coinbase_script, read_from_varint, to_compact_size_bytes};
+use crate::utxo::p2pkh_to_address;
 use bitcoin_hashes::{ripemd160, sha256, Hash};
-use std::io::{Cursor, Error};
+use std::io::{self, Cursor, Error, Read};
 
 #[derive(Debug, Clone)]
 pub struct PkScriptData {
@@ -27,6 +28,29 @@ pub struct TxOutput {
 }
 
 impl TxOutput {
+    fn get_address(&self) -> io::Result<String> {
+        let script_bytes = self.pk_script.clone();
+        let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
+
+        // consume cursor until reading
+        let buf = &mut [0; 1];
+        while buf[0] != 0x14 {
+            cursor.read_exact(buf)?;
+        }
+
+        let mut pk_hash = [0; 20];
+        cursor.read_exact(&mut pk_hash)?;
+
+        Ok(p2pkh_to_address(pk_hash))
+    }
+
+    pub fn destined_to(&self, address: &str) -> bool {
+        match self.get_address() {
+            Ok(a) => a == address,
+            Err(_) => false,
+        }
+    }
+
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let value = u64::from_le_stream(cursor)?; // this is actually a float?
         let pk_script_bytes = read_from_varint(cursor)?;
@@ -82,7 +106,7 @@ mod tests {
     use crate::utility::decode_hex;
 
     use super::*;
-    
+
     #[test]
     fn test_txou_serialization() {
         // txou bytes
@@ -113,9 +137,22 @@ mod tests {
 
     #[test]
     fn test_deseareal_and_sereal() {
-        let bytes = decode_hex("b7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac").unwrap();
+        let bytes =
+            decode_hex("b7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac")
+                .unwrap();
         let txou = TxOutput::from_bytes(&mut Cursor::new(&bytes)).unwrap();
         let serialized_txou = txou._serialize();
         assert_eq!(bytes, serialized_txou);
+    }
+
+    #[test]
+    fn test_txout_destined_to() {
+        let bytes =
+            decode_hex("96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac")
+                .unwrap();
+        let txou = TxOutput::from_bytes(&mut Cursor::new(&bytes)).unwrap();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        assert!(txou.destined_to(address));
+        assert!(!txou.destined_to("foo"));
     }
 }

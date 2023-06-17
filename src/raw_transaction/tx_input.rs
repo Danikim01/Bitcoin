@@ -3,7 +3,9 @@ use crate::raw_transaction::{
     read_coinbase_script, read_from_varint, read_hash, to_compact_size_bytes,
 };
 use std::io;
-use std::io::{Cursor, Error, ErrorKind};
+use std::io::{Cursor, Error, ErrorKind, Read};
+use bitcoin_hashes::{hash160, Hash};
+use crate::utxo::p2pkh_to_address;
 
 #[derive(Debug, Clone)]
 pub struct TxInput {
@@ -14,6 +16,32 @@ pub struct TxInput {
 }
 
 impl TxInput {
+    fn get_address(&self) -> String {
+        let script_bytes = self.script_sig.clone();
+        let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
+
+        // get sig length
+        let sig_length = u8::from_le_stream(&mut cursor).unwrap();
+
+        // skip sig
+        cursor.set_position(cursor.position() + sig_length as u64);
+
+        // read pubkey length
+        let pubkey_length = u8::from_le_stream(&mut cursor).unwrap();
+
+        // read pubkey
+        let mut pubkey = vec![0u8; pubkey_length as usize];
+        cursor.read_exact(&mut pubkey).unwrap();
+
+        // get address
+        let h160 = hash160::Hash::hash(&pubkey).to_byte_array();
+        p2pkh_to_address(h160)
+    }
+
+    pub fn destined_from(&self, address: &str) -> bool {
+        self.get_address() == address
+    }
+
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let previous_output = Outpoint::from_bytes(cursor)?;
         let script_bytes = read_from_varint(cursor)?;
@@ -175,8 +203,13 @@ impl CoinBaseInput {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
-    use crate::raw_transaction::RawTransaction;
+    use crate::{
+        raw_transaction::RawTransaction,
+        utility::{_encode_hex, decode_hex},
+        utxo::UtxoTransaction,
+    };
 
     #[test]
     fn test_coinbase_input_deserialization() {
@@ -266,5 +299,14 @@ mod tests {
         assert_eq!(bytes[32], serialized_txin[32]); // signature_script_bytes
         assert_eq!(bytes[33..58], serialized_txin[33..58]); // signature_script
         assert_eq!(bytes[58..61], serialized_txin[58..61]); // sequence
+    }
+
+    #[test]
+    fn test_txin_destined_from() {
+        let txin_bytes = decode_hex("881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff").unwrap();
+        let txin = TxInput::from_bytes(&mut Cursor::new(&txin_bytes)).unwrap();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        assert!(txin.destined_from(address));
+        assert!(!txin.destined_from("foo"));
     }
 }
