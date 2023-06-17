@@ -1,4 +1,3 @@
-use crate::raw_transaction::generate_txid_vout_bytes;
 use crate::raw_transaction::{tx_output::TxOutput, RawTransaction};
 use crate::utility::double_hash;
 use std::collections::HashMap;
@@ -9,7 +8,10 @@ pub type Lock = Vec<u8>;
 pub type UtxoId = [u8; 32];
 pub type WalletUtxo = HashMap<UtxoId, UtxoTransaction>;
 type Address = String;
-pub type UtxoSpent = Vec<[u8; 36]>;
+// pub type UtxoSpent = Vec<[u8; 36]>;
+
+pub type Index = u32;
+pub type UtxoSpent = HashMap<UtxoId, Vec<Index>>;
 
 #[derive(Debug, Clone)]
 pub struct UtxoSet {
@@ -21,14 +23,17 @@ impl UtxoSet {
     pub fn new() -> Self {
         Self {
             set: HashMap::new(),
-            spent: vec![],
+            spent: HashMap::new(),
         }
     }
 
-    fn utxo_spent(&self, txid: &[u8; 32], utxo: &UtxoTransaction) -> bool {
-        let vout = utxo.index.to_le_bytes();
-        self.spent
-            .contains(&generate_txid_vout_bytes(txid.clone(), vout))
+    fn utxo_spent(&self, txid: &UtxoId, utxo: &UtxoTransaction) -> bool {
+        if let Some(spent) = self.spent.get(txid) {
+            if spent.contains(&utxo.index) {
+                return true;
+            }
+        }
+        false
     }
 
     /// returns available utxos for a given address
@@ -53,6 +58,8 @@ impl UtxoSet {
         let mut balance = 0;
 
         if let Some(utxos) = self.set.get(address) {
+            // println!("utxos: {:?}", utxos);
+            println!("spent utxos: {:?}", self.spent);
             for (txid, utxo_transaction) in utxos {
                 if !self.utxo_spent(txid, utxo_transaction) {
                     balance += utxo_transaction.value as u64;
@@ -84,21 +91,21 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
 }
 
 impl UtxoTransaction {
-    fn _has_wallet(&self, address: &str) -> io::Result<bool> {
-        // iterate lock one byte at a time until 0x14 is found
-        let mut cursor = Cursor::new(self.lock.clone());
+    // fn has_wallet(&self, address: &str) -> io::Result<bool> {
+    //     // iterate lock one byte at a time until 0x14 is found
+    //     let mut cursor = Cursor::new(self.lock.clone());
 
-        let buf = &mut [0; 1];
-        while buf[0] != 0x14 {
-            cursor.read_exact(buf)?;
-        }
+    //     let buf = &mut [0; 1];
+    //     while buf[0] != 0x14 {
+    //         cursor.read_exact(buf)?;
+    //     }
 
-        let mut pk_hash = [0; 20];
-        cursor.read_exact(&mut pk_hash)?;
+    //     let mut pk_hash = [0; 20];
+    //     cursor.read_exact(&mut pk_hash)?;
 
-        let pk2addr = p2pkh_to_address(pk_hash);
-        Ok(pk2addr == address)
-    }
+    //     let pk2addr = p2pkh_to_address(pk_hash);
+    //     Ok(pk2addr == address)
+    // } // EVAL DELETE
 
     pub fn get_address(&self) -> io::Result<String> {
         // iterate lock one byte at a time until 0x14 is found

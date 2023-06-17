@@ -2,7 +2,6 @@ use crate::utility::_encode_hex;
 use crate::utxo::UtxoId;
 use crate::{
     raw_transaction::{
-        generate_txid_vout_bytes,
         tx_input::{Outpoint, TxInput, TxInputType},
         tx_output::TxOutput,
         RawTransaction,
@@ -46,8 +45,8 @@ impl Wallet {
         let secret_key =
             "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string();
-        // let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-        // let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u";
+        // let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"; // NUESTRA
+        // let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u"; // DE OTRO GRUPO
         Self {
             secret_key,
             address,
@@ -89,10 +88,6 @@ impl Wallet {
         let mut txins: Vec<TxInput> = Vec::new();
         let mut locks: Vec<Lock> = Vec::new();
         for (utxo_id, utxo, lock) in used_utxos {
-            let vout = utxo.index.to_le_bytes();
-            utxo_set.spent.push(generate_txid_vout_bytes(utxo_id, vout));
-
-            // let hashed_pk = hash_address(utxo.get_address()?)?;
             let txin = TxInput {
                 previous_output: Outpoint {
                     hash: utxo_id,
@@ -130,8 +125,9 @@ impl Wallet {
         //  the other txout is our "change"
         let self_hashed_pk = hash_address(&self.address)?;
         let second_pk_script = build_p2pkh_script(self_hashed_pk[1..21].to_vec());
+        let fee = 100000; // arbitrary fee, see how to improve this
         txout.push(TxOutput {
-            value: used_balance - amount,
+            value: used_balance - amount - fee,
             pk_script_bytes: second_pk_script.len() as u64,
             pk_script: second_pk_script,
         });
@@ -139,8 +135,6 @@ impl Wallet {
         Ok(txout)
     }
 
-    // WARNINNNNNNNNNNNNNNNNNNNNNNNNNG: GENERATE UTXO SNAPSHOT AND USE IT INSTEAD OF THE UTXOSET
-    // CHANGE UTXOSET TO UTXOSNAPSHOT ONCE EVERYTHING IS OK 😊
     pub fn generate_transaction(
         &self,
         utxo_set: &mut UtxoSet,
@@ -156,14 +150,22 @@ impl Wallet {
         let mut transaction = RawTransaction {
             version: 1,
             tx_in_count: txin.len() as u64,
-            tx_in: TxInputType::TxInput(txin),
+            tx_in: TxInputType::TxInput(txin.clone()),
             tx_out_count: txout.len() as u64,
             tx_out: txout,
             lock_time: 0 as u32,
         };
 
-        let prev_pk_script = locks[0].clone(); // this only works for one input, fix it later
-        transaction.sign_input(&self.secret_key, prev_pk_script, 0)?; // we only have one input, so index is zero
+        for index in 0..txin.len() {
+            let prev_pk_script = locks[index].clone();
+            transaction.sign_input(&self.secret_key, prev_pk_script, index)?;
+        }
+
+        // we should mark the used utxos as spent
+
+        // we should also now add this transaction as pending on a to-be-created hashmap
+        // utxo_set.pending.push(transaction.get_txid()?);
+
         Ok(transaction)
     }
 }
@@ -215,6 +217,36 @@ mod tests {
     }
 
     #[test]
+    fn test_read_wallet_balance_with_spent() {
+        let mut utxo_set: UtxoSet = UtxoSet::new();
+        let my_wallet = Wallet::login();
+
+        let transaction_1_bytes = decode_hex(
+            "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
+        ).unwrap();
+        let transaction_1 =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_1_bytes)).unwrap();
+        transaction_1.generate_utxo(&mut utxo_set).unwrap();
+
+        let transaction_2_bytes = decode_hex(
+            "02000000000101536d525880fd48a734fddd39d46d8f800ebf255102768d8d890603683a7af0b90000000000fdffffff0249def687010000001976a914799b0bc4ad97fff4c2e030443e4594ad374fa12788acb7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac02473044022053e5d615cad3ad5efe972e891d401a19b8659687f00cac8df2b140ec1e4b5ad802200fe1e8c05a32b3f5e26fd5b956948817d07f9e753002162f97c76ccee7c7eb36012103084f5b365524916f2974248f0430bf26d223dd3a5422bc6ce04d0c8b4af71563a3302500"
+        ).unwrap();
+        let transaction_2 =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_2_bytes)).unwrap();
+        transaction_2.generate_utxo(&mut utxo_set).unwrap();
+
+        let transaction_3_bytes = decode_hex(
+            "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
+        ).unwrap();
+        let transaction_3 =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_3_bytes)).unwrap();
+        transaction_3.generate_utxo(&mut utxo_set).unwrap();
+
+        let balance = utxo_set.get_wallet_balance(&my_wallet.address).unwrap();
+        assert_eq!(balance, 1705366+1967543)
+    }
+
+    #[test]
     fn test_generate_raw_transaction() {
         let wallet: Wallet = Wallet::login();
         let mut utxo_set: UtxoSet = UtxoSet::new();
@@ -233,13 +265,12 @@ mod tests {
 
         let bytes = raw_transaction.serialize();
         let res = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
-        // println!("{:?}", res);
         assert_eq!(res.tx_in_count, 1);
         assert_eq!(res.tx_out_count, 2);
         assert_eq!(res.tx_out[0].value, 10000);
-        assert_eq!(res.tx_out[1].value, 1805366);
+        assert_eq!(res.tx_out[1].value, 1705366); // deducted fee of 10000
 
-        let expected = "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006b483045022100f9b3335eb0cd3e93ecc6150f565808b6fd0c18caa56704fbb1c9ef3d18b1820302205982661b4cf2e0089d9e865542e44cc58d8fd4664116c10ac466714392aaf991012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac368c1b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000";
+        let expected = "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000";
         assert_eq!(expected, _encode_hex(&bytes));
     }
 }

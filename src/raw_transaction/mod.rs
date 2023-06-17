@@ -4,7 +4,7 @@ use crate::messages::utility::{
 };
 
 use crate::utility::{_encode_hex, double_hash, to_io_err};
-use crate::utxo::{Utxo, UtxoSet};
+use crate::utxo::{self, Utxo, UtxoSet};
 use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
 use std::{
@@ -17,6 +17,8 @@ use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
 use tx_output::TxOutput;
 
+use crate::utxo::{Index, UtxoId};
+
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
 const SIGHASH_ALL: u32 = 1;
 
@@ -26,14 +28,7 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
     Ok(array)
 }
 
-pub fn generate_txid_vout_bytes(txid: [u8; 32], vout: [u8; 4]) -> [u8; 36] {
-    let mut bytes: [u8; 36] = [0; 36];
-    bytes[..32].copy_from_slice(&txid);
-    bytes[32..].copy_from_slice(&vout);
-    bytes
-}
-
-fn sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
+fn der_sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
     let message = &z;
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
@@ -46,7 +41,7 @@ fn sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
     Ok(signature.serialize_der().to_vec())
 }
 
-fn sec_with_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
+fn pub_key_from_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
     let private_key = SecretKey::from_str(&private_key).map_err(to_io_err)?;
     let public_key = PublicKey::from_secret_key(&secp, &private_key);
@@ -108,7 +103,7 @@ impl RawTransaction {
         s.extend(self.lock_time.to_le_bytes());
         s.extend(SIGHASH_ALL.to_le_bytes());
 
-        let h256 = sha256::Hash::hash(&s);
+        let h256 = double_hash(&s);
         let bytes = h256.to_byte_array();
         Ok(bytes)
     }
@@ -120,15 +115,16 @@ impl RawTransaction {
         index: usize,
     ) -> io::Result<()> {
         let z = self.sig_hash(prev_pk_script, index)?;
-        let der = sign_with_priv_key(&z, secret_key)?;
-        let sig = [&der[..], &[0x01]].concat(); // 0x01 is SIGHASH_ALL
-        let sec = sec_with_priv_key(secret_key)?;
+        let der = der_sign_with_priv_key(&z, secret_key)?;
+        let pub_key = pub_key_from_priv_key(secret_key)?;
 
-        let script_sig = [&sig[..], &sec[..]].concat();
+        let der_len = (der.len() + 1) as u8;
+        let pub_key_len = pub_key.len() as u8;
+        let script_sig = [&[der_len], &der[..], &[0x01], &[pub_key_len], &pub_key[..]].concat();
 
         // change script sig of index
         match self.tx_in {
-            TxInputType::CoinBaseInput(_) => {}
+            TxInputType::CoinBaseInput(_) => {} // we should never get here
             TxInputType::TxInput(ref mut inputs) => {
                 inputs[index].script_bytes = script_sig.len() as u64;
                 inputs[index].script_sig = script_sig;
@@ -158,16 +154,15 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    fn get_spent_utxos(&self) -> Vec<[u8; 36]> {
-        let mut spent_utxos: Vec<[u8; 36]> = vec![];
+    fn get_spent_utxos(&self) -> Vec<(UtxoId, Index)> {
+        let mut spent_utxos: Vec<(UtxoId, Index)> = vec![];
 
         match &self.tx_in {
             TxInputType::CoinBaseInput(_) => {}
             TxInputType::TxInput(inputs) => {
                 for input in inputs {
                     let txid: [u8; 32] = input.previous_output.hash;
-                    let vout: [u8; 4] = input.previous_output.index.to_le_bytes(); // may need to reverse this
-                    spent_utxos.push(generate_txid_vout_bytes(txid, vout));
+                    spent_utxos.push((txid, input.previous_output.index));
                 }
             }
         }
@@ -179,8 +174,17 @@ impl RawTransaction {
         let new_id = double_hash(&self.serialize()).to_byte_array();
 
         // add spent utxos
-        let spent_utxos: Vec<[u8; 36]> = self.get_spent_utxos();
-        utxo_set.spent.extend(spent_utxos);
+        let spent_utxos: Vec<(UtxoId, Index)> = self.get_spent_utxos();
+        for (utxo_id, index) in spent_utxos {
+            match utxo_set.spent.get_mut(&utxo_id) {
+                Some(vec) => {
+                    vec.push(index);
+                }
+                None => {
+                    utxo_set.spent.insert(utxo_id, vec![index]);
+                }
+            }
+        }
 
         // add generated utxos
         let new_utxo = Utxo::from_raw_transaction(self)?;
