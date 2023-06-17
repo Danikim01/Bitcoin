@@ -92,6 +92,7 @@ impl Listener {
     }
 }
 
+#[derive(Debug)]
 pub struct Node {
     pub stream: TcpStream,
     _listener: JoinHandle<io::Result<()>>,
@@ -143,7 +144,7 @@ impl Node {
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
-    ) -> Result<Node, io::Error> {
+    ) -> io::Result<(SocketAddr,Node)> {
         if !node_addr.is_ipv4() {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
@@ -152,7 +153,9 @@ impl Node {
         }
         let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
         Node::handshake(&mut stream)?;
-        Node::spawn(stream, writer_channel, ui_sender)
+        let peer_addr: SocketAddr = stream.peer_addr()?;
+        let node = Node::spawn(stream, writer_channel, ui_sender)?;
+        Ok((peer_addr, node))
     }
 
     fn handshake(stream: &mut TcpStream) -> io::Result<()> {

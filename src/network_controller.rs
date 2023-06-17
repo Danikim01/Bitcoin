@@ -16,6 +16,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
 use crate::interface::{GtkMessage, ModelRequest};
+use gtk::gdk::keys::constants::P;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -182,9 +183,9 @@ impl NetworkController {
         Ok(())
     }
 
-    fn read_inventories(&mut self, inventories: Vec<Inventory>) -> io::Result<()> {
+    fn read_inventories(&mut self, peer: SocketAddr, inventories: Vec<Inventory>) -> io::Result<()> {
         // BIG ASS WARNING: TX IN INVENTORIES SHOULD BE REQUESTED TO THE NODE THAT SENT THEM
-        println!("Received inventories from a node!");
+        println!("Received inventories from node: {:?}!", peer);
         Ok(())
     }
 
@@ -278,19 +279,19 @@ impl OuterNetworkController {
             loop {
                 let t_inner = inner.clone();
                 match node_receiver.recv().map_err(to_io_err)? {
-                    (peer_addr, Message::Headers(headers)) => {
+                    (_, Message::Headers(headers)) => {
                         t_inner.lock().map_err(to_io_err)?.read_headers(&headers)
                     }
-                    (peer_addr, Message::Block(block)) => t_inner
+                    (_, Message::Block(block)) => t_inner
                         .lock()
                         .map_err(to_io_err)?
                         .read_block_from_node(block),
                     (peer_addr, Message::Inv(inventories)) => t_inner
                         .lock()
                         .map_err(to_io_err)?
-                        .read_inventories(inventories),
-                    (_, Message::Failure()) => {
-                        println!("Node is notifying me of a failure, should resend last request");
+                        .read_inventories(peer_addr, inventories),
+                    (peer_addr, Message::Failure()) => {
+                        println!("Node {:?} is notifying me of a failure, should resend last request", peer_addr);
                         Ok(())
                     }
                     _ => Err(io::Error::new(
