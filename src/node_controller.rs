@@ -23,7 +23,7 @@ fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
 
 impl NodeController {
     pub fn connect_to_peers(
-        writer_end: mpsc::Sender<Message>,
+        writer_end: mpsc::Sender<(SocketAddr, Message)>,
         sender: Sender<GtkMessage>,
     ) -> Result<Self, io::Error> {
         let node_addresses = find_nodes()?;

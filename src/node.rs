@@ -16,13 +16,15 @@ use crate::messages::constants::config::VERBOSE;
 use gtk::glib::Sender;
 
 pub struct Listener {
+    socket_addr: SocketAddr,
     stream: TcpStream,
-    writer_channel: mpsc::Sender<Message>,
+    writer_channel: mpsc::Sender<(SocketAddr, Message)>,
 }
 
 impl Listener {
-    fn new(stream: TcpStream, writer_channel: mpsc::Sender<Message>) -> Self {
+    fn new(stream: TcpStream, writer_channel: mpsc::Sender<(SocketAddr, Message)>) -> Self {
         Self {
+            socket_addr: stream.peer_addr().unwrap(), // handle this error
             stream,
             writer_channel,
         }
@@ -59,15 +61,8 @@ impl Listener {
                 }
             },
             commands::INV => match GetData::deserialize(&payload) {
-                Ok(Message::Inv(inventories)) => {
-                    for inventory in inventories {
-                        if inventory.inv_type == InvType::MSGTx {
-                            println!("received a tx inventory, request it!")
-                        }
-                    }
-                    Message::Ignore()
-                }
-                _ => Message::Ignore(),
+                Ok(m) => m,
+                _ => Message::Ignore(), // bad luck if it fails, we can't request inv to another node
             },
             _ => Message::Ignore(),
         };
@@ -89,7 +84,7 @@ impl Listener {
             match Self::process_message_payload(&message_header.command_name, payload) {
                 Ok(Message::Ignore()) => continue,
                 Ok(m) => {
-                    self.writer_channel.send(m).map_err(to_io_err)?;
+                    self.writer_channel.send((self.socket_addr, m)).map_err(to_io_err)?;
                 }
                 _ => continue,
             }
@@ -125,7 +120,7 @@ impl Node {
 
     fn spawn(
         stream: TcpStream,
-        writer_channel: mpsc::Sender<Message>,
+        writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
     ) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
@@ -146,7 +141,7 @@ impl Node {
 
     pub fn try_from_addr(
         node_addr: SocketAddr,
-        writer_channel: mpsc::Sender<Message>,
+        writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
     ) -> Result<Node, io::Error> {
         if !node_addr.is_ipv4() {

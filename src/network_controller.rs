@@ -3,7 +3,8 @@ use crate::logger::log;
 use crate::messages::constants::config::VERBOSE;
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
-    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, Message, Serialize,
+    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, Inventory,
+    Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::utility::{into_hashmap, to_io_err};
@@ -16,6 +17,7 @@ use std::sync::Mutex;
 // gtk imports
 use crate::interface::{GtkMessage, ModelRequest};
 use gtk::glib::Sender;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
 
@@ -32,7 +34,7 @@ pub struct NetworkController {
 impl NetworkController {
     pub fn new(
         ui_sender: Sender<GtkMessage>,
-        writer_end: mpsc::Sender<Message>,
+        writer_end: mpsc::Sender<(SocketAddr, Message)>,
     ) -> Result<Self, io::Error> {
         Ok(Self {
             headers: HashMap::new(),
@@ -51,7 +53,6 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    // HARDCODED NEEDS TO BE DYNAMIC
     fn read_wallet_balance(&self) -> io::Result<u64> {
         let balance = self.utxo_set.get_wallet_balance(&self.wallet.address)?;
         println!("Wallet balance: {:?}", balance);
@@ -181,6 +182,12 @@ impl NetworkController {
         Ok(())
     }
 
+    fn read_inventories(&mut self, inventories: Vec<Inventory>) -> io::Result<()> {
+        // BIG ASS WARNING: TX IN INVENTORIES SHOULD BE REQUESTED TO THE NODE THAT SENT THEM
+        println!("Received inventories from a node!");
+        Ok(())
+    }
+
     fn get_missing_headers(&self, headers: &Headers) -> io::Result<Vec<BlockHeader>> {
         let mut missing_headers = Vec::new();
 
@@ -240,7 +247,7 @@ pub struct OuterNetworkController {
 impl OuterNetworkController {
     pub fn new(
         ui_sender: Sender<GtkMessage>,
-        writer_end: mpsc::Sender<Message>,
+        writer_end: mpsc::Sender<(SocketAddr, Message)>,
     ) -> Result<Self, io::Error> {
         let inner = Arc::new(Mutex::new(NetworkController::new(ui_sender, writer_end)?));
         Ok(Self { inner })
@@ -265,27 +272,25 @@ impl OuterNetworkController {
         Ok(())
     }
 
-    fn recv_node_messages(&self, node_receiver: mpsc::Receiver<Message>) -> io::Result<()> {
+    fn recv_node_messages(&self, node_receiver: mpsc::Receiver<(SocketAddr, Message)>) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
                 let t_inner = inner.clone();
                 match node_receiver.recv().map_err(to_io_err)? {
-                    Message::Headers(headers) => {
-                        // println!("Got lock on node receiver : read headers");
+                    (peer_addr, Message::Headers(headers)) => {
                         t_inner.lock().map_err(to_io_err)?.read_headers(&headers)
                     }
-                    Message::Block(block) => {
-                        // println!("Got lock on node receiver : read block");
-                        t_inner
-                            .lock()
-                            .map_err(to_io_err)?
-                            .read_block_from_node(block)
-                    }
-                    Message::Failure() => {
-                        // println!("Got lock on node receiver : read failure");
+                    (peer_addr, Message::Block(block)) => t_inner
+                        .lock()
+                        .map_err(to_io_err)?
+                        .read_block_from_node(block),
+                    (peer_addr, Message::Inv(inventories)) => t_inner
+                        .lock()
+                        .map_err(to_io_err)?
+                        .read_inventories(inventories),
+                    (_, Message::Failure()) => {
                         println!("Node is notifying me of a failure, should resend last request");
-                        // aca deberiamos recibir el mensaje que fallo, y volver a enviarlo
                         Ok(())
                     }
                     _ => Err(io::Error::new(
@@ -293,7 +298,6 @@ impl OuterNetworkController {
                         "Received unsupported message",
                     )),
                 }?;
-                // println!("Freeing lock on node receiver");
             }
         });
         Ok(())
@@ -307,7 +311,7 @@ impl OuterNetworkController {
 
     pub fn start_sync(
         &self,
-        node_receiver: mpsc::Receiver<Message>,
+        node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
         ui_receiver: Receiver<ModelRequest>,
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver)?;
