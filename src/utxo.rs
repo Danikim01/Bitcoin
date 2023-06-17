@@ -58,8 +58,6 @@ impl UtxoSet {
         let mut balance = 0;
 
         if let Some(utxos) = self.set.get(address) {
-            // println!("utxos: {:?}", utxos);
-            println!("spent utxos: {:?}", self.spent);
             for (txid, utxo_transaction) in utxos {
                 if !self.utxo_spent(txid, utxo_transaction) {
                     balance += utxo_transaction.value as u64;
