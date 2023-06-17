@@ -78,6 +78,8 @@ impl From<Services> for [u8; 8] {
     }
 }
 
+type Inventories = Vec<Inventory>;
+
 #[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
@@ -86,7 +88,9 @@ pub enum Message {
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),
+    Inv(Inventories),
     Failure(),
+    Ignore(),
 }
 
 pub trait Hashable {
@@ -96,7 +100,7 @@ pub trait Hashable {
 pub trait Serialize {
     fn serialize(&self) -> io::Result<Vec<u8>>;
 
-    fn deserialize(_bytes: &[u8]) -> Result<Message, io::Error>
+    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error>
     where
         Self: Sized,
     {

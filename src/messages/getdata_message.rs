@@ -1,11 +1,16 @@
+use std::io::{self, Cursor};
+
+use crate::messages::utility::StreamRead;
 use crate::messages::{BlockHeader, Hashable, Serialize};
 
-use super::constants;
+use super::utility::read_hash;
+use super::Inventories;
+use super::{constants, utility::read_from_varint, Message};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InvType {
     _MSGError = 0,
-    _MSGTx = 1,
+    MSGTx = 1,
     MSGBlock = 2,
     _MSGFilteredBlock = 3,
     _MSGCompactBlock = 4,
@@ -18,7 +23,7 @@ impl InvType {
     pub fn to_u32(&self) -> u32 {
         match self {
             InvType::_MSGError => 0,
-            InvType::_MSGTx => 1,
+            InvType::MSGTx => 1,
             InvType::MSGBlock => 2,
             InvType::_MSGFilteredBlock => 3,
             InvType::_MSGCompactBlock => 4,
@@ -27,13 +32,30 @@ impl InvType {
             InvType::_MSGFilteredWitnessBlock => 0x40000003,
         }
     }
+
+    pub fn from_u32(value: u32) -> io::Result<Self> {
+        match value {
+            0 => Ok(InvType::_MSGError),
+            1 => Ok(InvType::MSGTx),
+            2 => Ok(InvType::MSGBlock),
+            3 => Ok(InvType::_MSGFilteredBlock),
+            4 => Ok(InvType::_MSGCompactBlock),
+            0x40000001 => Ok(InvType::_MSGWitnessTx),
+            0x40000002 => Ok(InvType::_MSGWitnessBlock),
+            0x40000003 => Ok(InvType::_MSGFilteredWitnessBlock),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid inventory type",
+            )),
+        }
+    }
 }
 
 //ver https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
 #[derive(Debug, Clone)]
 pub struct Inventory {
-    inv_type: InvType,
-    hash: [u8; 32],
+    pub inv_type: InvType,
+    pub hash: [u8; 32],
 }
 
 impl Inventory {
@@ -118,5 +140,23 @@ impl Serialize for GetData {
         let payload = self.build_payload()?;
         let message = self.build_message(constants::commands::GETDATA, Some(payload))?;
         Ok(message)
+    }
+
+    fn deserialize(bytes: &[u8]) -> Result<Message, std::io::Error> {
+        let mut cursor = Cursor::new(bytes);
+
+        let count = read_from_varint(&mut cursor)? as usize;
+        let mut inventories: Inventories = Vec::new();
+        for _ in 0..count {
+            let inv_type = i32::from_le_stream(&mut cursor)?;
+            let hash = read_hash(&mut cursor)?;
+
+            inventories.push(Inventory {
+                inv_type: InvType::from_u32(inv_type as u32)?,
+                hash,
+            })
+        }
+
+        Ok(Message::Inv(inventories))
     }
 }

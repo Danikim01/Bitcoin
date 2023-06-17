@@ -1,8 +1,8 @@
 use crate::logger::log;
-use crate::messages::Block;
 use crate::messages::{
-    constants::commands, Headers, Message, MessageHeader, Serialize, VerAck, Version,
+    constants::commands, Block, Headers, Message, MessageHeader, Serialize, VerAck, Version,
 };
+use crate::messages::{GetData, InvType};
 use crate::utility::to_io_err;
 use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -40,36 +40,59 @@ impl Listener {
         }
     }
 
+    fn process_message_payload(command_name: &str, payload: Vec<u8>) -> io::Result<Message> {
+        let dyn_message: Message = match command_name {
+            commands::HEADERS => match Headers::deserialize(&payload) {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("Invalid headers payload: {:?}, ignoring message", e);
+                    // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
+                    Message::Failure()
+                }
+            },
+            commands::BLOCK => match Block::deserialize(&payload) {
+                Ok(m) => m,
+                Err(e) => {
+                    println!("Invalid block payload: {:?}, ignoring message", e);
+                    // HERE WE MUST REQUEST THE BLOCK AGAIN!
+                    Message::Failure()
+                }
+            },
+            commands::INV => match GetData::deserialize(&payload) {
+                Ok(Message::Inv(inventories)) => {
+                    for inventory in inventories {
+                        if inventory.inv_type == InvType::MSGTx {
+                            println!("received a tx inventory, request it!")
+                        }
+                    }
+                    Message::Ignore()
+                }
+                _ => Message::Ignore(),
+            },
+            _ => Message::Ignore(),
+        };
+        Ok(dyn_message)
+    }
+
     fn listen(&mut self) -> io::Result<()> {
         loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             if message_header.validate_header().is_err() {
-                // println!("Invalid header: {:?}, ignoring message", message_header);
+                println!(
+                    "Invalid or unimplemented header: {:?}, ignoring message",
+                    message_header
+                );
                 continue;
             }
 
             let payload = message_header.read_payload(&mut self.stream)?;
-
-            let dyn_message: Message = match message_header.command_name.as_str() {
-                commands::HEADERS => match Headers::deserialize(&payload) {
-                    Ok(m) => m,
-                    Err(e) => {
-                        println!("Invalid headers payload: {:?}, ignoring message", e);
-                        // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
-                        Message::Failure()
-                    }
-                },
-                commands::BLOCK => match Block::deserialize(&payload) {
-                    Ok(m) => m,
-                    Err(e) => {
-                        println!("Invalid block payload: {:?}, ignoring message", e);
-                        // HERE WE MUST REQUEST THE BLOCK AGAIN!
-                        Message::Failure()
-                    }
-                },
+            match Self::process_message_payload(&message_header.command_name, payload) {
+                Ok(Message::Ignore()) => continue,
+                Ok(m) => {
+                    self.writer_channel.send(m).map_err(to_io_err)?;
+                }
                 _ => continue,
-            };
-            self.writer_channel.send(dyn_message).map_err(to_io_err)?;
+            }
         }
     }
 }
