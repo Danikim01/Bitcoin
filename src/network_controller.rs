@@ -3,8 +3,8 @@ use crate::logger::log;
 use crate::messages::constants::config::VERBOSE;
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
-    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, Inventory,
-    Message, Serialize,
+    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, InvType,
+    Inventory, Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::utility::{into_hashmap, to_io_err};
@@ -183,9 +183,26 @@ impl NetworkController {
         Ok(())
     }
 
-    fn read_inventories(&mut self, peer: SocketAddr, inventories: Vec<Inventory>) -> io::Result<()> {
-        // BIG ASS WARNING: TX IN INVENTORIES SHOULD BE REQUESTED TO THE NODE THAT SENT THEM
-        println!("Received inventories from node: {:?}!", peer);
+    /// read inv message from peer, if it contains tx invs, request txs to same peer
+    fn read_inventories(
+        &mut self,
+        peer: SocketAddr,
+        inventories: Vec<Inventory>,
+    ) -> io::Result<()> {
+        let mut txinv: Vec<Inventory> = Vec::new();
+        for inventory in inventories {
+            if inventory.inv_type == InvType::MSGTx {
+                txinv.push(inventory);
+            }
+        }
+
+        if txinv.is_empty() {
+            return Ok(());
+        }
+
+        let getdata_message = GetData::new(txinv.len(), txinv);
+        self.nodes
+            .send_to_specific(&peer, &getdata_message.serialize()?)?;
         Ok(())
     }
 
@@ -273,7 +290,10 @@ impl OuterNetworkController {
         Ok(())
     }
 
-    fn recv_node_messages(&self, node_receiver: mpsc::Receiver<(SocketAddr, Message)>) -> io::Result<()> {
+    fn recv_node_messages(
+        &self,
+        node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
+    ) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
@@ -291,7 +311,10 @@ impl OuterNetworkController {
                         .map_err(to_io_err)?
                         .read_inventories(peer_addr, inventories),
                     (peer_addr, Message::Failure()) => {
-                        println!("Node {:?} is notifying me of a failure, should resend last request", peer_addr);
+                        println!(
+                            "Node {:?} is notifying me of a failure, should resend last request",
+                            peer_addr
+                        );
                         Ok(())
                     }
                     _ => Err(io::Error::new(

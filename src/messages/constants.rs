@@ -33,6 +33,7 @@ pub mod commands {
     pub const FEEFILTER: &str = "feefilter\0\0\0";
     pub const ADDR: &str = "addr\0\0\0\0\0\0\0\0";
     pub const INV: &str = "inv\0\0\0\0\0\0\0\0\0";
+    pub const TX: &str = "tx\0\0\0\0\0\0\0\0\0\0";
 }
 
 pub mod version_constants {

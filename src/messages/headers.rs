@@ -94,6 +94,7 @@ impl MessageHeader {
             FEEFILTER,
             ADDR,
             INV,
+            TX,
         ];
         if commands.contains(&self.command_name.as_str()) {
             return Ok(());

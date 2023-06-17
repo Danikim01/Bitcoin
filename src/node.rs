@@ -64,6 +64,10 @@ impl Listener {
                 Ok(m) => m,
                 _ => Message::Ignore(), // bad luck if it fails, we can't request inv to another node
             },
+            commands::TX => {
+                println!("Received a transaction, todo");
+                Message::Ignore()
+            }
             _ => Message::Ignore(),
         };
         Ok(dyn_message)
@@ -84,7 +88,9 @@ impl Listener {
             match Self::process_message_payload(&message_header.command_name, payload) {
                 Ok(Message::Ignore()) => continue,
                 Ok(m) => {
-                    self.writer_channel.send((self.socket_addr, m)).map_err(to_io_err)?;
+                    self.writer_channel
+                        .send((self.socket_addr, m))
+                        .map_err(to_io_err)?;
                 }
                 _ => continue,
             }
@@ -144,7 +150,7 @@ impl Node {
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
-    ) -> io::Result<(SocketAddr,Node)> {
+    ) -> io::Result<(SocketAddr, Node)> {
         if !node_addr.is_ipv4() {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
