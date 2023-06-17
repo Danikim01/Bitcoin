@@ -3,7 +3,7 @@ use crate::messages::utility::{
     read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
 };
 
-use crate::utility::{double_hash, to_io_err};
+use crate::utility::{_encode_hex, double_hash, to_io_err};
 use crate::utxo::{Utxo, UtxoSet};
 use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
@@ -13,12 +13,12 @@ use std::{
 };
 
 pub mod tx_input;
-use tx_input::{CoinBaseInput, TxInput, TxInputType};
+use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
 use tx_output::TxOutput;
 
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
-const SIGHASH_ALL: u32 = 0x01;
+const SIGHASH_ALL: u32 = 1;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
     let mut array = vec![0_u8; count];
@@ -66,46 +66,51 @@ pub struct RawTransaction {
 impl RawTransaction {
     fn sig_hash(&self, prev_pk_script: Vec<u8>, index: usize) -> io::Result<[u8; 32]> {
         let mut s = Vec::new();
-        s.extend((self.version as u32).to_le_bytes());
-        s.extend(to_varint(self.tx_in_count as u64));
+        s.extend(self.version.to_le_bytes());
+
+        s.extend(to_varint(self.tx_in_count));
         match &self.tx_in {
             TxInputType::CoinBaseInput(_) => {}
             TxInputType::TxInput(tx_ins) => {
                 for (i, tx_in) in tx_ins.iter().enumerate() {
-                    // get only the tx_in desired
                     if i == index {
-                        s.extend_from_slice(&tx_in.previous_output.hash);
-                        s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
                         let pubkey_script_bytes = prev_pk_script.clone();
-                        s.extend_from_slice(&to_compact_size_bytes(
-                            pubkey_script_bytes.len() as u64
-                        ));
-                        s.extend_from_slice(&pubkey_script_bytes.clone());
-                        s.extend_from_slice(&tx_in.sequence.to_le_bytes());
+                        let tin = TxInput {
+                            previous_output: Outpoint {
+                                hash: tx_in.previous_output.hash,
+                                index: tx_in.previous_output.index,
+                            },
+                            script_bytes: pubkey_script_bytes.len() as u64,
+                            script_sig: pubkey_script_bytes,
+                            sequence: tx_in.sequence,
+                        };
+                        s.extend(tin._serialize());
                     } else {
-                        s.extend_from_slice(&tx_in.previous_output.hash);
-                        s.extend_from_slice(&tx_in.previous_output.index.to_le_bytes());
-                        s.extend_from_slice(&tx_in.sequence.to_le_bytes());
+                        let tin = TxInput {
+                            previous_output: Outpoint {
+                                hash: tx_in.previous_output.hash,
+                                index: tx_in.previous_output.index,
+                            },
+                            script_bytes: 0,
+                            script_sig: vec![],
+                            sequence: tx_in.sequence,
+                        };
+                        s.extend(tin._serialize());
                     }
                 }
             }
         }
 
-        s.extend(to_varint(self.tx_out_count as u64));
-
+        s.extend(to_varint(self.tx_out_count));
         for tx_out in self.tx_out.iter() {
             s.extend(tx_out._serialize());
-            s.extend(&(self.lock_time as u32).to_le_bytes());
-            s.extend(&SIGHASH_ALL.to_le_bytes());
         }
+        s.extend(self.lock_time.to_le_bytes());
+        s.extend(SIGHASH_ALL.to_le_bytes());
 
         let h256 = sha256::Hash::hash(&s);
-        let bytes: [u8; 32] = *h256.as_ref();
-        let mut be_bytes = [0u8; 32];
-        for i in 0..32 {
-            be_bytes[i] = bytes[31 - i];
-        }
-        Ok(be_bytes)
+        let bytes = h256.to_byte_array();
+        Ok(bytes)
     }
 
     pub fn sign_input(
@@ -116,7 +121,7 @@ impl RawTransaction {
     ) -> io::Result<()> {
         let z = self.sig_hash(prev_pk_script, index)?;
         let der = sign_with_priv_key(&z, secret_key)?;
-        let sig = [&der[..], &[0x01]].concat(); // Append SIGHASH_ALL (0x01) byte
+        let sig = [&der[..], &[0x01]].concat(); // 0x01 is SIGHASH_ALL
         let sec = sec_with_priv_key(secret_key)?;
 
         let script_sig = [&sig[..], &sec[..]].concat();

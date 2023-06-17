@@ -228,7 +228,7 @@ mod tests {
 
         let recvr_addr = "mnJvq7mbGiPNNhUne4FAqq27Q8xZrAsVun".to_string();
         let raw_transaction = wallet
-            .generate_transaction(&mut utxo_set, recvr_addr, 1)
+            .generate_transaction(&mut utxo_set, recvr_addr, 1000)
             .unwrap();
 
         let bytes = raw_transaction.serialize();
@@ -236,8 +236,8 @@ mod tests {
         // println!("{:?}", res);
         assert_eq!(res.tx_in_count, 1);
         assert_eq!(res.tx_out_count, 2);
-        assert_eq!(res.tx_out[0].value, 1);
-        assert_eq!(res.tx_out[1].value, 1815365);
+        assert_eq!(res.tx_out[0].value, 1000);
+        assert_eq!(res.tx_out[1].value, 1814366);
         // EL TEST NO ES SOLO QUE PASE ESTO, LUEGO HAY QUE DESEAREALIZARLA Y VER QUE ESTE TODO BIEN
         println!("{}", _encode_hex(&bytes))
     }
