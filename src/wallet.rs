@@ -228,7 +228,7 @@ mod tests {
 
         let recvr_addr = "mnJvq7mbGiPNNhUne4FAqq27Q8xZrAsVun".to_string();
         let raw_transaction = wallet
-            .generate_transaction(&mut utxo_set, recvr_addr, 1000)
+            .generate_transaction(&mut utxo_set, recvr_addr, 10000)
             .unwrap();
 
         let bytes = raw_transaction.serialize();
@@ -236,9 +236,10 @@ mod tests {
         // println!("{:?}", res);
         assert_eq!(res.tx_in_count, 1);
         assert_eq!(res.tx_out_count, 2);
-        assert_eq!(res.tx_out[0].value, 1000);
-        assert_eq!(res.tx_out[1].value, 1814366);
-        // EL TEST NO ES SOLO QUE PASE ESTO, LUEGO HAY QUE DESEAREALIZARLA Y VER QUE ESTE TODO BIEN
-        println!("{}", _encode_hex(&bytes))
+        assert_eq!(res.tx_out[0].value, 10000);
+        assert_eq!(res.tx_out[1].value, 1805366);
+
+        let expected = "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006b483045022100f9b3335eb0cd3e93ecc6150f565808b6fd0c18caa56704fbb1c9ef3d18b1820302205982661b4cf2e0089d9e865542e44cc58d8fd4664116c10ac466714392aaf991012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac368c1b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000";
+        assert_eq!(expected, _encode_hex(&bytes));
     }
 }
