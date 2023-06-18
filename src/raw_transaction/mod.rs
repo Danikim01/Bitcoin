@@ -5,7 +5,7 @@ use crate::messages::utility::{
 use crate::messages::Serialize;
 
 use crate::utility::{_encode_hex, double_hash, to_io_err};
-use crate::utxo::{self, Utxo, UtxoSet};
+use crate::utxo::{self, Utxo, UtxoSet, WalletUtxo};
 use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
 use std::{
@@ -59,6 +59,11 @@ pub struct RawTransaction {
     pub tx_out_count: u64,
     pub tx_out: Vec<TxOutput>,
     pub lock_time: u32,
+}
+
+pub enum TransactionOrigin {
+    Block,
+    Pending,
 }
 
 impl RawTransaction {
@@ -180,63 +185,79 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    fn get_spent_utxos(&self) -> Vec<(UtxoId, Index)> {
-        let mut spent_utxos: Vec<(UtxoId, Index)> = vec![];
+    // COMBINE THIS WITH generrate_pending_utxo ADD FLAG to indicate pending or confirmed
+    pub fn generate_utxo(
+        &self,
+        utxo_set: &mut UtxoSet,
+        origin: TransactionOrigin,
+    ) -> io::Result<()> {
+        // iterate txin
+        if let TxInputType::TxInput(ref inputs) = self.tx_in {
+            for input in inputs {
+                let address = match input.get_address() {
+                    Ok(a) => a,
+                    _ => "no_address".to_string(),
+                };
 
-        match &self.tx_in {
-            TxInputType::CoinBaseInput(_) => {}
-            TxInputType::TxInput(inputs) => {
-                for input in inputs {
-                    let txid: [u8; 32] = input.previous_output.hash;
-                    spent_utxos.push((txid, input.previous_output.index));
+                let utxo_id = input.previous_output.hash;
+                let index = input.previous_output.index;
+                match utxo_set.set.get_mut(&address) {
+                    Some(wallet) => match origin {
+                        TransactionOrigin::Pending => {
+                            wallet.add_pending_spent(utxo_id, index);
+                        }
+                        TransactionOrigin::Block => {
+                            wallet.add_spent(utxo_id, index);
+                        }
+                    },
+                    None => {
+                        let mut wallet = WalletUtxo::new();
+                        match origin {
+                            TransactionOrigin::Pending => {
+                                wallet.add_pending_spent(utxo_id, index);
+                            }
+                            TransactionOrigin::Block => {
+                                wallet.add_spent(utxo_id, index);
+                            }
+                        }
+                        utxo_set.set.insert(address, wallet);
+                    }
                 }
             }
         }
 
-        spent_utxos
-    }
-
-    pub fn generate_utxo(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
-        let new_id = double_hash(&self.serialize()).to_byte_array();
-
-        // add spent utxos
-        let spent_utxos: Vec<(UtxoId, Index)> = self.get_spent_utxos();
-        for (utxo_id, index) in spent_utxos {
-            match utxo_set.spent.get_mut(&utxo_id) {
-                Some(vec) => {
-                    vec.push(index);
-                }
-                None => {
-                    utxo_set.spent.insert(utxo_id, vec![index]);
-                }
-            }
-        }
-
-        // add generated utxos
-        let new_utxo = Utxo::from_raw_transaction(self)?;
-        for transaction in &new_utxo.transactions {
-            let tx_address = match transaction.get_address() {
-                Ok(val) => val,
-                Err(_) => "no_address".to_string(),
+        // iterate txout
+        let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
+        let new_utxo = Utxo::from_raw_transaction(&self)?;
+        for utxo_transaction in &new_utxo.transactions {
+            let address = match utxo_transaction.get_address() {
+                Ok(a) => a,
+                _ => "no_address".to_string(),
             };
 
-            match utxo_set.set.get_mut(&tx_address) {
-                Some(val) => {
-                    val.insert(new_id, transaction.clone());
-                }
+            match utxo_set.set.get_mut(&address) {
+                Some(wallet) => match origin {
+                    TransactionOrigin::Pending => {
+                        wallet.add_pending_utxo(new_utxo_id, utxo_transaction.clone());
+                    }
+                    TransactionOrigin::Block => {
+                        wallet.add_utxo(new_utxo_id, utxo_transaction.clone());
+                    }
+                },
                 None => {
-                    let mut map = HashMap::new();
-                    map.insert(new_id, transaction.clone());
-                    utxo_set.set.insert(tx_address, map);
+                    let mut wallet = WalletUtxo::new();
+                    match origin {
+                        TransactionOrigin::Pending => {
+                            wallet.add_pending_utxo(new_utxo_id, utxo_transaction.clone());
+                        }
+                        TransactionOrigin::Block => {
+                            wallet.add_utxo(new_utxo_id, utxo_transaction.clone());
+                        }
+                    }
+                    utxo_set.set.insert(address, wallet);
                 }
             }
         }
-
-        Ok(())
-    }
-
-    pub fn _validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
-        self.generate_utxo(utxo_set)?;
 
         Ok(())
     }

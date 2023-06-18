@@ -1,7 +1,7 @@
 use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
-use crate::raw_transaction::RawTransaction;
+use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::double_hash;
 use crate::utility::to_io_err;
 use crate::utxo::UtxoSet;
@@ -108,7 +108,7 @@ impl Block {
         let mut utxo_set_snapshot = utxo_set.clone();
 
         for txn in self.txns.iter() {
-            txn.generate_utxo(&mut utxo_set_snapshot)?;
+            txn.generate_utxo(&mut utxo_set_snapshot, TransactionOrigin::Block)?;
         }
 
         self.block_header.validate_proof_of_work()?;
@@ -121,7 +121,7 @@ impl Block {
 
     pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         for txn in self.txns.iter() {
-            txn.generate_utxo(utxo_set)?;
+            txn.generate_utxo(utxo_set, TransactionOrigin::Block)?;
         }
 
         self.block_header.validate_proof_of_work()?;

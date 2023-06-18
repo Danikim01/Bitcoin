@@ -28,7 +28,7 @@ pub struct TxOutput {
 }
 
 impl TxOutput {
-    fn get_address(&self) -> io::Result<String> {
+    pub fn get_address(&self) -> io::Result<String> {
         let script_bytes = self.pk_script.clone();
         let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
 

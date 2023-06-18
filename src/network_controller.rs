@@ -7,7 +7,7 @@ use crate::messages::{
     Inventory, Message, Serialize,
 };
 use crate::node_controller::NodeController;
-use crate::raw_transaction::RawTransaction;
+use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
@@ -56,8 +56,14 @@ impl NetworkController {
     }
 
     fn read_wallet_balance(&self) -> io::Result<u64> {
-        let balance = self.utxo_set.get_wallet_balance(&self.wallet.address)?;
-        println!("Wallet balance: {:?}", balance);
+        let balance = self.utxo_set.get_wallet_balance(&self.wallet.address);
+        let pending_balance = self
+            .utxo_set
+            .get_pending_wallet_balance(&self.wallet.address);
+        println!(
+            "Wallet balance: {:?}\n       pending: {:?}",
+            balance, pending_balance
+        );
         self.ui_sender
             .send(GtkMessage::UpdateLabel((
                 "balance_available_val".to_string(),
@@ -207,10 +213,10 @@ impl NetworkController {
         Ok(())
     }
 
-    fn read_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
+    fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
         if transaction.address_is_involved(&self.wallet.address) {
-            // add to pending transactions hashmap
-            println!("Found a transaction involving this wallet.");
+            println!("Read a pending transaction involving this wallet!");
+            transaction.generate_utxo(&mut self.utxo_set, TransactionOrigin::Pending)?;
         }
         Ok(())
     }
@@ -319,7 +325,9 @@ impl OuterNetworkController {
                         .lock()
                         .map_err(to_io_err)?
                         .read_inventories(peer_addr, inventories),
-                    (_, Message::Transaction(tx)) => t_inner.lock().map_err(to_io_err)?.read_tx(tx),
+                    (_, Message::Transaction(tx)) => {
+                        t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
+                    }
                     (peer_addr, Message::Failure()) => {
                         println!(
                             "Node {:?} is notifying me of a failure, should resend last request",

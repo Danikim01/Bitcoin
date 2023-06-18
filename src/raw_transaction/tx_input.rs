@@ -16,7 +16,7 @@ pub struct TxInput {
 }
 
 impl TxInput {
-    fn get_address(&self) -> io::Result<String> {
+    pub fn get_address(&self) -> io::Result<String> {
         let script_bytes = self.script_sig.clone();
         let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
 
