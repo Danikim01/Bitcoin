@@ -222,6 +222,14 @@ impl NetworkController {
         Ok(())
     }
 
+    fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64) -> io::Result<()> {
+        let payload = nonce.to_le_bytes();
+        println!("Received ping from peer: {:?}", peer_addr);
+        println!("Sending payload {:?} to peer: {:?}", payload, peer_addr);
+        //self.nodes.send_to_specific(&peer_addr, &payload)?;
+        Ok(())
+    }
+
     pub fn generate_transaction(&mut self, details: TransactionDetails) -> io::Result<()> {
         let (recv_addr, _label, amount) = details;
 
@@ -393,6 +401,17 @@ impl OuterNetworkController {
         Ok(())
     }
 
+    fn handle_node_ping_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        peer_addr: SocketAddr,
+        nonce: u64,
+    ) -> io::Result<()> {
+        t_inner
+            .lock()
+            .map_err(to_io_err)?
+            .read_ping(peer_addr, nonce)
+    }
+
     fn recv_node_messages(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
@@ -410,6 +429,12 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
+                    (peer_addr, Message::Failure()) => {
+                        Self::handle_node_failure_message(t_inner, peer_addr)
+                    }
+                    (peer_addr, Message::Ping(nonce)) => {
+                        Self::handle_node_ping_message(t_inner, peer_addr, nonce)
+                    }
                     (peer_addr, Message::Failure()) => {
                         Self::handle_node_failure_message(t_inner, peer_addr)
                     }

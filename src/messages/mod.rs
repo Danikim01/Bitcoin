@@ -91,6 +91,7 @@ pub enum Message {
     Version(Version),
     Inv(Inventories),
     Transaction(RawTransaction),
+    Ping(u64),
     Failure(),
     Ignore(),
 }

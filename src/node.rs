@@ -1,4 +1,5 @@
 use crate::logger::log;
+use crate::messages::utility::StreamRead;
 use crate::messages::GetData;
 use crate::messages::{
     constants::commands, Block, Headers, Message, MessageHeader, Serialize, VerAck, Version,
@@ -10,7 +11,6 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-
 // gtk imports
 use crate::interface::GtkMessage;
 use crate::messages::constants::config::VERBOSE;
@@ -43,6 +43,14 @@ impl Listener {
         }
     }
 
+    fn ping_deserialize(payload: &[u8]) -> io::Result<Message> {
+        let mut cursor = io::Cursor::new(payload);
+        println!("Received ping message with payload: {:?}", payload);
+        let nonce = u64::from_le_stream(&mut cursor)?;
+        println!("Received ping with nonce: {}", nonce);
+        Ok(Message::Ping(nonce))
+    }
+
     fn process_message_payload(command_name: &str, payload: Vec<u8>) -> io::Result<Message> {
         let dyn_message: Message = match command_name {
             commands::HEADERS => match Headers::deserialize(&payload) {
@@ -68,6 +76,10 @@ impl Listener {
             commands::TX => match RawTransaction::deserialize(&payload) {
                 Ok(m) => m,
                 _ => Message::Ignore(), // bad luck if it fails, we can't request tx to another node
+            },
+            commands::PING => match Self::ping_deserialize(&payload) {
+                Ok(m) => m,
+                _ => Message::Ignore(),
             },
             _ => Message::Ignore(),
         };
