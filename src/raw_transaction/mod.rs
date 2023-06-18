@@ -4,10 +4,9 @@ use crate::messages::utility::{
 };
 use crate::messages::Serialize;
 
-use crate::utility::{_encode_hex, double_hash, to_io_err};
-use crate::utxo::{self, Utxo, UtxoSet, WalletUtxo};
-use bitcoin_hashes::{sha256, Hash};
-use std::collections::HashMap;
+use crate::utility::{double_hash, to_io_err};
+use crate::utxo::{Utxo, UtxoSet, WalletUtxo};
+use bitcoin_hashes::Hash;
 use std::{
     io::{Error, Read},
     str::FromStr,
@@ -19,8 +18,6 @@ pub mod tx_output;
 use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
-
-use crate::utxo::{Index, UtxoId};
 
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
 const SIGHASH_ALL: u32 = 1;
@@ -37,7 +34,7 @@ fn der_sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
     let message_slice: &[u8] = message;
     let message_slice = Message::from_slice(message_slice).map_err(to_io_err)?;
-    let private_key = SecretKey::from_str(&private_key).map_err(to_io_err)?;
+    let private_key = SecretKey::from_str(private_key).map_err(to_io_err)?;
     let signature = secp.sign_ecdsa(&message_slice, &private_key);
 
     // Convert the DER-encoded signature to bytes
@@ -46,7 +43,7 @@ fn der_sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
 
 fn pub_key_from_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
-    let private_key = SecretKey::from_str(&private_key).map_err(to_io_err)?;
+    let private_key = SecretKey::from_str(private_key).map_err(to_io_err)?;
     let public_key = PublicKey::from_secret_key(&secp, &private_key);
     Ok(public_key.serialize().to_vec())
 }
@@ -61,48 +58,50 @@ pub struct RawTransaction {
     pub lock_time: u32,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransactionOrigin {
     Block,
     Pending,
 }
 
 impl RawTransaction {
+    fn sig_txin(&self, s: &mut Vec<u8>, prev_pk_script: Vec<u8>, index: usize) {
+        if let TxInputType::TxInput(tx_ins) = &self.tx_in {
+            for (i, tx_in) in tx_ins.iter().enumerate() {
+                if i == index {
+                    let pubkey_script_bytes = prev_pk_script.clone();
+                    let tin = TxInput {
+                        previous_output: Outpoint {
+                            hash: tx_in.previous_output.hash,
+                            index: tx_in.previous_output.index,
+                        },
+                        script_bytes: pubkey_script_bytes.len() as u64,
+                        script_sig: pubkey_script_bytes,
+                        sequence: tx_in.sequence,
+                    };
+                    s.extend(tin._serialize());
+                } else {
+                    let tin = TxInput {
+                        previous_output: Outpoint {
+                            hash: tx_in.previous_output.hash,
+                            index: tx_in.previous_output.index,
+                        },
+                        script_bytes: 0,
+                        script_sig: vec![],
+                        sequence: tx_in.sequence,
+                    };
+                    s.extend(tin._serialize());
+                }
+            }
+        }
+    }
+
     fn sig_hash(&self, prev_pk_script: Vec<u8>, index: usize) -> io::Result<[u8; 32]> {
         let mut s = Vec::new();
         s.extend(self.version.to_le_bytes());
 
         s.extend(to_varint(self.tx_in_count));
-        match &self.tx_in {
-            TxInputType::CoinBaseInput(_) => {}
-            TxInputType::TxInput(tx_ins) => {
-                for (i, tx_in) in tx_ins.iter().enumerate() {
-                    if i == index {
-                        let pubkey_script_bytes = prev_pk_script.clone();
-                        let tin = TxInput {
-                            previous_output: Outpoint {
-                                hash: tx_in.previous_output.hash,
-                                index: tx_in.previous_output.index,
-                            },
-                            script_bytes: pubkey_script_bytes.len() as u64,
-                            script_sig: pubkey_script_bytes,
-                            sequence: tx_in.sequence,
-                        };
-                        s.extend(tin._serialize());
-                    } else {
-                        let tin = TxInput {
-                            previous_output: Outpoint {
-                                hash: tx_in.previous_output.hash,
-                                index: tx_in.previous_output.index,
-                            },
-                            script_bytes: 0,
-                            script_sig: vec![],
-                            sequence: tx_in.sequence,
-                        };
-                        s.extend(tin._serialize());
-                    }
-                }
-            }
-        }
+        self.sig_txin(&mut s, prev_pk_script, index);
 
         s.extend(to_varint(self.tx_out_count));
         for tx_out in self.tx_out.iter() {
@@ -185,13 +184,11 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
-    // COMBINE THIS WITH generrate_pending_utxo ADD FLAG to indicate pending or confirmed
-    pub fn generate_utxo(
+    fn generate_utxo_in(
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
     ) -> io::Result<()> {
-        // iterate txin
         if let TxInputType::TxInput(ref inputs) = self.tx_in {
             for input in inputs {
                 let address = match input.get_address() {
@@ -202,33 +199,28 @@ impl RawTransaction {
                 let utxo_id = input.previous_output.hash;
                 let index = input.previous_output.index;
                 match utxo_set.set.get_mut(&address) {
-                    Some(wallet) => match origin {
-                        TransactionOrigin::Pending => {
-                            wallet.add_pending_spent(utxo_id, index);
-                        }
-                        TransactionOrigin::Block => {
-                            wallet.add_spent(utxo_id, index);
-                        }
-                    },
+                    Some(wallet) => {
+                        wallet.add_spent(utxo_id, index, origin.clone());
+                    }
                     None => {
                         let mut wallet = WalletUtxo::new();
-                        match origin {
-                            TransactionOrigin::Pending => {
-                                wallet.add_pending_spent(utxo_id, index);
-                            }
-                            TransactionOrigin::Block => {
-                                wallet.add_spent(utxo_id, index);
-                            }
-                        }
+                        wallet.add_spent(utxo_id, index, origin.clone());
                         utxo_set.set.insert(address, wallet);
                     }
                 }
             }
         }
 
-        // iterate txout
+        Ok(())
+    }
+
+    fn generate_utxo_out(
+        &self,
+        utxo_set: &mut UtxoSet,
+        origin: TransactionOrigin,
+    ) -> io::Result<()> {
         let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
-        let new_utxo = Utxo::from_raw_transaction(&self)?;
+        let new_utxo = Utxo::from_raw_transaction(self)?;
         for utxo_transaction in &new_utxo.transactions {
             let address = match utxo_transaction.get_address() {
                 Ok(a) => a,
@@ -236,28 +228,27 @@ impl RawTransaction {
             };
 
             match utxo_set.set.get_mut(&address) {
-                Some(wallet) => match origin {
-                    TransactionOrigin::Pending => {
-                        wallet.add_pending_utxo(new_utxo_id, utxo_transaction.clone());
-                    }
-                    TransactionOrigin::Block => {
-                        wallet.add_utxo(new_utxo_id, utxo_transaction.clone());
-                    }
-                },
+                Some(wallet) => {
+                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone())
+                }
                 None => {
                     let mut wallet = WalletUtxo::new();
-                    match origin {
-                        TransactionOrigin::Pending => {
-                            wallet.add_pending_utxo(new_utxo_id, utxo_transaction.clone());
-                        }
-                        TransactionOrigin::Block => {
-                            wallet.add_utxo(new_utxo_id, utxo_transaction.clone());
-                        }
-                    }
+                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone());
                     utxo_set.set.insert(address, wallet);
                 }
             }
         }
+
+        Ok(())
+    }
+
+    pub fn generate_utxo(
+        &self,
+        utxo_set: &mut UtxoSet,
+        origin: TransactionOrigin,
+    ) -> io::Result<()> {
+        self.generate_utxo_in(utxo_set, origin.clone())?;
+        self.generate_utxo_out(utxo_set, origin)?;
 
         Ok(())
     }
@@ -348,7 +339,7 @@ impl Serialize for RawTransaction {
 
 #[cfg(test)]
 mod tests {
-    use crate::utility::decode_hex;
+    use crate::utility::_decode_hex;
 
     use super::*;
     use std::fs;
@@ -502,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_raw_transaction_deserial_and_serial() {
-        let bytes = decode_hex("01000000011acd5fe758ab56da34a0973c9c5dda0b63dcd79fe5860950813a366db1c92585010000006a4730440220046dc82c7c2e72665938c0aa7e10a135496d2467c2d1d105daa4ed1bab436898022064d9e36334d87c56454f7447c9da2c2eeb56cb77d3e9431feeac45649a23d9b901210387d7265c4973b153830aa72486d2488f964d194d2de869236fb87cc907d83971ffffffff0240420f00000000001976a9149144fda38182db2d26e5de88456accf241c898eb88aca0860100000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac00000000").unwrap();
+        let bytes = _decode_hex("01000000011acd5fe758ab56da34a0973c9c5dda0b63dcd79fe5860950813a366db1c92585010000006a4730440220046dc82c7c2e72665938c0aa7e10a135496d2467c2d1d105daa4ed1bab436898022064d9e36334d87c56454f7447c9da2c2eeb56cb77d3e9431feeac45649a23d9b901210387d7265c4973b153830aa72486d2488f964d194d2de869236fb87cc907d83971ffffffff0240420f00000000001976a9149144fda38182db2d26e5de88456accf241c898eb88aca0860100000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac00000000").unwrap();
         let raw_transaction = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
         let serialized_raw_transaction = raw_transaction.serialize();
         assert_eq!(bytes, serialized_raw_transaction);
@@ -510,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_raw_transaction_address_is_envolved() {
-        let transaction_bytes = decode_hex("0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
+        let transaction_bytes = _decode_hex("0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
         let transaction =
             RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes.unwrap())).unwrap();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";

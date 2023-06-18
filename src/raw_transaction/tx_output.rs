@@ -103,7 +103,7 @@ impl TxOutput {
 
 #[cfg(test)]
 mod tests {
-    use crate::utility::decode_hex;
+    use crate::utility::_decode_hex;
 
     use super::*;
 
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn test_deseareal_and_sereal() {
         let bytes =
-            decode_hex("b7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac")
+            _decode_hex("b7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac")
                 .unwrap();
         let txou = TxOutput::from_bytes(&mut Cursor::new(&bytes)).unwrap();
         let serialized_txou = txou._serialize();
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn test_txout_destined_to() {
         let bytes =
-            decode_hex("96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac")
+            _decode_hex("96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac")
                 .unwrap();
         let txou = TxOutput::from_bytes(&mut Cursor::new(&bytes)).unwrap();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";

@@ -1,8 +1,8 @@
 use crate::logger::log;
+use crate::messages::GetData;
 use crate::messages::{
     constants::commands, Block, Headers, Message, MessageHeader, Serialize, VerAck, Version,
 };
-use crate::messages::{GetData, InvType};
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
 use std::io::{self, Write};

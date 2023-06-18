@@ -1,14 +1,15 @@
 use crate::config::Config;
 use crate::logger::log;
-use crate::messages::constants::config::VERBOSE;
+use crate::messages::constants::commands::TX;
+use crate::messages::constants::config::{MAGIC, VERBOSE};
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
     Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    Inventory, Message, Serialize,
+    Inventory, Message, MessageHeader, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{into_hashmap, to_io_err};
+use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use std::collections::HashMap;
@@ -16,8 +17,8 @@ use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
-use crate::interface::{GtkMessage, ModelRequest};
-use gtk::gdk::keys::constants::P;
+use crate::interface::{GtkMessage, ModelRequest, TransactionDetails};
+use bitcoin_hashes::Hash;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -221,6 +222,35 @@ impl NetworkController {
         Ok(())
     }
 
+    pub fn generate_transaction(&mut self, details: TransactionDetails) -> io::Result<()> {
+        let (recv_addr, _label, amount) = details;
+
+        let tx: RawTransaction =
+            self.wallet
+                .generate_transaction(&mut self.utxo_set, recv_addr, amount)?;
+
+        // broadcast tx
+        let tx_hash = double_hash(&tx.serialize()).to_byte_array();
+        let tx_hash_str = _encode_hex(&tx_hash);
+        println!("Generated transaction: {}, pending broadcast", tx_hash_str);
+
+        let payload = tx.serialize();
+        let mut bytes = MessageHeader::new(
+            MAGIC,
+            TX.to_string(),
+            payload.len() as u32,
+            [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
+        )
+        .serialize()?;
+
+        bytes.extend(payload);
+
+        // send bytes to all
+        self.nodes.send_to_all(&bytes)?;
+
+        Ok(())
+    }
+
     fn get_missing_headers(&self, headers: &Headers) -> io::Result<Vec<BlockHeader>> {
         let mut missing_headers = Vec::new();
 
@@ -286,22 +316,80 @@ impl OuterNetworkController {
         Ok(Self { inner })
     }
 
+    fn handle_ui_get_balance(t_inner: Arc<Mutex<NetworkController>>) -> io::Result<()> {
+        let inner_lock = t_inner.lock().map_err(to_io_err)?;
+        inner_lock.read_wallet_balance()?;
+        Ok(())
+    }
+
+    fn handle_ui_generate_transaction(
+        t_inner: Arc<Mutex<NetworkController>>,
+        details: TransactionDetails,
+    ) -> io::Result<()> {
+        let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
+        inner_lock.generate_transaction(details)?;
+        Ok(())
+    }
+
     fn recv_ui_messages(&self, ui_receiver: Receiver<ModelRequest>) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
-                let t_inner = inner.clone();
+                let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
-                    ModelRequest::GetWalletBalance => {
-                        // println!("Received request for wallet balance");
-                        let inner_lock = t_inner.lock().map_err(to_io_err)?;
-                        // println!("Got lock on ui receiver");
-                        inner_lock.read_wallet_balance()
+                    ModelRequest::GetWalletBalance => Self::handle_ui_get_balance(t_inner),
+                    ModelRequest::GenerateTransaction(details) => {
+                        Self::handle_ui_generate_transaction(t_inner, details)
                     }
                 }?;
-                // println!("Freeing lock on ui receiver");
             }
         });
+        Ok(())
+    }
+
+    fn handle_node_block_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        block: Block,
+    ) -> io::Result<()> {
+        t_inner
+            .lock()
+            .map_err(to_io_err)?
+            .read_block_from_node(block)
+    }
+
+    fn handle_node_headers_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        headers: Headers,
+    ) -> io::Result<()> {
+        t_inner.lock().map_err(to_io_err)?.read_headers(&headers)
+    }
+
+    fn handle_node_inv_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        peer_addr: SocketAddr,
+        inventories: Vec<Inventory>,
+    ) -> io::Result<()> {
+        t_inner
+            .lock()
+            .map_err(to_io_err)?
+            .read_inventories(peer_addr, inventories)
+    }
+
+    fn handle_node_tx_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        tx: RawTransaction,
+    ) -> io::Result<()> {
+        t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
+    }
+
+    fn handle_node_failure_message(
+        _t_inner: Arc<Mutex<NetworkController>>,
+        peer_addr: SocketAddr,
+    ) -> io::Result<()> {
+        println!(
+            "Node {:?} is notifying me of a failure, should resend last request",
+            peer_addr
+        );
         Ok(())
     }
 
@@ -312,28 +400,18 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
-                let t_inner = inner.clone();
+                let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
                 match node_receiver.recv().map_err(to_io_err)? {
                     (_, Message::Headers(headers)) => {
-                        t_inner.lock().map_err(to_io_err)?.read_headers(&headers)
+                        Self::handle_node_headers_message(t_inner, headers)
                     }
-                    (_, Message::Block(block)) => t_inner
-                        .lock()
-                        .map_err(to_io_err)?
-                        .read_block_from_node(block),
-                    (peer_addr, Message::Inv(inventories)) => t_inner
-                        .lock()
-                        .map_err(to_io_err)?
-                        .read_inventories(peer_addr, inventories),
-                    (_, Message::Transaction(tx)) => {
-                        t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
+                    (_, Message::Block(block)) => Self::handle_node_block_message(t_inner, block),
+                    (peer_addr, Message::Inv(inventories)) => {
+                        Self::handle_node_inv_message(t_inner, peer_addr, inventories)
                     }
+                    (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
                     (peer_addr, Message::Failure()) => {
-                        println!(
-                            "Node {:?} is notifying me of a failure, should resend last request",
-                            peer_addr
-                        );
-                        Ok(())
+                        Self::handle_node_failure_message(t_inner, peer_addr)
                     }
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,

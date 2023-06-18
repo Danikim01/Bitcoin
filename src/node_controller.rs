@@ -3,7 +3,6 @@ use crate::logger::log;
 use crate::messages::constants::config::QUIET;
 use crate::messages::Message;
 use crate::node::Node;
-use bitcoin_hashes::Hash;
 use rand::random;
 use std::collections::HashMap;
 use std::io;
@@ -47,7 +46,7 @@ impl NodeController {
         let node_number = random_number % self.nodes.len();
         let random_node = self.nodes.values_mut().nth(node_number).unwrap();
         match &mut random_node.send(payload) {
-            Ok(k) => Ok(k.clone()),
+            Ok(_) => Ok(()),
             Err(e) => {
                 log(
                     &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
@@ -65,7 +64,7 @@ impl NodeController {
         }
     }
 
-    pub fn send_to_specific(&mut self, peer: &SocketAddr, payload: &Vec<u8>) -> io::Result<()> {
+    pub fn send_to_specific(&mut self, peer: &SocketAddr, payload: &[u8]) -> io::Result<()> {
         let node = match self.nodes.get_mut(peer) {
             Some(n) => n,
             None => {
@@ -76,17 +75,33 @@ impl NodeController {
             }
         };
         match &mut node.send(payload) {
-            Ok(k) => Ok(k.clone()),
+            Ok(_) => Ok(()),
             Err(e) => {
                 log(
                     &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
                     QUIET,
                 );
-                return Err(io::Error::new(
+                Err(io::Error::new(
                     io::ErrorKind::NotConnected,
                     "Failed to send message to peer",
-                ));
+                ))
             }
         }
+    }
+
+    pub fn send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
+        for node in self.nodes.values_mut() {
+            match &mut node.send(payload) {
+                Ok(_) => continue,
+                Err(e) => {
+                    log(
+                        &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
+                        QUIET,
+                    );
+                    continue;
+                }
+            }
+        }
+        Ok(())
     }
 }

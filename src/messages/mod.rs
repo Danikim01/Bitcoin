@@ -102,7 +102,7 @@ pub trait Hashable {
 pub trait Serialize {
     fn serialize(&self) -> io::Result<Vec<u8>>;
 
-    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error>
+    fn deserialize(_bytes: &[u8]) -> Result<Message, io::Error>
     where
         Self: Sized,
     {
