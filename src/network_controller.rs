@@ -7,6 +7,7 @@ use crate::messages::{
     Inventory, Message, Serialize,
 };
 use crate::node_controller::NodeController;
+use crate::raw_transaction::RawTransaction;
 use crate::utility::{into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
@@ -206,6 +207,14 @@ impl NetworkController {
         Ok(())
     }
 
+    fn read_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
+        if transaction.address_is_involved(&self.wallet.address) {
+            // add to pending transactions hashmap
+            println!("Found a transaction involving this wallet.");
+        }
+        Ok(())
+    }
+
     fn get_missing_headers(&self, headers: &Headers) -> io::Result<Vec<BlockHeader>> {
         let mut missing_headers = Vec::new();
 
@@ -310,6 +319,7 @@ impl OuterNetworkController {
                         .lock()
                         .map_err(to_io_err)?
                         .read_inventories(peer_addr, inventories),
+                    (_, Message::Transaction(tx)) => t_inner.lock().map_err(to_io_err)?.read_tx(tx),
                     (peer_addr, Message::Failure()) => {
                         println!(
                             "Node {:?} is notifying me of a failure, should resend last request",
@@ -322,6 +332,23 @@ impl OuterNetworkController {
                         "Received unsupported message",
                     )),
                 }?;
+            }
+        });
+        Ok(())
+    }
+
+    fn req_headers_periodically(&self) -> io::Result<()> {
+        let inner = self.inner.clone();
+        thread::spawn(move || -> io::Result<()> {
+            loop {
+                println!("Requesting headers periodically...");
+                let t_inner = inner.clone();
+                let tallest_header = t_inner.lock().map_err(to_io_err)?.tallest_header;
+                t_inner
+                    .lock()
+                    .map_err(to_io_err)?
+                    .request_headers(tallest_header)?;
+                thread::sleep(std::time::Duration::from_secs(60));
             }
         });
         Ok(())
@@ -341,6 +368,7 @@ impl OuterNetworkController {
         self.recv_ui_messages(ui_receiver)?;
         self.recv_node_messages(node_receiver)?;
         self.sync()?;
+        self.req_headers_periodically()?;
 
         Ok(())
     }

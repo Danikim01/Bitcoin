@@ -16,30 +16,33 @@ pub struct TxInput {
 }
 
 impl TxInput {
-    fn get_address(&self) -> String {
+    fn get_address(&self) -> io::Result<String> {
         let script_bytes = self.script_sig.clone();
         let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
 
         // get sig length
-        let sig_length = u8::from_le_stream(&mut cursor).unwrap();
+        let sig_length = u8::from_le_stream(&mut cursor)?;
 
         // skip sig
         cursor.set_position(cursor.position() + sig_length as u64);
 
         // read pubkey length
-        let pubkey_length = u8::from_le_stream(&mut cursor).unwrap();
+        let pubkey_length = u8::from_le_stream(&mut cursor)?;
 
         // read pubkey
         let mut pubkey = vec![0u8; pubkey_length as usize];
-        cursor.read_exact(&mut pubkey).unwrap();
+        cursor.read_exact(&mut pubkey)?;
 
         // get address
         let h160 = hash160::Hash::hash(&pubkey).to_byte_array();
-        p2pkh_to_address(h160)
+        Ok(p2pkh_to_address(h160))
     }
 
     pub fn destined_from(&self, address: &str) -> bool {
-        self.get_address() == address
+        match self.get_address() {
+            Ok(addr) => addr == address,
+            Err(..) => false,
+        }
     }
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {

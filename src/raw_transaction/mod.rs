@@ -2,6 +2,7 @@ use crate::io::{self, Cursor};
 use crate::messages::utility::{
     read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
 };
+use crate::messages::Serialize;
 
 use crate::utility::{_encode_hex, double_hash, to_io_err};
 use crate::utxo::{self, Utxo, UtxoSet};
@@ -16,6 +17,8 @@ pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
 use tx_output::TxOutput;
+
+use super::messages::Message as Msg;
 
 use crate::utxo::{Index, UtxoId};
 
@@ -137,7 +140,7 @@ impl RawTransaction {
     pub fn address_is_involved(&self, address: &str) -> bool {
         // check if any of txin contains address
         match &self.tx_in {
-            TxInputType::CoinBaseInput(_) => {},
+            TxInputType::CoinBaseInput(_) => {}
             TxInputType::TxInput(tx_ins) => {
                 for txin in tx_ins {
                     if txin.destined_from(address) {
@@ -307,6 +310,18 @@ impl RawTransaction {
         transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
         transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
+    }
+}
+
+impl Serialize for RawTransaction {
+    fn deserialize(bytes: &[u8]) -> Result<Msg, std::io::Error> {
+        let mut cursor = Cursor::new(bytes);
+        let raw_transaction = RawTransaction::from_bytes(&mut cursor)?;
+        Ok(Msg::Transaction(raw_transaction))
+    }
+
+    fn serialize(&self) -> io::Result<Vec<u8>> {
+        Ok(self.serialize())
     }
 }
 

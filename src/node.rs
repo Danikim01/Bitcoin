@@ -3,6 +3,7 @@ use crate::messages::{
     constants::commands, Block, Headers, Message, MessageHeader, Serialize, VerAck, Version,
 };
 use crate::messages::{GetData, InvType};
+use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
 use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -64,10 +65,10 @@ impl Listener {
                 Ok(m) => m,
                 _ => Message::Ignore(), // bad luck if it fails, we can't request inv to another node
             },
-            commands::TX => {
-                println!("Received a transaction, todo");
-                Message::Ignore()
-            }
+            commands::TX => match RawTransaction::deserialize(&payload) {
+                Ok(m) => m,
+                _ => Message::Ignore(), // bad luck if it fails, we can't request tx to another node
+            },
             _ => Message::Ignore(),
         };
         Ok(dyn_message)

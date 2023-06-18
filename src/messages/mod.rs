@@ -1,3 +1,4 @@
+use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
@@ -89,6 +90,7 @@ pub enum Message {
     _VerAck(VerAck),
     Version(Version),
     Inv(Inventories),
+    Transaction(RawTransaction),
     Failure(),
     Ignore(),
 }
