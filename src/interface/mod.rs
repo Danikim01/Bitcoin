@@ -12,8 +12,11 @@ pub enum GtkMessage {
     UpdateLabel((String, String)),
 }
 
+pub type TransactionDetails = (String, String, u64); // (address, label, value)
+
 pub enum ModelRequest {
     GetWalletBalance,
+    GenerateTransaction(TransactionDetails),
 }
 
 /// called from the model, to update the text of a specific label
@@ -53,9 +56,21 @@ pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> 
 
     // this only for example
     let get_balance_btn = builder.object::<gtk::Button>("get_balance_btn").unwrap();
+    let sender_clone = sender.clone();
     get_balance_btn.connect_clicked(move |_| {
         println!("click");
-        sender.send(ModelRequest::GetWalletBalance).unwrap();
+        sender_clone.send(ModelRequest::GetWalletBalance).unwrap();
+    });
+
+    let send_tx_btn = builder.object::<gtk::Button>("send_tx_btn").unwrap();
+    send_tx_btn.connect_clicked(move |_| {
+        println!("click");
+        let address = "mnJvq7mbGiPNNhUne4FAqq27Q8xZrAsVun".to_string();
+        let value = 10000;
+        let details = (address, "label".to_string(), value);
+        sender
+            .send(ModelRequest::GenerateTransaction(details))
+            .unwrap();
     });
 
     let window: gtk::Window = components::init(builder)?;
@@ -64,6 +79,3 @@ pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> 
     gtk::main();
     Ok(())
 }
-
-// model -> view
-// view -> model??

@@ -14,7 +14,7 @@ mod node_controller;
 mod raw_transaction;
 mod utility;
 mod utxo;
-
+mod wallet;
 use std::sync::mpsc;
 use std::thread;
 

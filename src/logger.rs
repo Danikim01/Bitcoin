@@ -1,9 +1,9 @@
+use crate::config::Config;
+use crate::messages::constants::config::VERBOSE;
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex, Once};
-use crate::config::Config;
-use crate::messages::constants::config::VERBOSE;
 
 struct Logger {
     log_file: Arc<Mutex<std::fs::File>>,
@@ -28,9 +28,12 @@ impl Logger {
         let line = format!("{} - {}\n", now, message);
         println!("{}", message);
 
-        if self.mode != VERBOSE { return; }
+        if self.mode != VERBOSE {
+            return;
+        }
         let mut file = self.log_file.lock().unwrap();
-        file.write_all(line.as_bytes()).expect("Failed to write to log file")
+        file.write_all(line.as_bytes())
+            .expect("Failed to write to log file")
     }
 
     fn log_quiet(&self, message: &str) {
@@ -38,9 +41,9 @@ impl Logger {
         let line = format!("{} - {}\n", now, message);
         println!("{}", message);
         let mut file = self.log_file.lock().unwrap();
-        file.write_all(line.as_bytes()).expect("Failed to write to log file")
+        file.write_all(line.as_bytes())
+            .expect("Failed to write to log file")
     }
-
 }
 
 struct LazyLogger {
@@ -69,7 +72,7 @@ pub fn log(message: &str, mode: &str) {
     let mut lazy_logger = LazyLogger::new();
     let logger = lazy_logger.get_logger();
 
-    match mode{
+    match mode {
         VERBOSE => logger.log_verbose(message),
         _ => logger.log_quiet(message),
     }

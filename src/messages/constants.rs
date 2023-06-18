@@ -33,6 +33,7 @@ pub mod commands {
     pub const FEEFILTER: &str = "feefilter\0\0\0";
     pub const ADDR: &str = "addr\0\0\0\0\0\0\0\0";
     pub const INV: &str = "inv\0\0\0\0\0\0\0\0\0";
+    pub const TX: &str = "tx\0\0\0\0\0\0\0\0\0\0";
 }
 
 pub mod version_constants {
@@ -44,5 +45,5 @@ pub mod config {
     pub const PORT: u16 = 8333;
     pub const VERBOSE: &str = "VERBOSE";
     pub const QUIET: &str = "QUIET";
-    pub const MAGIC: [u8;4] = [0x0b, 0x11, 0x09, 0x07];
+    pub const MAGIC: [u8; 4] = [0x0b, 0x11, 0x09, 0x07];
 }

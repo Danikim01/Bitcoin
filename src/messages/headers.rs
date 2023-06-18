@@ -25,7 +25,7 @@ impl Default for MessageHeader {
 }
 
 impl MessageHeader {
-    fn new(
+    pub fn new(
         start_string: [u8; START_STRING_SIZE],
         command_name: String,
         payload_size: u32,
@@ -94,6 +94,7 @@ impl MessageHeader {
             FEEFILTER,
             ADDR,
             INV,
+            TX,
         ];
         if commands.contains(&self.command_name.as_str()) {
             return Ok(());
@@ -123,6 +124,17 @@ impl MessageHeader {
         let mut payload_buffer = vec![0_u8; self.payload_size as usize];
         stream.read_exact(&mut payload_buffer)?;
         Ok(payload_buffer)
+    }
+
+    pub fn serialize(&self) -> io::Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+
+        bytes.extend_from_slice(self.start_string.as_ref());
+        bytes.extend_from_slice(self.command_name.as_bytes());
+        bytes.extend_from_slice(&self.payload_size.to_le_bytes());
+        bytes.extend_from_slice(&self.checksum);
+
+        Ok(bytes)
     }
 }
 
@@ -156,5 +168,19 @@ mod tests {
 
         let message_header = MessageHeader::from_bytes(&bytes);
         println!("{:?}", message_header);
+    }
+
+    #[test]
+    fn test_serialize() {
+        let message_header =
+            MessageHeader::new(MAGIC, VERACK.to_string(), 0, [0x5d, 0xf6, 0xe0, 0xe2]);
+
+        let serialized = message_header.serialize().unwrap();
+        let bytes: [u8; 24] = [
+            11, 17, 9, 7, 0x76, 0x65, 0x72, 0x61, 0x63, 0x6b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x5d, 0xf6, 0xe0, 0xe2,
+        ];
+
+        assert_eq!(serialized, bytes);
     }
 }
