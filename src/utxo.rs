@@ -1,22 +1,166 @@
-use crate::raw_transaction::{RawTransaction, TxOutput};
+use crate::raw_transaction::TransactionOrigin;
+use crate::raw_transaction::{tx_output::TxOutput, RawTransaction};
 use crate::utility::double_hash;
-use bitcoin_hashes::{hash160, Hash};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
 
-fn _hash_pk_address(pk_address: Vec<u8>) -> [u8; 20] {
-    hash160::Hash::hash(&pk_address).to_byte_array()
+pub type Lock = Vec<u8>;
+pub type UtxoId = [u8; 32];
+type Address = String;
+pub type Index = u32;
+
+#[derive(Debug, Clone)]
+pub struct PendingUtxo {
+    pub utxos: HashMap<UtxoId, UtxoTransaction>,
+    pub spent: HashMap<UtxoId, Vec<Index>>,
 }
 
-// pub type UtxoSet = HashMap<UtxoId, Utxo>;
-pub type UtxoSet = HashMap<String, HashMap<UtxoId,UtxoTransaction>>;
+impl PendingUtxo {
+    pub fn new() -> Self {
+        Self {
+            utxos: HashMap::new(),
+            spent: HashMap::new(), // is this really needed?
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WalletUtxo {
+    pub utxos: HashMap<UtxoId, UtxoTransaction>,
+    pub spent: HashMap<UtxoId, Vec<Index>>,
+    pub pending: PendingUtxo,
+}
+
+impl WalletUtxo {
+    pub fn new() -> Self {
+        Self {
+            utxos: HashMap::new(),
+            spent: HashMap::new(),
+            pending: PendingUtxo::new(),
+        }
+    }
+
+    pub fn get_available_utxos(&self) -> Vec<(UtxoId, UtxoTransaction)> {
+        let mut available_utxos: Vec<(UtxoId, UtxoTransaction)> = Vec::new();
+
+        for (utxo_id, utxo) in &self.utxos {
+            if !self.spent.contains_key(utxo_id) {
+                available_utxos.push((*utxo_id, utxo.clone()));
+            }
+        }
+
+        available_utxos
+    }
+
+    pub fn get_balance(&self) -> u64 {
+        let mut balance = 0;
+
+        for (utxo_id, utxo) in &self.utxos {
+            if !self.spent.contains_key(utxo_id) {
+                balance += utxo.value;
+            }
+        }
+
+        balance
+    }
+
+    pub fn get_pending_balance(&self) -> u64 {
+        let mut balance = 0;
+
+        for (utxo_id, utxo) in &self.pending.utxos {
+            if !self.pending.spent.contains_key(utxo_id) {
+                balance += utxo.value;
+            }
+        }
+
+        balance
+    }
+
+    pub fn add_utxo(&mut self, utxo_id: UtxoId, utxo: UtxoTransaction, origin: TransactionOrigin) {
+        if origin == TransactionOrigin::Pending {
+            self.add_pending_utxo(utxo_id, utxo);
+            return;
+        }
+
+        self.pending.utxos.remove(&utxo_id);
+        self.utxos.insert(utxo_id, utxo);
+    }
+
+    pub fn add_spent(&mut self, utxo_id: UtxoId, index: Index, origin: TransactionOrigin) {
+        if origin == TransactionOrigin::Pending {
+            self.add_pending_spent(utxo_id, index);
+            return;
+        }
+
+        self.pending.spent.remove(&utxo_id);
+        if let Some(spent) = self.spent.get_mut(&utxo_id) {
+            spent.push(index);
+        } else {
+            self.spent.insert(utxo_id, vec![index]);
+        }
+    }
+
+    fn add_pending_utxo(&mut self, utxo_id: UtxoId, utxo: UtxoTransaction) {
+        self.pending.utxos.insert(utxo_id, utxo);
+    }
+
+    fn add_pending_spent(&mut self, utxo_id: UtxoId, index: Index) {
+        if let Some(spent) = self.pending.spent.get_mut(&utxo_id) {
+            spent.push(index);
+        } else {
+            self.pending.spent.insert(utxo_id, vec![index]);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UtxoSet {
+    pub set: HashMap<Address, WalletUtxo>,
+}
+
+impl UtxoSet {
+    pub fn new() -> Self {
+        Self {
+            set: HashMap::new(),
+        }
+    }
+
+    /// returns available utxos for a given address
+    pub fn get_wallet_available_utxos(&self, address: &str) -> Vec<(UtxoId, UtxoTransaction)> {
+        if let Some(wallet) = self.set.get(address) {
+            return wallet.get_available_utxos();
+        }
+
+        // eval check that it's not on pending spent either
+
+        Vec::new()
+    }
+
+    // Maybe we should combine this method with the one bellow
+    pub fn get_wallet_balance(&self, address: &str) -> u64 {
+        if let Some(wallet) = self.set.get(address) {
+            return wallet.get_balance();
+        }
+
+        0
+    }
+
+    // Maybe we should combine this method with the one above
+    pub fn get_pending_wallet_balance(&self, address: &str) -> u64 {
+        if let Some(wallet) = self.set.get(address) {
+            return wallet.get_pending_balance();
+        }
+
+        0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UtxoTransaction {
-    pub _value: i64,
-    _lock: Vec<u8>,
-    _spent: bool,
+    pub index: u32,
+    pub value: u64,
+    pub lock: Lock,
 }
 
 pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
@@ -32,25 +176,9 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
 }
 
 impl UtxoTransaction {
-    fn _has_wallet(&self, address: &str) -> io::Result<bool> {
-        // iterate lock one byte at a time until 0x14 is found
-        let mut cursor = Cursor::new(self._lock.clone());
-
-        let buf = &mut [0; 1];
-        while buf[0] != 0x14 {
-            cursor.read_exact(buf)?;
-        }
-
-        let mut pk_hash = [0; 20];
-        cursor.read_exact(&mut pk_hash)?;
-
-        let pk2addr = p2pkh_to_address(pk_hash);
-        Ok(pk2addr == address)
-    }
-
     pub fn get_address(&self) -> io::Result<String> {
         // iterate lock one byte at a time until 0x14 is found
-        let mut cursor = Cursor::new(self._lock.clone());
+        let mut cursor = Cursor::new(self.lock.clone());
 
         let buf = &mut [0; 1];
         while buf[0] != 0x14 {
@@ -63,27 +191,12 @@ impl UtxoTransaction {
         Ok(p2pkh_to_address(pk_hash))
     }
 
-    pub fn from_tx_output(tx_output: &TxOutput) -> io::Result<Self> {
+    pub fn from_tx_output(tx_output: &TxOutput, index: u32) -> io::Result<Self> {
         let value = tx_output.value;
         let lock = tx_output.pk_script.clone();
-        Ok(Self {
-            _value: value,
-            _lock: lock,
-            _spent: false,
-        })
-    }
-
-    pub fn _get_wallet_balance(&self, address: &str) -> io::Result<i64> {
-        // if desired pk_adress is the same as the adress held
-        // and the transaction is not spent, return the value
-        if self._has_wallet(address)? && !self._spent {
-            return Ok(self._value);
-        }
-        Ok(0)
+        Ok(Self { index, value, lock })
     }
 }
-
-pub type UtxoId = [u8; 32];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Utxo {
@@ -96,137 +209,85 @@ impl Utxo {
             transactions: Vec::new(),
         };
 
-        for tx_output in &raw_transaction.tx_out {
-            let utxo_transaction = UtxoTransaction::from_tx_output(tx_output)?;
+        for (index, tx_output) in raw_transaction.tx_out.iter().enumerate() {
+            let utxo_transaction = UtxoTransaction::from_tx_output(tx_output, index as u32)?;
             utxo.transactions.push(utxo_transaction);
         }
         Ok(utxo)
-    }
-
-    /// Validate that the transaction of index in txid can be spent
-    /// and mark it as spent
-    pub fn _validate_spend(&self, index: usize) -> io::Result<()> {
-        // first check that it exists
-        if index >= self.transactions.len() {
-            println!("Utxo index out of bounds!");
-            // return Err(io::Error::new(
-            //     io::ErrorKind::InvalidInput,
-            //     "Index out of bounds",
-            // ));
-        }
-
-        // then check the lock (research how to do this)
-
-        Ok(())
-    }
-
-    pub fn _get_wallet_balance(&self, address: &str) -> io::Result<i64> {
-        let mut balance = 0;
-        for transaction in &self.transactions {
-            balance += transaction._get_wallet_balance(address)?;
-        }
-        Ok(balance)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{raw_transaction::TransactionOrigin, utility::_decode_hex};
 
     #[test]
-    fn test_hash_pk_address() {
-        // https://learnmeabitcoin.com/technical/public-key-hash
-        let pk_address: &[u8] = &[
-            0x02, 0xb4, 0x63, 0x2d, 0x08, 0x48, 0x5f, 0xf1, 0xdf, 0x2d, 0xb5, 0x5b, 0x9d, 0xaf,
-            0xd2, 0x33, 0x47, 0xd1, 0xc4, 0x7a, 0x45, 0x70, 0x72, 0xa1, 0xe8, 0x7b, 0xe2, 0x68,
-            0x96, 0x54, 0x9a, 0x87, 0x37,
+    fn test_get_address_test_from_p2pkh() {
+        let p2pkh: [u8; 20] = [
+            0x7a, 0xa8, 0x18, 0x46, 0x85, 0xca, 0x1f, 0x06, 0xf5, 0x43, 0xb6, 0x4a, 0x50, 0x2e,
+            0xb3, 0xb6, 0x13, 0x5d, 0x67, 0x20,
         ];
-
-        let expected_pk_hash: &[u8] = &[
-            0x93, 0xce, 0x48, 0x57, 0x0b, 0x55, 0xc4, 0x2c, 0x2a, 0xf8, 0x16, 0xae, 0xab, 0xa0,
-            0x6c, 0xfe, 0xe1, 0x22, 0x4f, 0xae,
-        ];
-
-        let pk_hash = _hash_pk_address(pk_address.to_vec());
-        assert_eq!(pk_hash, expected_pk_hash)
+        let actual = p2pkh_to_address(p2pkh);
+        let expected = "mrhW6tcF2LDetj3kJvaDTvatrVxNK64NXk".to_string();
+        assert_eq!(actual, expected)
     }
 
     #[test]
-    fn test_utxo_transaction_get_pk_address_balance() {
-        let lock_bytes: &[u8] = &[
-            0x14, // push 20 bytes as data
-            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
-            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
-        ];
+    fn test_get_wallet_balance_from_various_tx() {
+        let mut utxo_set = UtxoSet::new();
 
-        let expected_value = 100;
+        // read tx_a that generates utxoA
+        let bytes = _decode_hex("020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500").unwrap();
+        let tx_a = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
+        tx_a.generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+            .unwrap();
 
-        let utxo_transaction = UtxoTransaction {
-            _value: expected_value,
-            _lock: lock_bytes.to_vec(),
-            _spent: false,
-        };
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1815366
+        );
 
-        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        // read tx_b that generates utxoB, but spends utxoA
+        let bytes = _decode_hex("0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000").unwrap();
+        let tx_b = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
+        tx_b.generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+            .unwrap();
 
-        let actual_value = utxo_transaction._get_wallet_balance(address).unwrap();
-        assert_eq!(actual_value, expected_value);
-    }
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1705366
+        );
 
-    #[test]
-    fn test_utxo_get_pk_address_balance() {
-        let lock_bytes: &[u8] = &[
-            0x14, // push 20 bytes as data
-            0xc9, 0xbc, 0x00, 0x3b, 0xf7, 0x2e, 0xbd, 0xc5, 0x3a, 0x95, 0x72, 0xf7, 0xea, 0x79,
-            0x2e, 0xf4, 0x9a, 0x28, 0x58, 0xd7, // Public key hash
-        ];
+        // read pending tx_c that generates utxoC
+        let bytes = _decode_hex("020000000001011caf1fc6e053c6048b7108c3d22be0f57f95cc676ae688ef22e7793d853afd860100000000fdffffff02c81d1e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ace6964cbe010000001976a914bbfb2d931dd19e1d3a503d0bfaba40cc2d3203fb88ac024730440220239f9521c30a2bb7df61011e0486712ab01a5fb43009ff872023051433f94a93022044f647c595894eba610b9089db5f34faea06aa0c58a684220c755fc38929f29201210394e3ae4d013b556c51d514a77ac5b5aae2f4e81edaedb192fc8b45b7a97d52ac9b2f2500").unwrap();
+        let tx_c = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
+        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Pending)
+            .unwrap(); // generate as pending
 
-        let lock_other_bytes: &[u8] = &[
-            0x14, // push 20 bytes as data
-            0xff, 0xff, 0x48, 0x57, 0x0b, 0x55, 0xc4, 0x2c, 0x2a, 0xf8, 0x16, 0xae, 0xab, 0xa0,
-            0x6c, 0xfe, 0xe1, 0x22, 0x4f, 0xae, // Public key hash
-        ];
+        assert_eq!(
+            utxo_set.get_pending_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1973704
+        );
+        // assure balance is not changed
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1705366
+        );
 
-        let val1 = 100;
-        let val2 = 200;
-        let expected_value = val1 + val2;
+        // read txC that generated utxoC
+        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+            .unwrap();
 
-        let utxo_transaction1 = UtxoTransaction {
-            _value: val1,
-            _lock: lock_bytes.to_vec(),
-            _spent: false,
-        };
-
-        let utxo_transaction2 = UtxoTransaction {
-            _value: 150,
-            _lock: lock_other_bytes.to_vec(),
-            _spent: false,
-        };
-
-        let utxo_transaction3 = UtxoTransaction {
-            _value: val2,
-            _lock: lock_bytes.to_vec(),
-            _spent: false,
-        };
-
-        let utxo_transaction4 = UtxoTransaction {
-            _value: 150,
-            _lock: lock_bytes.to_vec(),
-            _spent: true,
-        };
-
-        let utxo = Utxo {
-            transactions: vec![
-                utxo_transaction1,
-                utxo_transaction2,
-                utxo_transaction3,
-                utxo_transaction4,
-            ],
-        };
-
-        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
-
-        let actual_value = utxo._get_wallet_balance(address).unwrap();
-        assert_eq!(actual_value, expected_value);
+        // pending balance should now be 0
+        assert_eq!(
+            utxo_set.get_pending_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            0
+        );
+        // balance should now be the same as before plus the pending balance now confirmed
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1705366 + 1973704
+        );
     }
 }

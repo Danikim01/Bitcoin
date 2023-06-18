@@ -1,5 +1,5 @@
-use crate::messages::constants::config::{PATH, QUIET};
 use crate::messages::constants::config::PORT;
+use crate::messages::constants::config::{PATH, QUIET};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
@@ -27,7 +27,6 @@ impl Config {
             port: "".to_string().parse().unwrap_or(PORT),
             start_timestamp: 1,
             logger_mode: QUIET.to_string(),
-
         }
     }
 
@@ -47,7 +46,9 @@ impl Config {
         self.seed.to_owned() + ":" + &self.port.to_string()
     }
 
-    pub fn get_logger_mode(&self) -> String { self.logger_mode.clone() }
+    pub fn get_logger_mode(&self) -> String {
+        self.logger_mode.clone()
+    }
 
     pub fn from_file() -> Result<Config, io::Error> {
         let file = File::open(PATH)?;

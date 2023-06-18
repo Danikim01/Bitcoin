@@ -2,8 +2,8 @@ use crate::messages::{HashId, Hashable};
 use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::io;
 use std::fmt::Write;
+use std::io;
 use std::num::ParseIntError;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

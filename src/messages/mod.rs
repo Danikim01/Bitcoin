@@ -1,3 +1,4 @@
+use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
@@ -14,13 +15,13 @@ mod version_message;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;
+pub use block_message::BlockSet;
 pub use getdata_message::{GetData, InvType, Inventory};
 pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use verack_message::VerAck;
 pub use version_message::Version;
-pub use block_message::BlockSet;
 
 pub type HashId = [u8; 32];
 
@@ -78,6 +79,8 @@ impl From<Services> for [u8; 8] {
     }
 }
 
+type Inventories = Vec<Inventory>;
+
 #[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
@@ -86,7 +89,10 @@ pub enum Message {
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),
+    Inv(Inventories),
+    Transaction(RawTransaction),
     Failure(),
+    Ignore(),
 }
 
 pub trait Hashable {
