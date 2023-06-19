@@ -5,8 +5,6 @@ use gtk::prelude::ButtonExt;
 use gtk::traits::BoxExt;
 use gtk::traits::ContainerExt;
 use gtk::traits::EntryExt;
-use gtk::traits::WidgetExt;
-
 use crate::interface::ModelRequest;
 use crate::interface::TransactionDetails;
 use std::sync::mpsc::Sender;
