@@ -229,8 +229,6 @@ impl NetworkController {
 
         // broadcast tx
         let tx_hash = double_hash(&tx.serialize()).to_byte_array();
-        let tx_hash_str = _encode_hex(&tx_hash);
-        println!("Generated transaction: {}, pending broadcast", tx_hash_str);
 
         let payload = tx.serialize();
         let mut bytes = MessageHeader::new(
@@ -246,6 +244,7 @@ impl NetworkController {
         // send bytes to all
         self.nodes.send_to_all(&bytes)?;
 
+        println!("Generated transaction, broadcasting");
         Ok(())
     }
 

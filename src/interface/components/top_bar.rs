@@ -22,9 +22,11 @@ fn register_btn_panel_changer(builder: gtk::Builder, button: gtk::Button, panel_
 pub fn init(builder: gtk::Builder) -> io::Result<()> {
     let overview_btn: gtk::Button = builder.object("overview_btn").unwrap();
     let transactions_btn: gtk::Button = builder.object("transactions_btn").unwrap();
+    let send_btn: gtk::Button = builder.object("send_btn").unwrap();
 
     register_btn_panel_changer(builder.clone(), overview_btn, "overview_panel");
-    register_btn_panel_changer(builder, transactions_btn, "transactions_panel");
+    register_btn_panel_changer(builder.clone(), transactions_btn, "transactions_panel");
+    register_btn_panel_changer(builder, send_btn, "send_panel");
 
     Ok(())
 }

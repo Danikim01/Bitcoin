@@ -20,8 +20,14 @@ pub enum ModelRequest {
 }
 
 /// called from the model, to update the text of a specific label
-pub fn update_ui_label(sender: GtkSender<GtkMessage>, label: String, text: String) -> io::Result<()> {
-    sender.send(GtkMessage::UpdateLabel((label, text))).map_err(to_io_err)
+pub fn update_ui_label(
+    sender: GtkSender<GtkMessage>,
+    label: String,
+    text: String,
+) -> io::Result<()> {
+    sender
+        .send(GtkMessage::UpdateLabel((label, text)))
+        .map_err(to_io_err)
 }
 
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
@@ -62,18 +68,7 @@ pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> 
         sender_clone.send(ModelRequest::GetWalletBalance).unwrap();
     });
 
-    let send_tx_btn = builder.object::<gtk::Button>("send_tx_btn").unwrap();
-    send_tx_btn.connect_clicked(move |_| {
-        println!("click");
-        let address = "mnJvq7mbGiPNNhUne4FAqq27Q8xZrAsVun".to_string();
-        let value = 10000;
-        let details = (address, "label".to_string(), value);
-        sender
-            .send(ModelRequest::GenerateTransaction(details))
-            .unwrap();
-    });
-
-    let window: gtk::Window = components::init(builder)?;
+    let window: gtk::Window = components::init(builder, sender)?;
     window.show_all();
 
     gtk::main();
