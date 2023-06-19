@@ -220,8 +220,8 @@ impl NetworkController {
         Ok(())
     }
 
-    pub fn generate_transaction(&mut self, details: TransactionDetails) -> io::Result<()> {
-        let (recv_addr, _label, amount) = details;
+    pub fn generate_transaction(&mut self, details: Vec<TransactionDetails>) -> io::Result<()> {
+        let (recv_addr, _label, amount) = details[0].clone();
 
         let tx: RawTransaction =
             self.wallet
@@ -321,7 +321,7 @@ impl OuterNetworkController {
 
     fn handle_ui_generate_transaction(
         t_inner: Arc<Mutex<NetworkController>>,
-        details: TransactionDetails,
+        details: Vec<TransactionDetails>,
     ) -> io::Result<()> {
         let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
         inner_lock.generate_transaction(details)?;

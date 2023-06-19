@@ -16,7 +16,7 @@ pub type TransactionDetails = (String, String, u64); // (address, label, value)
 
 pub enum ModelRequest {
     GetWalletBalance,
-    GenerateTransaction(TransactionDetails),
+    GenerateTransaction(Vec<TransactionDetails>),
 }
 
 /// called from the model, to update the text of a specific label

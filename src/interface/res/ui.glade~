@@ -493,7 +493,7 @@
           <object class="GtkLabel">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Warning: Fee estimation is currently available</property>
+            <property name="label" translatable="yes">Warning: Fee estimation is currently unavailable</property>
             <property name="xalign">0.019999999552965164</property>
             <attributes>
               <attribute name="weight" value="semibold"/>
@@ -598,12 +598,12 @@
             <property name="margin-top">4</property>
             <property name="margin-bottom">4</property>
             <child>
-              <object class="GtkBox">
+              <object class="GtkBox" id="transaction_recipients_info">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkBox" id="transaction_0_info">
+                  <object class="GtkBox" id="transaction_info0">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="margin-bottom">4</property>
@@ -628,7 +628,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkEntry" id="transaction_address_0_entry">
+                          <object class="GtkEntry" id="transaction_address_entry_0">
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="placeholder-text" translatable="yes">Enter a Bitcoin address (e. g. n2wxQmfexkjwEgdD6iJA7T7RtzkmHxhFc)</property>
@@ -666,7 +666,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkEntry" id="transaction_label_0_entry">
+                          <object class="GtkEntry" id="transaction_label_entry_0">
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="placeholder-text" translatable="yes">Enter a label for this address to add it to the list of used addresses</property>
@@ -704,7 +704,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkEntry" id="transaction_amount_0_entry">
+                          <object class="GtkEntry" id="transaction_amount_entry_0">
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="margin-bottom">4</property>
@@ -757,6 +757,152 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="top-attach">0</property>
+      </packing>
+    </child>
+  </object>
+  <object class="GtkBox" id="transaction_info1">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="margin-bottom">4</property>
+    <property name="orientation">vertical</property>
+    <child>
+      <object class="GtkBox" id="pay_to_info1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-bottom">8</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-left">5</property>
+            <property name="margin-right">5</property>
+            <property name="margin-start">5</property>
+            <property name="margin-end">5</property>
+            <property name="label" translatable="yes">Pay To:</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkEntry" id="transaction_address_entry_1">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="placeholder-text" translatable="yes">Enter a Bitcoin address (e. g. n2wxQmfexkjwEgdD6iJA7T7RtzkmHxhFc)</property>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox" id="label_info1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-bottom">8</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-left">5</property>
+            <property name="margin-right">5</property>
+            <property name="margin-start">5</property>
+            <property name="margin-end">5</property>
+            <property name="label" translatable="yes">Label:</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkEntry" id="transaction_label_entry_1">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="placeholder-text" translatable="yes">Enter a label for this address to add it to the list of used addresses</property>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox" id="amount_info1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-bottom">8</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-left">5</property>
+            <property name="margin-right">5</property>
+            <property name="margin-start">5</property>
+            <property name="margin-end">5</property>
+            <property name="label" translatable="yes">Amount</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkEntry" id="transaction_amount_entry_1">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="margin-bottom">4</property>
+            <property name="max-length">30</property>
+            <property name="width-chars">30</property>
+            <property name="xalign">1</property>
+            <property name="placeholder-text" translatable="yes">0.00000000</property>
+            <property name="input-purpose">number</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="label" translatable="yes">tBTC</property>
+            <property name="width-chars">0</property>
+            <property name="max-width-chars">0</property>
+            <property name="xalign">0.019999999552965164</property>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">2</property>
       </packing>
     </child>
   </object>
