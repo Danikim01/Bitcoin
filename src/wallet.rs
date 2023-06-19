@@ -1,3 +1,4 @@
+use crate::interface::TransactionDetails;
 use crate::utxo::UtxoId;
 use crate::{
     raw_transaction::{
@@ -118,20 +119,21 @@ impl Wallet {
         &self,
         amount: u64,
         used_balance: u64,
-        recv_addr: String,
+        details: Vec<TransactionDetails>,
     ) -> io::Result<Vec<TxOutput>> {
         let mut txout: Vec<TxOutput> = Vec::new();
 
         //  the first txout is destined for the receiver
-        let recv_hashed_pk = hash_address(&recv_addr)?;
-        let first_pk_script = build_p2pkh_script(recv_hashed_pk[1..21].to_vec());
-        txout.push(TxOutput {
-            value: amount,
-            pk_script_bytes: first_pk_script.len() as u64,
-            pk_script: first_pk_script,
-        });
-
-        //  the other txout is our "change"
+        for (recv_addr, _label, spec_amount) in details {
+            let recv_hashed_pk = hash_address(&recv_addr)?;
+            let first_pk_script = build_p2pkh_script(recv_hashed_pk[1..21].to_vec());
+            txout.push(TxOutput {
+                value: spec_amount,
+                pk_script_bytes: first_pk_script.len() as u64,
+                pk_script: first_pk_script,
+            });
+        }
+        //  the last txout is our "change"
         let self_hashed_pk = hash_address(&self.address)?;
         let second_pk_script = build_p2pkh_script(self_hashed_pk[1..21].to_vec());
         let fee = 100000; // arbitrary fee, see how to improve this
@@ -147,15 +149,16 @@ impl Wallet {
     pub fn generate_transaction(
         &self,
         utxo_set: &mut UtxoSet,
-        recv_addr: String,
-        amount: u64,
+        details: Vec<TransactionDetails>,
     ) -> io::Result<RawTransaction> {
-        if utxo_set.get_wallet_balance(&self.address) < amount {
+        let amount = details.iter().fold(0, |acc, x| acc + x.2);
+
+        if utxo_set.get_wallet_balance(&self.address) <= amount {
             return Err(io::Error::new(io::ErrorKind::Other, "Not enough funds"));
         }
 
         let (txin, used_balance, locks) = self.fill_txins(utxo_set, amount)?;
-        let txout = self.fill_txouts(amount, used_balance, recv_addr)?;
+        let txout = self.fill_txouts(amount, used_balance, details)?;
         let mut transaction = RawTransaction {
             version: 1,
             tx_in_count: txin.len() as u64,
@@ -273,9 +276,8 @@ mod tests {
             .unwrap();
 
         let recvr_addr = "mnJvq7mbGiPNNhUne4FAqq27Q8xZrAsVun".to_string();
-        let raw_transaction = wallet
-            .generate_transaction(&mut utxo_set, recvr_addr, 10000)
-            .unwrap();
+        let details = vec![(recvr_addr.clone(), "foo".to_string(), 10000)];
+        let raw_transaction = wallet.generate_transaction(&mut utxo_set, details).unwrap();
 
         let bytes = raw_transaction.serialize();
         let res = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();

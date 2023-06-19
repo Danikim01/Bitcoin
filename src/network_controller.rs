@@ -221,11 +221,9 @@ impl NetworkController {
     }
 
     pub fn generate_transaction(&mut self, details: Vec<TransactionDetails>) -> io::Result<()> {
-        let (recv_addr, _label, amount) = details[0].clone();
-
         let tx: RawTransaction =
             self.wallet
-                .generate_transaction(&mut self.utxo_set, recv_addr, amount)?;
+                .generate_transaction(&mut self.utxo_set, details)?;
 
         // broadcast tx
         let tx_hash = double_hash(&tx.serialize()).to_byte_array();
