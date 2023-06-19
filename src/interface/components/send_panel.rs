@@ -71,13 +71,41 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
     Ok(())
 }
 
+fn connect_clear_all_btn(builder: gtk::Builder) -> io::Result<()> {
+    let transaction_clear_all_btn: gtk::Button = builder
+        .object("transaction_clear_btn")
+        .expect("could not find transaction clear all btn");
+
+    let transaction_recipients_info: gtk::Box = builder
+        .object("transaction_recipients_info")
+        .expect("could not find transaction recipients info");
+
+    transaction_clear_all_btn.connect_clicked(move |_| {
+        // clear all recipients
+        transaction_recipients_info.foreach(|widget| {
+            transaction_recipients_info.remove(widget);
+        });
+
+        // add one empty recipient
+        let glade_src = include_str!("../res/ui.glade");
+        let inner_builder = gtk::Builder::from_string(glade_src);
+        let new_recipient: gtk::Box = inner_builder
+            .object("transaction_info_template")
+            .expect("could not find transaction recipient template");
+
+        transaction_recipients_info.pack_start(&new_recipient, true, true, 0);
+    });
+
+    Ok(())
+}
+
 fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
     let transaction_append_btn: gtk::Button = builder
         .object("transaction_add_recipient_btn")
         .expect("could not find transaction append btn");
 
     // get box where recipients are appended
-    let transactions_recipients_info: gtk::Box = builder
+    let transaction_recipients_info: gtk::Box = builder
         .object("transaction_recipients_info")
         .expect("could not find transaction recipients info");
 
@@ -90,7 +118,7 @@ fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
             .object("transaction_info_template")
             .expect("could not find transaction recipient template");
 
-        transactions_recipients_info.pack_start(&new_recipient, true, true, 0);
+        transaction_recipients_info.pack_start(&new_recipient, true, true, 0);
     });
 
     Ok(())
@@ -98,6 +126,8 @@ fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
 
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<()> {
     connect_send_btn(builder.clone(), sender.clone())?;
+    connect_clear_all_btn(builder.clone())?;
     connect_append_btn(builder.clone())?;
+
     Ok(())
 }
