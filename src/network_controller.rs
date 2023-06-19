@@ -12,13 +12,13 @@ use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::{sha256, Hash};
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
 use crate::interface::{GtkMessage, ModelRequest, TransactionDetails};
-use bitcoin_hashes::Hash;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -224,9 +224,28 @@ impl NetworkController {
 
     fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64) -> io::Result<()> {
         let payload = nonce.to_le_bytes();
+        let hash = double_hash(&payload);
+        let checksum: [u8; 4] = match hash[0..4].try_into() {
+            Ok(result) => result,
+            Err(error) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Checksum conversion error: {}", error),
+                ));
+            }
+        };
+        let message_header = MessageHeader::new(
+            MAGIC,
+            "pong\0\0\0\0\0\0\0\0".to_string(),
+            payload.len() as u32,
+            checksum,
+        );
         println!("Received ping from peer: {:?}", peer_addr);
         println!("Sending payload {:?} to peer: {:?}", payload, peer_addr);
-        //self.nodes.send_to_specific(&peer_addr, &payload)?;
+        let mut to_send = Vec::new();
+        to_send.extend_from_slice(&message_header.serialize()?);
+        to_send.extend_from_slice(&payload);
+        self.nodes.send_to_specific(&peer_addr, &to_send)?;
         Ok(())
     }
 
