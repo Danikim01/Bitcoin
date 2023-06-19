@@ -240,8 +240,8 @@ impl NetworkController {
             payload.len() as u32,
             checksum,
         );
-        println!("Received ping from peer: {:?}", peer_addr);
-        println!("Sending payload {:?} to peer: {:?}", payload, peer_addr);
+        //println!("Received ping from peer: {:?}", peer_addr);
+        //println!("Sending payload {:?} to peer: {:?}", payload, peer_addr);
         let mut to_send = Vec::new();
         to_send.extend_from_slice(&message_header.serialize()?);
         to_send.extend_from_slice(&payload);

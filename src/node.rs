@@ -45,9 +45,9 @@ impl Listener {
 
     fn ping_deserialize(payload: &[u8]) -> io::Result<Message> {
         let mut cursor = io::Cursor::new(payload);
-        println!("Received ping message with payload: {:?}", payload);
+        //println!("Received ping message with payload: {:?}", payload);
         let nonce = u64::from_le_stream(&mut cursor)?;
-        println!("Received ping with nonce: {}", nonce);
+        //println!("Received ping with nonce: {}", nonce);
         Ok(Message::Ping(nonce))
     }
 
