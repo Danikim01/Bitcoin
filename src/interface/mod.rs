@@ -13,7 +13,7 @@ pub enum GtkMessage {
     UpdateLabel((String, String)),
 }
 
-pub type TransactionDetails = (String, String, u64); // (address, label, value)
+pub type RecipientDetails = (String, String, u64); // (address, label, value)
 
 pub enum ModelRequest {
     GetWalletBalance,

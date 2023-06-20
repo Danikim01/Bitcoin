@@ -17,13 +17,13 @@ use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
-use crate::interface::{update_ui_label, GtkMessage, ModelRequest, TransactionDetails};
+use crate::interface::components::send_panel::TransactionInfo;
+use crate::interface::{update_ui_label, GtkMessage, ModelRequest, RecipientDetails};
 use bitcoin_hashes::Hash;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
-use crate::interface::components::send_panel::TransactionInfo;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
@@ -222,9 +222,9 @@ impl NetworkController {
     }
 
     pub fn generate_transaction(&mut self, transaction_info: TransactionInfo) -> io::Result<()> {
-        let tx: RawTransaction =
-            self.wallet
-                .generate_transaction(&mut self.utxo_set, transaction_info)?;
+        let tx: RawTransaction = self
+            .wallet
+            .generate_transaction(&mut self.utxo_set, transaction_info)?;
 
         // broadcast tx
         let tx_hash = double_hash(&tx.serialize()).to_byte_array();

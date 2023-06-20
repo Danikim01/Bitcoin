@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::interface::ModelRequest;
-use crate::interface::TransactionDetails;
+use crate::interface::RecipientDetails;
 use gtk::prelude::BuilderExtManual;
 use gtk::prelude::ButtonExt;
 use gtk::traits::BoxExt;
@@ -13,11 +13,11 @@ use gtk::prelude::Cast;
 
 #[derive(Debug)]
 pub struct TransactionInfo {
-    pub recipients: Vec<TransactionDetails>,
+    pub recipients: Vec<RecipientDetails>,
     pub fee: u64,
 }
 
-fn transaction_details_from_entries(entries: Vec<gtk::Entry>) -> TransactionDetails {
+fn transaction_details_from_entries(entries: Vec<gtk::Entry>) -> RecipientDetails {
     let float_value: f64 = match entries[2].text().parse::<f64>() {
         Ok(v) => v,
         Err(_) => 0.0,
@@ -32,8 +32,8 @@ fn transaction_details_from_entries(entries: Vec<gtk::Entry>) -> TransactionDeta
     )
 }
 
-fn get_recipients(builder: gtk::Builder) -> Vec<TransactionDetails> {
-    let mut recipients_details: Vec<TransactionDetails> = Vec::new();
+fn get_recipients(builder: gtk::Builder) -> Vec<RecipientDetails> {
+    let mut recipients_details: Vec<RecipientDetails> = Vec::new();
     let recipients: gtk::Box = builder.object("transaction_recipients_info").unwrap(); // handle error
 
     // iterate over all recipients
@@ -65,7 +65,7 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
         .expect("could not find transaction send btn");
 
     transaction_send_btn.connect_clicked(move |_| {
-        let recipients: Vec<TransactionDetails> = get_recipients(builder.clone());
+        let recipients: Vec<RecipientDetails> = get_recipients(builder.clone());
 
         // get fee
         let fee: u64 = match builder.object::<gtk::Entry>("transaction_fee_entry") {

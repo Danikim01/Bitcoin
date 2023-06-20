@@ -1,5 +1,5 @@
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::interface::TransactionDetails;
+use crate::interface::RecipientDetails;
 use crate::utxo::UtxoId;
 use crate::{
     raw_transaction::{
@@ -284,7 +284,9 @@ mod tests {
             recipients,
             fee: 100000,
         };
-        let raw_transaction = wallet.generate_transaction(&mut utxo_set, transaction_info).unwrap();
+        let raw_transaction = wallet
+            .generate_transaction(&mut utxo_set, transaction_info)
+            .unwrap();
 
         let bytes = raw_transaction.serialize();
         let res = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
