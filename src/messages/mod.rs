@@ -82,6 +82,12 @@ impl From<Services> for [u8; 8] {
 type Inventories = Vec<Inventory>;
 
 #[derive(Debug, Clone)]
+pub enum ErrorType {
+    HeaderError,
+    BlockError,
+}
+
+#[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
     _GetData(GetData),
@@ -92,7 +98,7 @@ pub enum Message {
     Inv(Inventories),
     Transaction(RawTransaction),
     Ping(u64),
-    Failure(),
+    Failure(ErrorType),
     Ignore(),
 }
 

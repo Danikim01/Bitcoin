@@ -4,9 +4,10 @@ use crate::messages::constants::commands::TX;
 use crate::messages::constants::config::{MAGIC, VERBOSE};
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
-    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    Inventory, Message, MessageHeader, Serialize,
+    Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
+    InvType, Inventory, Message, MessageHeader, Serialize,
 };
+use crate::network_controller;
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
@@ -240,8 +241,6 @@ impl NetworkController {
             payload.len() as u32,
             checksum,
         );
-        //println!("Received ping from peer: {:?}", peer_addr);
-        //println!("Sending payload {:?} to peer: {:?}", payload, peer_addr);
         let mut to_send = Vec::new();
         to_send.extend_from_slice(&message_header.serialize()?);
         to_send.extend_from_slice(&payload);
@@ -410,13 +409,62 @@ impl OuterNetworkController {
     }
 
     fn handle_node_failure_message(
-        _t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<Mutex<NetworkController>>,
         peer_addr: SocketAddr,
+        error: ErrorType,
     ) -> io::Result<()> {
         println!(
-            "Node {:?} is notifying me of a failure, should resend last request",
-            peer_addr
+            "Node {:?} is notifying me of a failure, should resend last request, the error is {:?}",
+            peer_addr, error
         );
+
+        let mut network_controller = t_inner.lock().map_err(to_io_err)?;
+        network_controller
+            .nodes
+            .disconnect_and_remove_node(peer_addr);
+        match error {
+            ErrorType::BlockError => Self::handle_block_error(&mut network_controller)?,
+            ErrorType::HeaderError => Self::handle_header_error(&t_inner, &mut network_controller)?,
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn handle_block_error(network_controller: &mut NetworkController) -> io::Result<()> {
+        println!("Requesting Blocks again");
+        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
+            network_controller.tallest_header = headers.last_header_hash();
+            network_controller
+                .headers
+                .extend(into_hashmap(headers.block_headers.clone()));
+            network_controller.read_headers(&headers)?;
+
+            let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+            headers.trim_timestamp(init_tp_timestamp)?;
+            let missing_headers = network_controller.get_missing_headers(&headers)?;
+
+            if !missing_headers.is_empty() {
+                network_controller.request_blocks(Headers::from_block_headers(missing_headers))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_header_error(
+        t_inner: &Arc<Mutex<NetworkController>>,
+        network_controller: &mut NetworkController,
+    ) -> io::Result<()> {
+        println!("Requesting Headers again");
+        let network_controller_ref = t_inner.clone();
+        network_controller.request_headers(
+            network_controller_ref
+                .lock()
+                .map_err(to_io_err)?
+                .tallest_header,
+        )?;
+
         Ok(())
     }
 
@@ -448,15 +496,20 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_addr, Message::Failure()) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr)
+                    (peer_addr, Message::Failure(ErrorType::BlockError)) => {
+                        Self::handle_node_failure_message(t_inner, peer_addr, ErrorType::BlockError)
+                    }
+                    (peer_addr, Message::Failure(ErrorType::HeaderError)) => {
+                        Self::handle_node_failure_message(
+                            t_inner,
+                            peer_addr,
+                            ErrorType::HeaderError,
+                        )
                     }
                     (peer_addr, Message::Ping(nonce)) => {
                         Self::handle_node_ping_message(t_inner, peer_addr, nonce)
                     }
-                    (peer_addr, Message::Failure()) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr)
-                    }
+
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,
                         "Received unsupported message",

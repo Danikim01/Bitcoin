@@ -2,7 +2,8 @@ use crate::logger::log;
 use crate::messages::utility::StreamRead;
 use crate::messages::GetData;
 use crate::messages::{
-    constants::commands, Block, Headers, Message, MessageHeader, Serialize, VerAck, Version,
+    constants::commands, Block, ErrorType, Headers, Message, MessageHeader, Serialize, VerAck,
+    Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
@@ -58,7 +59,7 @@ impl Listener {
                 Err(e) => {
                     println!("Invalid headers payload: {:?}, ignoring message", e);
                     // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
-                    Message::Failure()
+                    Message::Failure(ErrorType::HeaderError)
                 }
             },
             commands::BLOCK => match Block::deserialize(&payload) {
@@ -66,7 +67,7 @@ impl Listener {
                 Err(e) => {
                     println!("Invalid block payload: {:?}, ignoring message", e);
                     // HERE WE MUST REQUEST THE BLOCK AGAIN!
-                    Message::Failure()
+                    Message::Failure(ErrorType::BlockError)
                 }
             },
             commands::INV => match GetData::deserialize(&payload) {

@@ -6,9 +6,9 @@ use crate::node::Node;
 use rand::random;
 use std::collections::HashMap;
 use std::io;
+use std::net::Shutdown;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
-
 // gtk imports
 use crate::interface::GtkMessage;
 use gtk::glib::Sender;
@@ -39,6 +39,13 @@ impl NodeController {
             }
         }
         Ok(Self { nodes })
+    }
+
+    pub fn disconnect_and_remove_node(&mut self, addr: SocketAddr) {
+        if let Some(node) = self.nodes.remove(&addr) {
+            let _ = node.stream.shutdown(Shutdown::Both);
+            println!("Desconexión de {}", addr);
+        }
     }
 
     pub fn send_to_any(&mut self, payload: &Vec<u8>) -> io::Result<()> {
