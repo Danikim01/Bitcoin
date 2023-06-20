@@ -1,7 +1,7 @@
 use crate::io::Cursor;
 use crate::messages::{utility::*, Hashable};
-use crate::utility::double_hash;
-use std::io::ErrorKind::InvalidData;
+use crate::utility::{double_hash, to_io_err};
+use std::io::{self, ErrorKind::InvalidData, Write};
 
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -57,17 +57,6 @@ impl BlockHeader {
         &self.merkle_root_hash
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut header_bytes = vec![];
-        header_bytes.extend(&self.version.to_le_bytes());
-        header_bytes.extend(&self.prev_block_hash);
-        header_bytes.extend(&self.merkle_root_hash);
-        header_bytes.extend(&self.timestamp.to_le_bytes());
-        header_bytes.extend(&self.nbits.to_le_bytes());
-        header_bytes.extend(&self.nonce.to_le_bytes());
-        header_bytes
-    }
-
     fn compare_target_threshold_and_hash(target: &[u8; 32], hash: &[u8; 32]) -> std::cmp::Ordering {
         target.cmp(hash)
     }
@@ -107,6 +96,50 @@ impl BlockHeader {
         let mut target_arr = [0u8; 32];
         target_arr[31 - exponent..].copy_from_slice(&target);
         target_arr
+    }
+
+    pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(file_name)
+            .map_err(to_io_err)?;
+
+        let bytes = self.serialize();
+        file.write_all(&bytes)?;
+        Ok(())
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut header_bytes = vec![];
+        header_bytes.extend(&self.version.to_le_bytes());
+        header_bytes.extend(&self.prev_block_hash);
+        header_bytes.extend(&self.merkle_root_hash);
+        header_bytes.extend(&self.timestamp.to_le_bytes());
+        header_bytes.extend(&self.nbits.to_le_bytes());
+        header_bytes.extend(&self.nonce.to_le_bytes());
+        header_bytes
+    }
+
+    pub fn deserialize(cursor: &mut Cursor<&[u8]>) -> io::Result<BlockHeader> {
+        let version = i32::from_le_stream(cursor)?;
+        let prev_block_hash = read_hash(cursor)?;
+        let merkle_root_hash = read_hash(cursor)?;
+        let timestamp = u32::from_le_stream(cursor)?;
+        let nbits = u32::from_le_stream(cursor)?;
+        let nonce = u32::from_le_stream(cursor)?;
+        let _empty_tx = u8::from_le_stream(cursor)?;
+        println!("version {}, empty_tx {}", version, _empty_tx);
+        let header = BlockHeader::new(
+            version,
+            prev_block_hash,
+            merkle_root_hash,
+            timestamp,
+            nbits,
+            nonce,
+        );
+        Ok(header)
     }
 }
 

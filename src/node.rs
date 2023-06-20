@@ -201,4 +201,8 @@ impl Node {
         self.stream.flush()?;
         Ok(())
     }
+
+    pub fn get_addr(&self) -> io::Result<SocketAddr> {
+        self.stream.peer_addr()
+    }
 }

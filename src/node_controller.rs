@@ -41,24 +41,33 @@ impl NodeController {
         Ok(Self { nodes })
     }
 
+    pub fn kill_node(&mut self, socket_addr: SocketAddr) -> io::Result<()> {
+        self.nodes.remove(&socket_addr);
+        if self.nodes.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "All connections were closed",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn send_to_any(&mut self, payload: &Vec<u8>) -> io::Result<()> {
         let random_number: usize = random();
         let node_number = random_number % self.nodes.len();
         let random_node = self.nodes.values_mut().nth(node_number).unwrap();
+        let node_address = random_node.get_addr()?;
         match &mut random_node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
                 log(
-                    &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
+                    &format!(
+                        "Error writing to ANY TCPStream: {:?}, Killing connection and retrying.",
+                        e
+                    ) as &str,
                     QUIET,
                 );
-                // self.nodes.swap_remove(node_number); // IMPLEMENT ANOTHER WAY TO KILL THE NODE
-                if self.nodes.is_empty() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::NotConnected,
-                        "All connections were closed",
-                    ));
-                }
+                self.kill_node(node_address)?;
                 self.send_to_any(payload)
             }
         }
@@ -74,13 +83,15 @@ impl NodeController {
                 ))
             }
         };
+        let node_address = node.get_addr()?;
         match &mut node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
                 log(
-                    &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
+                    &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
                 );
+                self.kill_node(node_address)?;
                 Err(io::Error::new(
                     io::ErrorKind::NotConnected,
                     "Failed to send message to peer",
@@ -90,17 +101,20 @@ impl NodeController {
     }
 
     pub fn send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
+        let mut dead_connections = vec![];
         for node in self.nodes.values_mut() {
-            match &mut node.send(payload) {
-                Ok(_) => continue,
-                Err(e) => {
-                    log(
-                        &format!("Error writing to TCPStream: {:?}. Trying a dif node", e) as &str,
-                        QUIET,
-                    );
-                    continue;
-                }
+            let node_address = node.get_addr()?;
+            if let Err(e) = node.send(payload) {
+                log(
+                    &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
+                    QUIET,
+                );
+                dead_connections.push(node_address);
+                continue;
             }
+        }
+        for node_address in dead_connections {
+            self.kill_node(node_address)?;
         }
         Ok(())
     }
