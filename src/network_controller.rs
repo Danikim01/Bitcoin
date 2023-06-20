@@ -3,7 +3,7 @@ use crate::logger::log;
 use crate::messages::constants::{
     commands::TX,
     config::{MAGIC, VERBOSE},
-    messages::GENESIS_HASHID
+    messages::GENESIS_HASHID,
 };
 use crate::messages::{
     Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, InvType,

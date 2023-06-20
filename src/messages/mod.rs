@@ -25,16 +25,16 @@ pub use version_message::Version;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HashId {
-    hash: [u8; 32]
+    hash: [u8; 32],
 }
 
 impl HashId {
     fn new(hash: [u8; 32]) -> Self {
-        Self {hash}
+        Self { hash }
     }
 
     fn default() -> Self {
-        Self {hash: [0u8; 32]}
+        Self { hash: [0u8; 32] }
     }
 
     fn iter(&self) -> HashIdIter {
@@ -46,7 +46,15 @@ impl HashId {
 
 impl std::fmt::Display for HashId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", self.hash.iter().map(|num| format!("{:x}", num)).collect::<Vec<String>>().join(""))
+        write!(
+            f,
+            "0x{}",
+            self.hash
+                .iter()
+                .map(|num| format!("{:x}", num))
+                .collect::<Vec<String>>()
+                .join("")
+        )
     }
 }
 struct HashIdIter<'a> {

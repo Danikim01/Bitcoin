@@ -1,7 +1,7 @@
 use std::io::{self, Cursor};
 
 use crate::messages::utility::StreamRead;
-use crate::messages::{BlockHeader, Hashable, HashId, Serialize};
+use crate::messages::{BlockHeader, HashId, Hashable, Serialize};
 
 use super::utility::read_hash;
 use super::Inventories;
