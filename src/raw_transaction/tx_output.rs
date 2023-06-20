@@ -32,7 +32,7 @@ impl TxOutput {
         let script_bytes = self.pk_script.clone();
         let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
 
-        // consume cursor until reading
+        // consume cursor until reading 0x14
         let buf = &mut [0; 1];
         while buf[0] != 0x14 {
             cursor.read_exact(buf)?;
