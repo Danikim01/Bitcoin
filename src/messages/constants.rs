@@ -30,6 +30,7 @@ pub mod commands {
     pub const SENDCMPCT: &str = "sendcmpct\0\0\0";
     pub const SENDHEADERS: &str = "sendheaders\0";
     pub const PING: &str = "ping\0\0\0\0\0\0\0\0";
+    pub const PONG: &str = "pong\0\0\0\0\0\0\0\0";
     pub const FEEFILTER: &str = "feefilter\0\0\0";
     pub const ADDR: &str = "addr\0\0\0\0\0\0\0\0";
     pub const INV: &str = "inv\0\0\0\0\0\0\0\0\0";

@@ -41,13 +41,6 @@ impl NodeController {
         Ok(Self { nodes })
     }
 
-    pub fn disconnect_and_remove_node(&mut self, addr: SocketAddr) {
-        if let Some(node) = self.nodes.remove(&addr) {
-            let _ = node.stream.shutdown(Shutdown::Both);
-            println!("Desconexión de {}", addr);
-        }
-    }
-
     pub fn send_to_any(&mut self, payload: &Vec<u8>) -> io::Result<()> {
         let random_number: usize = random();
         let node_number = random_number % self.nodes.len();

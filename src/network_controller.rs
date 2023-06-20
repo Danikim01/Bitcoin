@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::logger::log;
-use crate::messages::constants::commands::TX;
+use crate::messages::constants::commands::{PONG, TX};
 use crate::messages::constants::config::{MAGIC, VERBOSE};
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
@@ -226,24 +226,16 @@ impl NetworkController {
     fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64) -> io::Result<()> {
         let payload = nonce.to_le_bytes();
         let hash = double_hash(&payload);
-        let checksum: [u8; 4] = match hash[0..4].try_into() {
-            Ok(result) => result,
-            Err(error) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("Checksum conversion error: {}", error),
-                ));
-            }
-        };
-        let message_header = MessageHeader::new(
-            MAGIC,
-            "pong\0\0\0\0\0\0\0\0".to_string(),
-            payload.len() as u32,
-            checksum,
-        );
+        let checksum: [u8; 4] = [hash[0], hash[1], hash[2], hash[3]];
+        let message_header =
+            MessageHeader::new(MAGIC, PONG.to_string(), payload.len() as u32, checksum);
         let mut to_send = Vec::new();
         to_send.extend_from_slice(&message_header.serialize()?);
         to_send.extend_from_slice(&payload);
+        println!(
+            "Sending message header {:?} to peer {:?}",
+            message_header, peer_addr
+        );
         self.nodes.send_to_specific(&peer_addr, &to_send)?;
         Ok(())
     }
@@ -417,54 +409,6 @@ impl OuterNetworkController {
             "Node {:?} is notifying me of a failure, should resend last request, the error is {:?}",
             peer_addr, error
         );
-
-        let mut network_controller = t_inner.lock().map_err(to_io_err)?;
-        network_controller
-            .nodes
-            .disconnect_and_remove_node(peer_addr);
-        match error {
-            ErrorType::BlockError => Self::handle_block_error(&mut network_controller)?,
-            ErrorType::HeaderError => Self::handle_header_error(&t_inner, &mut network_controller)?,
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    fn handle_block_error(network_controller: &mut NetworkController) -> io::Result<()> {
-        println!("Requesting Blocks again");
-        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
-            network_controller.tallest_header = headers.last_header_hash();
-            network_controller
-                .headers
-                .extend(into_hashmap(headers.block_headers.clone()));
-            network_controller.read_headers(&headers)?;
-
-            let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-            headers.trim_timestamp(init_tp_timestamp)?;
-            let missing_headers = network_controller.get_missing_headers(&headers)?;
-
-            if !missing_headers.is_empty() {
-                network_controller.request_blocks(Headers::from_block_headers(missing_headers))?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn handle_header_error(
-        t_inner: &Arc<Mutex<NetworkController>>,
-        network_controller: &mut NetworkController,
-    ) -> io::Result<()> {
-        println!("Requesting Headers again");
-        let network_controller_ref = t_inner.clone();
-        network_controller.request_headers(
-            network_controller_ref
-                .lock()
-                .map_err(to_io_err)?
-                .tallest_header,
-        )?;
-
         Ok(())
     }
 
