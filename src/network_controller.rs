@@ -23,6 +23,7 @@ use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
+use crate::interface::components::send_panel::TransactionInfo;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
@@ -220,10 +221,10 @@ impl NetworkController {
         Ok(())
     }
 
-    pub fn generate_transaction(&mut self, details: Vec<TransactionDetails>) -> io::Result<()> {
+    pub fn generate_transaction(&mut self, transaction_info: TransactionInfo) -> io::Result<()> {
         let tx: RawTransaction =
             self.wallet
-                .generate_transaction(&mut self.utxo_set, details)?;
+                .generate_transaction(&mut self.utxo_set, transaction_info)?;
 
         // broadcast tx
         let tx_hash = double_hash(&tx.serialize()).to_byte_array();
@@ -319,10 +320,10 @@ impl OuterNetworkController {
 
     fn handle_ui_generate_transaction(
         t_inner: Arc<Mutex<NetworkController>>,
-        details: Vec<TransactionDetails>,
+        transaction_info: TransactionInfo,
     ) -> io::Result<()> {
         let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
-        inner_lock.generate_transaction(details)?;
+        inner_lock.generate_transaction(transaction_info)?;
         Ok(())
     }
 
@@ -333,8 +334,8 @@ impl OuterNetworkController {
                 let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
                     ModelRequest::GetWalletBalance => Self::handle_ui_get_balance(t_inner),
-                    ModelRequest::GenerateTransaction(details) => {
-                        Self::handle_ui_generate_transaction(t_inner, details)
+                    ModelRequest::GenerateTransaction(transaction_info) => {
+                        Self::handle_ui_generate_transaction(t_inner, transaction_info)
                     }
                 }?;
             }

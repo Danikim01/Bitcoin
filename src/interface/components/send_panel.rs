@@ -1,15 +1,21 @@
 use std::io;
 
+use crate::interface::ModelRequest;
+use crate::interface::TransactionDetails;
 use gtk::prelude::BuilderExtManual;
 use gtk::prelude::ButtonExt;
 use gtk::traits::BoxExt;
 use gtk::traits::ContainerExt;
 use gtk::traits::EntryExt;
-use crate::interface::ModelRequest;
-use crate::interface::TransactionDetails;
 use std::sync::mpsc::Sender;
 
 use gtk::prelude::Cast;
+
+#[derive(Debug)]
+pub struct TransactionInfo {
+    pub recipients: Vec<TransactionDetails>,
+    pub fee: u64,
+}
 
 fn transaction_details_from_entries(entries: Vec<gtk::Entry>) -> TransactionDetails {
     let float_value: f64 = match entries[2].text().parse::<f64>() {
@@ -59,9 +65,26 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
         .expect("could not find transaction send btn");
 
     transaction_send_btn.connect_clicked(move |_| {
-        let details: Vec<TransactionDetails> = get_recipients(builder.clone());
-        println!("details: {:?}", details);
-        match sender.send(ModelRequest::GenerateTransaction(details)) {
+        let recipients: Vec<TransactionDetails> = get_recipients(builder.clone());
+
+        // get fee
+        let fee: u64 = match builder.object::<gtk::Entry>("transaction_fee_entry") {
+            Some(f) => {
+                let float_value = match f.text().parse::<f64>() {
+                    Ok(v) => v,
+                    Err(_) => 0.0,
+                };
+                (float_value * 100000000.0) as u64
+            }
+            _ => 0,
+        };
+
+        let transaction_info = TransactionInfo {
+            recipients: recipients.clone(),
+            fee,
+        };
+        println!("transaction_info: {:?}", transaction_info);
+        match sender.send(ModelRequest::GenerateTransaction(transaction_info)) {
             Ok(_) => (),
             Err(_) => println!("could not send transaction details to model"),
         }

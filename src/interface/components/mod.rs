@@ -3,7 +3,7 @@ use std::io;
 use std::sync::mpsc::Sender;
 
 mod overview;
-mod send_panel;
+pub mod send_panel;
 mod top_bar;
 
 use crate::interface::ModelRequest;

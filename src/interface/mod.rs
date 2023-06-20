@@ -1,3 +1,4 @@
+use crate::interface::components::send_panel::TransactionInfo;
 use gtk::glib;
 use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
 use gtk::prelude::*;
@@ -6,7 +7,7 @@ use std::sync::mpsc::Sender;
 
 use crate::utility::to_io_err;
 
-mod components;
+pub mod components;
 
 pub enum GtkMessage {
     UpdateLabel((String, String)),
@@ -16,7 +17,7 @@ pub type TransactionDetails = (String, String, u64); // (address, label, value)
 
 pub enum ModelRequest {
     GetWalletBalance,
-    GenerateTransaction(Vec<TransactionDetails>),
+    GenerateTransaction(TransactionInfo),
 }
 
 /// called from the model, to update the text of a specific label
