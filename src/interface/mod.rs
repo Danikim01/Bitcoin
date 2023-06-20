@@ -49,19 +49,19 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 // get balances labels and update them
                 let balance_available_val: gtk::Label =
                     builder_aux.object("balance_available_val").unwrap();
-                balance_available_val.set_text(format!("{}", balance).as_str());
+                balance_available_val.set_text(format!("{:.8}", balance).as_str());
 
                 let balance_pending_val: gtk::Label =
                     builder_aux.object("balance_pending_val").unwrap();
-                balance_pending_val.set_text(format!("{}", pending).as_str());
+                balance_pending_val.set_text(format!("{:.8}", pending).as_str());
 
                 let transaction_balance_label: gtk::Label =
                     builder_aux.object("transaction_balance_label").unwrap();
-                transaction_balance_label.set_text(format!("{}", balance).as_str()); // should it be balance or balance and pending?
+                transaction_balance_label.set_text(format!("{:.8}", balance).as_str()); // should it be balance or balance and pending?
 
                 let balance_total_val: gtk::Label =
                     builder_aux.object("balance_total_val").unwrap();
-                balance_total_val.set_text(format!("{}", balance + pending).as_str());
+                balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
             }
         }
 
