@@ -114,7 +114,7 @@ fn connect_clear_all_btn(builder: gtk::Builder) -> io::Result<()> {
             .object("transaction_info_template")
             .expect("could not find transaction recipient template");
 
-        transaction_recipients_info.pack_start(&new_recipient, true, true, 0);
+        transaction_recipients_info.pack_start(&new_recipient, false, false, 0);
     });
 
     Ok(())
