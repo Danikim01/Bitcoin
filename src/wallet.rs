@@ -1,5 +1,4 @@
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::interface::RecipientDetails;
 use crate::utxo::UtxoId;
 use crate::{
     raw_transaction::{

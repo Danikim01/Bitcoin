@@ -18,10 +18,7 @@ pub struct TransactionInfo {
 }
 
 fn transaction_details_from_entries(entries: Vec<gtk::Entry>) -> RecipientDetails {
-    let float_value: f64 = match entries[2].text().parse::<f64>() {
-        Ok(v) => v,
-        Err(_) => 0.0,
-    };
+    let float_value: f64 = entries[2].text().parse::<f64>().unwrap_or(0.0);
 
     let value: u64 = (float_value * 100000000.0) as u64;
 
@@ -70,20 +67,13 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
         // get fee
         let fee: u64 = match builder.object::<gtk::Entry>("transaction_fee_entry") {
             Some(f) => {
-                let float_value = match f.text().parse::<f64>() {
-                    Ok(v) => v,
-                    Err(_) => 0.0,
-                };
+                let float_value = f.text().parse::<f64>().unwrap_or(0.0);
                 (float_value * 100000000.0) as u64
             }
             _ => 0,
         };
 
-        let transaction_info = TransactionInfo {
-            recipients: recipients.clone(),
-            fee,
-        };
-        println!("transaction_info: {:?}", transaction_info);
+        let transaction_info = TransactionInfo { recipients, fee };
         match sender.send(ModelRequest::GenerateTransaction(transaction_info)) {
             Ok(_) => (),
             Err(_) => println!("could not send transaction details to model"),
@@ -146,9 +136,9 @@ fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
 }
 
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<()> {
-    connect_send_btn(builder.clone(), sender.clone())?;
+    connect_send_btn(builder.clone(), sender)?;
     connect_clear_all_btn(builder.clone())?;
-    connect_append_btn(builder.clone())?;
+    connect_append_btn(builder)?;
 
     Ok(())
 }

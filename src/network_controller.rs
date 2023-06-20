@@ -1,17 +1,18 @@
 use crate::config::Config;
 use crate::logger::log;
-use crate::messages::constants::commands::TX;
+use crate::messages::constants::commands::{PONG, TX};
 use crate::messages::constants::config::{MAGIC, VERBOSE};
 use crate::messages::constants::messages::GENESIS_HASHID;
 use crate::messages::{
-    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    Inventory, Message, MessageHeader, Serialize,
+    Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
+    InvType, Inventory, Message, MessageHeader, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
+use crate::utility::{double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::Hash;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -19,7 +20,6 @@ use std::sync::Mutex;
 // gtk imports
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::{update_ui_label, GtkMessage, ModelRequest};
-use bitcoin_hashes::Hash;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -216,7 +216,6 @@ impl NetworkController {
 
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
         if transaction.address_is_involved(&self.wallet.address) {
-            println!("Read a pending transaction involving this wallet!");
             transaction.generate_utxo(&mut self.utxo_set, TransactionOrigin::Pending)?;
 
             // get wallet balance and update UI
@@ -225,10 +224,24 @@ impl NetworkController {
         Ok(())
     }
 
-    pub fn generate_transaction(&mut self, transaction_info: TransactionInfo) -> io::Result<()> {
+    fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64) -> io::Result<()> {
+        let payload = nonce.to_le_bytes();
+        let hash = double_hash(&payload);
+        let checksum: [u8; 4] = [hash[0], hash[1], hash[2], hash[3]];
+        let message_header =
+            MessageHeader::new(MAGIC, PONG.to_string(), payload.len() as u32, checksum);
+        let mut to_send = Vec::new();
+        to_send.extend_from_slice(&message_header.serialize()?);
+        to_send.extend_from_slice(&payload);
+
+        self.nodes.send_to_specific(&peer_addr, &to_send)?;
+        Ok(())
+    }
+
+    pub fn generate_transaction(&mut self, details: TransactionInfo) -> io::Result<()> {
         let tx: RawTransaction = self
             .wallet
-            .generate_transaction(&mut self.utxo_set, transaction_info)?;
+            .generate_transaction(&mut self.utxo_set, details)?;
 
         // broadcast tx
         let tx_hash = double_hash(&tx.serialize()).to_byte_array();
@@ -247,7 +260,6 @@ impl NetworkController {
         // send bytes to all
         self.nodes.send_to_all(&bytes)?;
 
-        println!("Generated transaction, broadcasting");
         Ok(())
     }
 
@@ -377,12 +389,24 @@ impl OuterNetworkController {
     fn handle_node_failure_message(
         _t_inner: Arc<Mutex<NetworkController>>,
         peer_addr: SocketAddr,
+        error: ErrorType,
     ) -> io::Result<()> {
         println!(
-            "Node {:?} is notifying me of a failure, should resend last request",
-            peer_addr
+            "Node {:?} is notifying me of a failure, should resend last request, the error is {:?}",
+            peer_addr, error
         );
         Ok(())
+    }
+
+    fn handle_node_ping_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        peer_addr: SocketAddr,
+        nonce: u64,
+    ) -> io::Result<()> {
+        t_inner
+            .lock()
+            .map_err(to_io_err)?
+            .read_ping(peer_addr, nonce)
     }
 
     fn recv_node_messages(
@@ -402,9 +426,13 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_addr, Message::Failure()) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr)
+                    (peer_addr, Message::Failure(err)) => {
+                        Self::handle_node_failure_message(t_inner, peer_addr, err)
                     }
+                    (peer_addr, Message::Ping(nonce)) => {
+                        Self::handle_node_ping_message(t_inner, peer_addr, nonce)
+                    }
+
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,
                         "Received unsupported message",
@@ -419,7 +447,6 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
-                println!("Requesting headers periodically...");
                 let t_inner = inner.clone();
                 let tallest_header = t_inner.lock().map_err(to_io_err)?.tallest_header;
                 t_inner
