@@ -1,8 +1,10 @@
 use crate::config::Config;
 use crate::logger::log;
-use crate::messages::constants::commands::{PONG, TX};
-use crate::messages::constants::config::{MAGIC, VERBOSE};
-use crate::messages::constants::messages::GENESIS_HASHID;
+use crate::messages::constants::{
+    commands::{PONG, TX},
+    config::{MAGIC, VERBOSE},
+    messages::GENESIS_HASHID,
+};
 use crate::messages::{
     Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
     InvType, Inventory, Message, MessageHeader, Serialize,
@@ -119,7 +121,7 @@ impl NetworkController {
         Ok(())
     }
 
-    fn request_blocks(&mut self, headers: Headers) -> io::Result<()> {
+    fn request_blocks(&mut self, headers: &mut Headers) -> io::Result<()> {
         if headers.count == 0 {
             return Ok(());
         }
@@ -133,33 +135,38 @@ impl NetworkController {
         Ok(())
     }
 
+    fn retain_missing_headers(&self, headers: &mut Headers) {
+        headers
+            .block_headers
+            .retain(|header| !self.blocks.contains_key(&header.hash()));
+    }
+
     /// requests block for headers after given timestamp
     fn request_blocks_from(&mut self, mut headers: Headers, timestamp: u32) -> io::Result<()> {
-        headers.trim_timestamp(timestamp)?;
-
-        let mut needed_blocks = Vec::new();
-
-        for header in headers.block_headers.clone() {
-            if !self.blocks.contains_key(&header.hash()) {
-                needed_blocks.push(header);
-            }
-        }
-
-        self.request_blocks(Headers::from_block_headers(needed_blocks))?;
+        headers.trim_timestamp(timestamp);
+        self.retain_missing_headers(&mut headers);
+        self.request_blocks(&mut headers)?;
         Ok(())
     }
 
-    fn read_headers(&mut self, headers: &Headers) -> io::Result<()> {
+    fn read_headers(&mut self, headers: Headers) -> io::Result<()> {
         let previous_header_count = self.headers.len();
+        let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
+        self.request_blocks_from(headers.clone(), init_tp_timestamp)?;
+        // save values to variables before consuming headers
+        let last_header = headers.last_header_hash();
+        let is_paginated = headers.is_paginated();
 
-        // store headers in hashmap
-        self.headers
-            .extend(into_hashmap(headers.block_headers.clone()));
-
+        // store headers in hashmap, consuming headers
+        let headers_hashmap = into_hashmap(headers.block_headers);
+        for (header_hash, header) in headers_hashmap {
+            if self.headers.insert(header_hash, header).is_none() {
+                header.save_to_file("tmp/headers_backup.dat")?;
+            }
+        }
         if self.headers.len() == previous_header_count {
             return Ok(());
         }
-
         log(
             &format!(
                 "Received header. New header count: {:?}",
@@ -167,27 +174,17 @@ impl NetworkController {
             ),
             VERBOSE,
         );
-
-        // request more headers
-        self.tallest_header = headers.last_header_hash(); // last to get doesn't have to be tallest -- check this
-        if headers.is_paginated() {
+        // request next headers, and blocks for recieved headers
+        self.tallest_header = last_header; // last to get doesn't have to be tallest -- check this
+        if is_paginated {
             self.request_headers(self.tallest_header)?;
         }
-
-        // save headers to file
-        headers.save_to_file("tmp/headers_backup.dat")?;
-
-        // request blocks
-        let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-        self.request_blocks_from(headers.clone(), init_tp_timestamp)?;
-
         Ok(())
     }
 
     fn request_headers(&mut self, header_hash: HashId) -> io::Result<()> {
         let getheader_message = GetHeader::from_last_header(header_hash);
-        self.nodes.send_to_any(&getheader_message.serialize()?)?;
-        // self.nodes.send_to_all(&getheader_message.serialize()?)?;
+        self.nodes.send_to_all(&getheader_message.serialize()?)?;
         Ok(())
     }
 
@@ -268,18 +265,6 @@ impl NetworkController {
         Ok(())
     }
 
-    fn get_missing_headers(&self, headers: &Headers) -> io::Result<Vec<BlockHeader>> {
-        let mut missing_headers = Vec::new();
-
-        for header in headers.clone().block_headers {
-            if !self.blocks.contains_key(&header.hash()) {
-                missing_headers.push(header);
-            }
-        }
-
-        Ok(missing_headers)
-    }
-
     pub fn start_sync(&mut self) -> io::Result<()> {
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
@@ -291,31 +276,18 @@ impl NetworkController {
         }
 
         // attempt to read headers from backup file
-        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
+        if let Ok(headers) = Headers::from_file("tmp/headers_backup.dat") {
             self.update_status_bar("Reading headers from backup file...".to_string())?;
             self.tallest_header = headers.last_header_hash();
-            self.headers
-                .extend(into_hashmap(headers.block_headers.clone()));
-            self.read_headers(&headers)?;
+            self.headers = into_hashmap(headers.clone().block_headers);
 
-            // find missing headers in blocks and then request them
+            // find headers for which we don't have the blocks and then request them
             let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
-            headers.trim_timestamp(init_tp_timestamp)?;
-            let missing_headers = self.get_missing_headers(&headers)?;
-
-            if !missing_headers.is_empty() {
-                self.update_status_bar(format!(
-                    "Found {} missing blocks in backup file, requesting them...",
-                    missing_headers.len()
-                ))?;
-                self.request_blocks(Headers::from_block_headers(missing_headers))?;
-            }
+            self.request_blocks_from(headers, init_tp_timestamp)?;
 
             self.update_status_bar("Read headers from backup file.".to_string())?;
-        } // else init ibd
-
-        self.request_headers(self.tallest_header)?; // with ibd this goes on the else clause
-
+        } // Finally, catch up to blockchain doing IBD
+        self.request_headers(self.tallest_header)?;
         Ok(())
     }
 }
@@ -378,7 +350,7 @@ impl OuterNetworkController {
         t_inner: Arc<Mutex<NetworkController>>,
         headers: Headers,
     ) -> io::Result<()> {
-        t_inner.lock().map_err(to_io_err)?.read_headers(&headers)
+        t_inner.lock().map_err(to_io_err)?.read_headers(headers)
     }
 
     fn handle_node_inv_message(
