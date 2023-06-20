@@ -7,13 +7,12 @@ use crate::messages::{
     Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
     InvType, Inventory, Message, MessageHeader, Serialize,
 };
-use crate::network_controller;
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
-use bitcoin_hashes::{sha256, Hash};
+use bitcoin_hashes::Hash;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -401,7 +400,7 @@ impl OuterNetworkController {
     }
 
     fn handle_node_failure_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        _t_inner: Arc<Mutex<NetworkController>>,
         peer_addr: SocketAddr,
         error: ErrorType,
     ) -> io::Result<()> {
@@ -440,15 +439,8 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_addr, Message::Failure(ErrorType::BlockError)) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr, ErrorType::BlockError)
-                    }
-                    (peer_addr, Message::Failure(ErrorType::HeaderError)) => {
-                        Self::handle_node_failure_message(
-                            t_inner,
-                            peer_addr,
-                            ErrorType::HeaderError,
-                        )
+                    (peer_addr, Message::Failure(err)) => {
+                        Self::handle_node_failure_message(t_inner, peer_addr, err)
                     }
                     (peer_addr, Message::Ping(nonce)) => {
                         Self::handle_node_ping_message(t_inner, peer_addr, nonce)

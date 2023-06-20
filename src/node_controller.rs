@@ -6,7 +6,6 @@ use crate::node::Node;
 use rand::random;
 use std::collections::HashMap;
 use std::io;
-use std::net::Shutdown;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
 // gtk imports
