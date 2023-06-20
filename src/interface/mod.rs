@@ -11,12 +11,12 @@ pub mod components;
 
 pub enum GtkMessage {
     UpdateLabel((String, String)),
+    UpdateBalance((u64, u64)),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
 
 pub enum ModelRequest {
-    GetWalletBalance,
     GenerateTransaction(TransactionInfo),
 }
 
@@ -39,6 +39,30 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 let label: gtk::Label = builder_aux.object(label.as_str()).unwrap();
                 label.set_text(text.as_str());
             }
+            GtkMessage::UpdateBalance((balance, pending)) => {
+                let builder_aux = builder.clone();
+
+                // format balances as (balance / 100000000.0)
+                let balance = balance as f64 / 100000000.0;
+                let pending = pending as f64 / 100000000.0;
+
+                // get balances labels and update them
+                let balance_available_val: gtk::Label =
+                    builder_aux.object("balance_available_val").unwrap();
+                balance_available_val.set_text(format!("{}", balance).as_str());
+
+                let balance_pending_val: gtk::Label =
+                    builder_aux.object("balance_pending_val").unwrap();
+                balance_pending_val.set_text(format!("{}", pending).as_str());
+
+                let transaction_balance_label: gtk::Label =
+                    builder_aux.object("transaction_balance_label").unwrap();
+                transaction_balance_label.set_text(format!("{}", balance).as_str()); // should it be balance or balance and pending?
+
+                let balance_total_val: gtk::Label =
+                    builder_aux.object("balance_total_val").unwrap();
+                balance_total_val.set_text(format!("{}", balance + pending).as_str());
+            }
         }
 
         // Returning false here would close the receiver
@@ -60,14 +84,6 @@ pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> 
     let builder = gtk::Builder::from_string(glade_src);
 
     attach_rcv(receiver, builder.clone());
-
-    // this only for example
-    let get_balance_btn = builder.object::<gtk::Button>("get_balance_btn").unwrap();
-    let sender_clone = sender.clone();
-    get_balance_btn.connect_clicked(move |_| {
-        println!("click");
-        sender_clone.send(ModelRequest::GetWalletBalance).unwrap();
-    });
 
     let window: gtk::Window = components::init(builder, sender)?;
     window.show_all();

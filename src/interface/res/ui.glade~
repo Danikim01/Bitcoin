@@ -361,7 +361,7 @@
               <object class="GtkLabel" id="balance_available_val">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="label" translatable="yes">0</property>
+                <property name="label" translatable="yes">0.00000000</property>
                 <property name="justify">fill</property>
                 <property name="width-chars">0</property>
                 <property name="max-width-chars">0</property>
@@ -381,16 +381,87 @@
           </packing>
         </child>
         <child>
-          <object class="GtkButton" id="get_balance_btn">
-            <property name="label" translatable="yes">get balance</property>
+          <object class="GtkBox" id="overview_pending_box">
             <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-top">4</property>
+            <child>
+              <object class="GtkLabel" id="balance_pending_lab">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Pending:</property>
+                <property name="width-chars">20</property>
+                <property name="xalign">0.009999999776482582</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="balance_pending_val">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">0.00000000</property>
+                <property name="justify">fill</property>
+                <property name="width-chars">0</property>
+                <property name="max-width-chars">0</property>
+                <property name="xalign">0.99000000953674316</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox" id="overview_total_box">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-top">24</property>
+            <child>
+              <object class="GtkLabel" id="balance_total_lab">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Total:</property>
+                <property name="width-chars">20</property>
+                <property name="xalign">0.009999999776482582</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="balance_total_val">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">0.00000000</property>
+                <property name="justify">fill</property>
+                <property name="width-chars">0</property>
+                <property name="max-width-chars">0</property>
+                <property name="xalign">0.99000000953674316</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">3</property>
           </packing>
         </child>
       </object>
@@ -562,15 +633,52 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="transaction_balance_label">
+          <object class="GtkBox">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Balance: 0.00000000 tBTC</property>
-            <property name="xalign">1</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Balance: </property>
+                <property name="xalign">1</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="transaction_balance_label">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="xpad">4</property>
+                <property name="label" translatable="yes">0.00000000</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">tBTC</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">True</property>
             <property name="fill">True</property>
+            <property name="pack-type">end</property>
             <property name="position">3</property>
           </packing>
         </child>
@@ -745,7 +853,7 @@
                   </object>
                   <packing>
                     <property name="expand">False</property>
-                    <property name="fill">True</property>
+                    <property name="fill">False</property>
                     <property name="position">0</property>
                   </packing>
                 </child>

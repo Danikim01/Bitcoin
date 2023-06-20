@@ -18,13 +18,12 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::interface::{update_ui_label, GtkMessage, ModelRequest, RecipientDetails};
+use crate::interface::{update_ui_label, GtkMessage, ModelRequest};
 use bitcoin_hashes::Hash;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread;
-
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
@@ -55,23 +54,20 @@ impl NetworkController {
         update_ui_label(self.ui_sender.clone(), "status_bar".to_string(), msg)
     }
 
-    fn read_wallet_balance(&self) -> io::Result<u64> {
+    fn update_ui_balance(&self) -> io::Result<()> {
+        let (balance, pending) = self.read_wallet_balance()?;
+        self.ui_sender
+            .send(GtkMessage::UpdateBalance((balance, pending)))
+            .map_err(to_io_err)
+    }
+
+    fn read_wallet_balance(&self) -> io::Result<(u64, u64)> {
         let balance = self.utxo_set.get_wallet_balance(&self.wallet.address);
         let pending_balance = self
             .utxo_set
             .get_pending_wallet_balance(&self.wallet.address);
-        println!(
-            "Wallet balance: {:?}\n       pending: {:?}",
-            balance, pending_balance
-        );
-        self.ui_sender
-            .send(GtkMessage::UpdateLabel((
-                "balance_available_val".to_string(),
-                format!("{:?}", balance),
-            )))
-            .map_err(to_io_err)?;
 
-        Ok(balance)
+        Ok((balance, pending_balance))
     }
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
@@ -92,6 +88,8 @@ impl NetworkController {
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
 
+        // get wallet balance and update UI
+        self.update_ui_balance()?;
         Ok(())
     }
 
@@ -105,6 +103,9 @@ impl NetworkController {
         // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate_unsafe(&mut self.utxo_set)?;
         self.blocks.insert(block.hash(), block);
+
+        // get wallet balance and update UI
+        self.update_ui_balance()?;
 
         Ok(())
     }
@@ -217,6 +218,9 @@ impl NetworkController {
         if transaction.address_is_involved(&self.wallet.address) {
             println!("Read a pending transaction involving this wallet!");
             transaction.generate_utxo(&mut self.utxo_set, TransactionOrigin::Pending)?;
+
+            // get wallet balance and update UI
+            self.update_ui_balance()?;
         }
         Ok(())
     }
@@ -298,7 +302,6 @@ impl NetworkController {
         Ok(())
     }
 }
-
 pub struct OuterNetworkController {
     inner: Arc<Mutex<NetworkController>>,
 }
@@ -310,12 +313,6 @@ impl OuterNetworkController {
     ) -> Result<Self, io::Error> {
         let inner = Arc::new(Mutex::new(NetworkController::new(ui_sender, writer_end)?));
         Ok(Self { inner })
-    }
-
-    fn handle_ui_get_balance(t_inner: Arc<Mutex<NetworkController>>) -> io::Result<()> {
-        let inner_lock = t_inner.lock().map_err(to_io_err)?;
-        inner_lock.read_wallet_balance()?;
-        Ok(())
     }
 
     fn handle_ui_generate_transaction(
@@ -333,7 +330,6 @@ impl OuterNetworkController {
             loop {
                 let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
-                    ModelRequest::GetWalletBalance => Self::handle_ui_get_balance(t_inner),
                     ModelRequest::GenerateTransaction(transaction_info) => {
                         Self::handle_ui_generate_transaction(t_inner, transaction_info)
                     }
