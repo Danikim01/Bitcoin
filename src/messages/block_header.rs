@@ -1,5 +1,5 @@
 use crate::io::Cursor;
-use crate::messages::{utility::*, Hashable};
+use crate::messages::{utility::*, Hashable, HashId, HashIdIter};
 use crate::utility::{double_hash, to_io_err};
 use std::io::{self, ErrorKind::InvalidData, Write};
 
@@ -7,8 +7,8 @@ use std::io::{self, ErrorKind::InvalidData, Write};
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BlockHeader {
     pub version: i32,
-    pub prev_block_hash: [u8; 32],
-    pub merkle_root_hash: [u8; 32],
+    pub prev_block_hash: HashId,
+    pub merkle_root_hash: HashId,
     pub timestamp: u32,
     pub nbits: u32,
     pub nonce: u32,
@@ -17,8 +17,8 @@ pub struct BlockHeader {
 impl BlockHeader {
     pub fn new(
         version: i32,
-        prev_block_hash: [u8; 32],
-        merkle_root_hash: [u8; 32],
+        prev_block_hash: HashId,
+        merkle_root_hash: HashId,
         timestamp: u32,
         nbits: u32,
         nonce: u32,
@@ -35,8 +35,8 @@ impl BlockHeader {
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
         let version = i32::from_le_stream(cursor)?;
-        let prev_block_hash = read_hash(cursor)?;
-        let merkle_root_hash = read_hash(cursor)?;
+        let prev_block_hash = HashId::new(read_hash(cursor)?);
+        let merkle_root_hash = HashId::new(read_hash(cursor)?);
         let timestamp = u32::from_le_stream(cursor)?;
         let nbits = u32::from_le_stream(cursor)?;
         let nonce = u32::from_le_stream(cursor)?;
@@ -53,17 +53,17 @@ impl BlockHeader {
         Ok(actual_header)
     }
 
-    pub fn _prev_hash(&self) -> &[u8; 32] {
+    pub fn _prev_hash(&self) -> &HashId {
         &self.merkle_root_hash
     }
 
-    fn compare_target_threshold_and_hash(target: &[u8; 32], hash: &[u8; 32]) -> std::cmp::Ordering {
+    fn compare_target_threshold_and_hash(target: &HashId, hash: &HashId) -> std::cmp::Ordering {
         target.cmp(hash)
     }
 
     pub fn validate_proof_of_work(&self) -> Result<(), std::io::Error> {
-        let target_threshold: [u8; 32] = Self::nbits_to_target(self.nbits);
-        let block_header_hash: [u8; 32] = self.hash();
+        let target_threshold: HashId = Self::nbits_to_target(self.nbits);
+        let block_header_hash: HashId = self.hash();
         match Self::compare_target_threshold_and_hash(&target_threshold, &block_header_hash) {
             std::cmp::Ordering::Less => {
                 // The block header hash is lower than the target threshold
@@ -82,7 +82,7 @@ impl BlockHeader {
         Ok(())
     }
 
-    fn nbits_to_target(nbits: u32) -> [u8; 32] {
+    fn nbits_to_target(nbits: u32) -> HashId {
         let exponent = (nbits >> 24) as usize;
         let significand = nbits & 0x00FFFFFF;
 
@@ -95,7 +95,7 @@ impl BlockHeader {
 
         let mut target_arr = [0u8; 32];
         target_arr[31 - exponent..].copy_from_slice(&target);
-        target_arr
+        HashId::new(target_arr)
     }
 
     pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
@@ -114,8 +114,8 @@ impl BlockHeader {
     pub fn serialize(&self) -> Vec<u8> {
         let mut header_bytes = vec![];
         header_bytes.extend(&self.version.to_le_bytes());
-        header_bytes.extend(&self.prev_block_hash);
-        header_bytes.extend(&self.merkle_root_hash);
+        header_bytes.extend(self.prev_block_hash.iter());
+        header_bytes.extend(self.merkle_root_hash.iter());
         header_bytes.extend(&self.timestamp.to_le_bytes());
         header_bytes.extend(&self.nbits.to_le_bytes());
         header_bytes.extend(&self.nonce.to_le_bytes());
@@ -124,13 +124,12 @@ impl BlockHeader {
 
     pub fn deserialize(cursor: &mut Cursor<&[u8]>) -> io::Result<BlockHeader> {
         let version = i32::from_le_stream(cursor)?;
-        let prev_block_hash = read_hash(cursor)?;
-        let merkle_root_hash = read_hash(cursor)?;
+        let prev_block_hash = HashId::new(read_hash(cursor)?);
+        let merkle_root_hash = HashId::new(read_hash(cursor)?);
         let timestamp = u32::from_le_stream(cursor)?;
         let nbits = u32::from_le_stream(cursor)?;
         let nonce = u32::from_le_stream(cursor)?;
         let _empty_tx = u8::from_le_stream(cursor)?;
-        println!("version {}, empty_tx {}", version, _empty_tx);
         let header = BlockHeader::new(
             version,
             prev_block_hash,
@@ -144,19 +143,19 @@ impl BlockHeader {
 }
 
 impl Hashable for BlockHeader {
-    fn hash(&self) -> [u8; 32] {
+    fn hash(&self) -> HashId {
         let hash = double_hash(&self.serialize());
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&hash[..]);
-        bytes
+        HashId::new(bytes)
     }
 }
 
 impl Default for BlockHeader {
     fn default() -> Self {
         let version = 0_i32;
-        let prev_block_hash = [0_u8; 32];
-        let merkle_root_hash = [0_u8; 32];
+        let prev_block_hash = HashId::default();
+        let merkle_root_hash = HashId::default();
         let timestamp = 0_u32;
         let nbits = 0_u32;
         let nonce = 0_u32;
@@ -218,17 +217,17 @@ mod tests {
         let block_header = BlockHeader::from_bytes(&mut cursor).unwrap();
         assert_eq!(
             block_header.prev_block_hash,
-            [
+            HashId::new([
                 51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136, 175, 122, 209,
                 45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0
-            ]
+            ])
         );
         assert_eq!(
             block_header.merkle_root_hash,
-            [
+            HashId::new([
                 219, 236, 86, 82, 205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7,
                 42, 179, 16, 189, 22, 176, 239, 148, 154, 195, 174, 188, 14, 245
-            ]
+            ])
         );
         assert_eq!(block_header.timestamp, 1681095679);
         assert_eq!(block_header.nbits, 422120062);

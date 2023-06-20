@@ -23,7 +23,43 @@ pub use headers_message::Headers;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
-pub type HashId = [u8; 32];
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct HashId {
+    hash: [u8; 32]
+}
+
+impl HashId {
+    fn new(hash: [u8; 32]) -> Self {
+        Self {hash}
+    }
+
+    fn default() -> Self {
+        Self {hash: [0u8; 32]}
+    }
+
+    fn iter<'a>(&'a self) -> HashIdIter<'a> {
+        HashIdIter {
+            inner: self.hash.iter(),
+        }
+    }
+}
+
+impl std::fmt::Display for HashId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", self.hash.iter().map(|num| format!("{:x}", num)).collect::<Vec<String>>().join(""))
+    }
+}
+struct HashIdIter<'a> {
+    inner: std::slice::Iter<'a, u8>,
+}
+
+impl<'a> Iterator for HashIdIter<'a> {
+    type Item = &'a u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Services {
