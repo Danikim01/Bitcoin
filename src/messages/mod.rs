@@ -37,7 +37,7 @@ impl HashId {
         Self {hash: [0u8; 32]}
     }
 
-    fn iter<'a>(&'a self) -> HashIdIter<'a> {
+    fn iter(&self) -> HashIdIter {
         HashIdIter {
             inner: self.hash.iter(),
         }

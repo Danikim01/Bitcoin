@@ -1,5 +1,5 @@
 use crate::io::Cursor;
-use crate::messages::{utility::*, Hashable, HashId, HashIdIter};
+use crate::messages::{utility::*, Hashable, HashId};
 use crate::utility::{double_hash, to_io_err};
 use std::io::{self, ErrorKind::InvalidData, Write};
 
