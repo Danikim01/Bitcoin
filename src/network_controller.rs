@@ -1,26 +1,26 @@
 use crate::config::Config;
 use crate::logger::log;
 use crate::messages::constants::{
-    commands::TX,
+    commands::{PONG, TX},
     config::{MAGIC, VERBOSE},
     messages::GENESIS_HASHID,
 };
 use crate::messages::{
-    Block, BlockHeader, BlockSet, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    Inventory, Message, MessageHeader, Serialize,
+    Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
+    InvType, Inventory, Message, MessageHeader, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::Hash;
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 // gtk imports
 use crate::interface::{GtkMessage, ModelRequest, TransactionDetails};
-use bitcoin_hashes::Hash;
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -219,6 +219,23 @@ impl NetworkController {
         Ok(())
     }
 
+    fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64) -> io::Result<()> {
+        let payload = nonce.to_le_bytes();
+        let hash = double_hash(&payload);
+        let checksum: [u8; 4] = [hash[0], hash[1], hash[2], hash[3]];
+        let message_header =
+            MessageHeader::new(MAGIC, PONG.to_string(), payload.len() as u32, checksum);
+        let mut to_send = Vec::new();
+        to_send.extend_from_slice(&message_header.serialize()?);
+        to_send.extend_from_slice(&payload);
+        println!(
+            "Sending message header {:?} to peer {:?}",
+            message_header, peer_addr
+        );
+        self.nodes.send_to_specific(&peer_addr, &to_send)?;
+        Ok(())
+    }
+
     pub fn generate_transaction(&mut self, details: TransactionDetails) -> io::Result<()> {
         let (recv_addr, _label, amount) = details;
 
@@ -357,12 +374,24 @@ impl OuterNetworkController {
     fn handle_node_failure_message(
         _t_inner: Arc<Mutex<NetworkController>>,
         peer_addr: SocketAddr,
+        error: ErrorType,
     ) -> io::Result<()> {
         println!(
-            "Node {:?} is notifying me of a failure, should resend last request",
-            peer_addr
+            "Node {:?} is notifying me of a failure, should resend last request, the error is {:?}",
+            peer_addr, error
         );
         Ok(())
+    }
+
+    fn handle_node_ping_message(
+        t_inner: Arc<Mutex<NetworkController>>,
+        peer_addr: SocketAddr,
+        nonce: u64,
+    ) -> io::Result<()> {
+        t_inner
+            .lock()
+            .map_err(to_io_err)?
+            .read_ping(peer_addr, nonce)
     }
 
     fn recv_node_messages(
@@ -382,9 +411,13 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_addr, Message::Failure()) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr)
+                    (peer_addr, Message::Failure(err)) => {
+                        Self::handle_node_failure_message(t_inner, peer_addr, err)
                     }
+                    (peer_addr, Message::Ping(nonce)) => {
+                        Self::handle_node_ping_message(t_inner, peer_addr, nonce)
+                    }
+
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,
                         "Received unsupported message",

@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
-
 // gtk imports
 use crate::interface::GtkMessage;
 use gtk::glib::Sender;
