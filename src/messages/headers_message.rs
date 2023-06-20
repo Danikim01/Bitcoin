@@ -64,10 +64,7 @@ impl Headers {
             headers.count += 1;
             headers.block_headers.push(block_header);
         }
-        log(
-            &format!("read {:?} headers from file", headers.count),
-            VERBOSE,
-        );
+        log(&format!("read {:?} headers from file", headers.count), VERBOSE);
         Ok(headers)
     }
 }
