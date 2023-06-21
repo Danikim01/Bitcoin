@@ -423,11 +423,7 @@ impl OuterNetworkController {
                         "Received unsupported message",
                     )),
                 } {
-                    // closes all threads if it fails to read from channel
-                    println!(
-                        "Network controller died due to unhandled error: {:?}",
-                        result
-                    );
+                    println!("Received unhandled error: {:?}", result);
                     return Err(result);
                 }
             }

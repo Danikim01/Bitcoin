@@ -75,7 +75,7 @@ impl MessageHeader {
         }
 
         let mut header_buffer = [0_u8; HEADER_SIZE - START_STRING_SIZE];
-        stream.read(&mut header_buffer)?;
+        stream.read_exact(&mut header_buffer)?;
         MessageHeader::from_bytes(&header_buffer)
     }
 
