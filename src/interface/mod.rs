@@ -1,12 +1,12 @@
 use crate::interface::components::send_panel::TransactionInfo;
+use crate::network_controller::TransactionDisplayInfo;
+use crate::raw_transaction::TransactionOrigin;
 use crate::utility::to_io_err;
 use gtk::glib;
 use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
 use gtk::prelude::*;
 use std::io;
 use std::sync::mpsc::Sender;
-use crate::network_controller::TransactionDisplayInfo;
-use crate::raw_transaction::TransactionOrigin;
 
 pub mod components;
 
@@ -68,20 +68,30 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
             }
             GtkMessage::TransactionInfo(result) => match result {
                 Ok(info) => {
-                    let dialog: gtk::MessageDialog = builder.clone().object("dialog").unwrap();
-                    let label: gtk::Label = builder.clone().object("dialog_label").unwrap();
-                    label.set_text(&format!("Transaction sent\ndetails:{:?}", info));
+                    let dialog = gtk::MessageDialog::new(
+                        None::<&gtk::Window>,
+                        gtk::DialogFlags::empty(),
+                        gtk::MessageType::Info,
+                        gtk::ButtonsType::Ok,
+                        &format!("Transaction sent\ndetails:{:?}", info),
+                    );
+                    dialog.set_default_size(150, 100);
                     dialog.set_modal(true);
                     dialog.set_title("Transaction sent succesfully");
                     dialog.run();
                     dialog.close();
                 }
                 Err(e) => {
-                    let dialog: gtk::MessageDialog = builder.clone().object("dialog").unwrap();
-                    let label: gtk::Label = builder.clone().object("dialog_label").unwrap();
-                    label.set_text(&format!("Transaction error\ndetails:{:?}", e));
+                    let dialog = gtk::MessageDialog::new(
+                        None::<&gtk::Window>,
+                        gtk::DialogFlags::empty(),
+                        gtk::MessageType::Error,
+                        gtk::ButtonsType::Ok,
+                        &format!("Transaction failed\nreason:{:?}", e),
+                    );
+                    dialog.set_default_size(150, 100);
                     dialog.set_modal(true);
-                    dialog.set_title("Transaction error");
+                    dialog.set_title("Error: Transaction failed");
                     dialog.run();
                     dialog.close();
                 }
@@ -113,7 +123,6 @@ pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> 
 
     let window: gtk::Window = components::init(builder, sender)?;
     window.show_all();
-
     gtk::main();
     Ok(())
 }
