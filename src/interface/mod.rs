@@ -4,6 +4,8 @@ use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
 use gtk::prelude::*;
 use std::io;
 use std::sync::mpsc::Sender;
+use crate::network_controller::TransactionDisplayInfo;
+use crate::raw_transaction::TransactionOrigin;
 
 use crate::utility::to_io_err;
 
@@ -12,6 +14,7 @@ pub mod components;
 pub enum GtkMessage {
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
+    UpdateOverview((Vec<TransactionDisplayInfo>, TransactionOrigin)),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -62,6 +65,9 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 let balance_total_val: gtk::Label =
                     builder_aux.object("balance_total_val").unwrap();
                 balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
+            }
+            GtkMessage::UpdateOverview((transactions, origin)) => {
+                //update_overview(builder.clone(), transactions, origin);
             }
         }
 
