@@ -100,21 +100,22 @@ impl NodeController {
     }
 
     pub fn send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
-        let mut dead_connections = vec![];
+        let mut alive_nodes: Vec<SocketAddr> = vec![];
         for node in self.nodes.values_mut() {
-            let node_address = node.get_addr()?;
-            if let Err(e) = node.send(payload) {
-                log(
-                    &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
-                    QUIET,
-                );
-                dead_connections.push(node_address);
-                continue;
+            if let Ok(node_address) = node.get_addr() {
+                match node.send(payload) {
+                    Ok(_) => {
+                        alive_nodes.push(node_address);
+                    }
+                    Err(e) => log(
+                        &format!("Error writing to TCPStream: {:?}, Killing connection.", e)
+                            as &str,
+                        QUIET,
+                    ),
+                }
             }
         }
-        for node_address in dead_connections {
-            self.kill_node(node_address)?;
-        }
+        self.nodes.retain(|k, _v| alive_nodes.contains(k));
         Ok(())
     }
 }

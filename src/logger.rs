@@ -15,7 +15,7 @@ impl Logger {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open("src/log.txt")
+            .open("tmp/log.txt")
             .expect("Failed to open log file");
         Logger {
             log_file: Arc::new(Mutex::new(file)),
@@ -26,7 +26,7 @@ impl Logger {
     fn log_verbose(&self, message: &str) {
         let now = Local::now();
         let line = format!("{} - {}\n", now, message);
-        println!("{}", message);
+        eprintln!("{}", message);
 
         if self.mode != VERBOSE {
             return;
@@ -39,7 +39,7 @@ impl Logger {
     fn log_quiet(&self, message: &str) {
         let now = Local::now();
         let line = format!("{} - {}\n", now, message);
-        println!("{}", message);
+        eprintln!("{}", message);
         let mut file = self.log_file.lock().unwrap();
         file.write_all(line.as_bytes())
             .expect("Failed to write to log file")

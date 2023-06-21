@@ -1,11 +1,8 @@
-use crate::logger::log;
 use crate::messages::constants::{header_constants::MAX_HEADER, messages::GENESIS_HASHID};
 use crate::messages::utility::{read_from_varint, to_varint};
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use std::fs;
 use std::io::{self, Cursor};
-
-use super::constants::config::VERBOSE;
 
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
@@ -64,10 +61,6 @@ impl Headers {
             headers.count += 1;
             headers.block_headers.push(block_header);
         }
-        log(
-            &format!("read {:?} headers from file", headers.count),
-            VERBOSE,
-        );
         Ok(headers)
     }
 }
