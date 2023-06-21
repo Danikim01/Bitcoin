@@ -36,6 +36,18 @@ pub struct NetworkController {
     wallet: Wallet,
 }
 
+pub enum TransactionRole{
+    Receiver,
+    Sender
+}
+
+pub struct TransactionDisplayInfo{
+    pub(crate) role: TransactionRole,
+    pub(crate) date: String,
+    pub(crate) amount: u64,
+    pub(crate) hash: HashId,
+}
+
 impl NetworkController {
     pub fn new(
         ui_sender: Sender<GtkMessage>,
@@ -233,6 +245,26 @@ impl NetworkController {
 
         self.nodes.send_to_specific(&peer_addr, &to_send)?;
         Ok(())
+    }
+
+
+
+
+    fn generate_all_transactions(&mut self) -> Vec< TransactionDisplayInfo >{
+        let mut transactions = vec!{};
+
+
+        for (_,block) in &self.blocks{
+            for tx in &block.txns{
+                if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"){
+                    let transaction_info: TransactionDisplayInfo = tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", &self.utxo_set);
+                    transactions.push(transaction_info);
+                }
+
+            }
+        }
+
+        return transactions
     }
 
     pub fn generate_transaction(&mut self, details: TransactionInfo) -> io::Result<()> {

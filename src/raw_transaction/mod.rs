@@ -2,7 +2,7 @@ use crate::io::{self, Cursor};
 use crate::messages::utility::{
     read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
 };
-use crate::messages::Serialize;
+use crate::messages::{HashId, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Utxo, UtxoSet, WalletUtxo};
@@ -20,6 +20,8 @@ use tx_output::TxOutput;
 use super::messages::Message as Msg;
 
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+use crate::network_controller::{TransactionDisplayInfo, TransactionRole};
+
 const SIGHASH_ALL: u32 = 1;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
@@ -141,8 +143,7 @@ impl RawTransaction {
         Ok(())
     }
 
-    pub fn address_is_involved(&self, address: &str) -> bool {
-        // check if any of txin contains address
+    pub fn is_from_address(&self, address: &str) -> bool{
         match &self.tx_in {
             TxInputType::CoinBaseInput(_) => {}
             TxInputType::TxInput(tx_ins) => {
@@ -153,17 +154,40 @@ impl RawTransaction {
                 }
             }
         }
+        false
+    }
 
-        // check if any of txout contains address
+
+    pub fn is_destined_to_address(&self, address: &str) -> bool{
         for txout in &self.tx_out {
             if txout.destined_to(address) {
                 return true;
             }
         }
-
         false
     }
 
+    pub fn address_is_involved(&self, address: &str) -> bool {
+        self.is_from_address(address) || self.is_destined_to_address(address)
+    }
+
+    pub fn transaction_info_for(&self, address: &str, utxo_set: &UtxoSet) -> TransactionDisplayInfo{
+        /*
+        if tx.is_from_address("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"){
+            let spent_value = tx.tx_in.get_spent_value("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", self.utxo_set);
+            let change_value = tx.tx_out.get_change_value_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX");
+        } else if tx.is_destined_to_address("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string()){
+
+            let change_value = tx.tx_out.get_change_value_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string());
+        }
+        */
+         return TransactionDisplayInfo{
+             role: TransactionRole::Receiver,
+             date: "".to_string(),
+             amount: 0,
+             hash: HashId::new([0_u8;32]),
+         }
+    }
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;

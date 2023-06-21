@@ -29,7 +29,7 @@ pub struct HashId {
 }
 
 impl HashId {
-    fn new(hash: [u8; 32]) -> Self {
+    pub(crate) fn new(hash: [u8; 32]) -> Self {
         Self { hash }
     }
 
