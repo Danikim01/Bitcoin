@@ -9,7 +9,9 @@ mod top_bar;
 use crate::interface::ModelRequest;
 
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<gtk::Window> {
-    let window: gtk::Window = builder.object("main_window").unwrap(); // add err handling
+    let window: gtk::Window = builder
+        .object("main_window")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to initialize window"))?;
     top_bar::init(builder.clone())?;
     overview::init(builder.clone())?;
     send_panel::init(builder, sender)?;
