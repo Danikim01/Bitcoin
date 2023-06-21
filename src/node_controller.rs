@@ -55,7 +55,7 @@ impl NodeController {
         let random_number: usize = random();
         let node_number = random_number % self.nodes.len();
         let random_node = self.nodes.values_mut().nth(node_number).unwrap();
-        let node_address = random_node.get_addr()?;
+        let node_address = random_node.address;
         match &mut random_node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -82,7 +82,7 @@ impl NodeController {
                 ))
             }
         };
-        let node_address = node.get_addr()?;
+        let node_address = node.address;
         match &mut node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
@@ -102,17 +102,14 @@ impl NodeController {
     pub fn send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
         let mut alive_nodes: Vec<SocketAddr> = vec![];
         for node in self.nodes.values_mut() {
-            if let Ok(node_address) = node.get_addr() {
-                match node.send(payload) {
-                    Ok(_) => {
-                        alive_nodes.push(node_address);
-                    }
-                    Err(e) => log(
-                        &format!("Error writing to TCPStream: {:?}, Killing connection.", e)
-                            as &str,
-                        QUIET,
-                    ),
+            match node.send(payload) {
+                Ok(_) => {
+                    alive_nodes.push(node.address);
                 }
+                Err(e) => log(
+                    &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
+                    QUIET,
+                ),
             }
         }
         self.nodes.retain(|k, _v| alive_nodes.contains(k));
