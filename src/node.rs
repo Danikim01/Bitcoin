@@ -37,7 +37,10 @@ impl Listener {
             Ok(..) => Ok(()),
             Err(e) => {
                 log(&format!("{:?}", e) as &str, VERBOSE);
-                log(&format!("connection: {:?}", self.stream) as &str, VERBOSE);
+                log(
+                    &format!("Listener for connection {:?} died.", self.stream) as &str,
+                    VERBOSE,
+                );
                 // self.listen()
                 Err(e)
             }

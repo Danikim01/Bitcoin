@@ -106,7 +106,8 @@ impl BlockHeader {
             .open(file_name)
             .map_err(to_io_err)?;
 
-        let bytes = self.serialize();
+        let mut bytes = self.serialize();
+        bytes.extend([0_u8; 1]);
         file.write_all(&bytes)?;
         Ok(())
     }
