@@ -68,6 +68,16 @@ impl NetworkController {
         update_ui_label(self.ui_sender.clone(), "status_bar".to_string(), msg)
     }
 
+    fn update_ui_overview_transactions(
+        &self,
+        transactions_info: Vec<TransactionDisplayInfo>,
+        origin: TransactionOrigin,
+    ) -> io::Result<()> {
+        self.ui_sender
+            .send(GtkMessage::UpdateOverview((transactions_info, origin)))
+            .map_err(to_io_err)
+    }
+
     fn update_ui_balance(&self) -> io::Result<()> {
         let (balance, pending) = self.read_wallet_balance()?;
         self.ui_sender
@@ -99,10 +109,8 @@ impl NetworkController {
             self.update_ui_status_bar("Up to date".to_string())?;
         }
 
-        // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate(&mut self.utxo_set)?;
 
-        // get wallet balance and update UI
         self.update_ui_balance()?;
         Ok(())
     }
@@ -114,11 +122,14 @@ impl NetworkController {
 
         self.update_ui_status_bar("Reading backup blocks...".to_string())?;
 
-        // validation does not yet include checks por UTXO spending, only checks proof of work
         block.validate_unsafe(&mut self.utxo_set)?;
+
+        let transactions = block.read_transactions_from(&self.wallet.address);
+        if !transactions.is_empty() {
+            self.update_ui_overview_transactions(transactions, TransactionOrigin::Block)?;
+        }
         self.blocks.insert(block.hash(), block);
 
-        // get wallet balance and update UI
         self.update_ui_balance()?;
 
         Ok(())
@@ -247,26 +258,10 @@ impl NetworkController {
         Ok(())
     }
 
-    fn generate_all_transactions(&mut self) -> Vec<TransactionDisplayInfo> {
-        let mut transactions = vec![];
-
-        for (_, block) in &self.blocks {
-            for tx in &block.txns {
-                if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX") {
-                    let transaction_info: TransactionDisplayInfo = tx
-                        .transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", &self.utxo_set);
-                    transactions.push(transaction_info);
-                }
-            }
-        }
-
-        return transactions;
-    }
-
     pub fn generate_transaction(
         &mut self,
         details: TransactionInfo,
-    ) -> io::Result<(TransactionInfo)> {
+    ) -> io::Result<TransactionInfo> {
         let tx: RawTransaction = self
             .wallet
             .generate_transaction(&mut self.utxo_set, details.clone())?;

@@ -3,9 +3,10 @@ use crate::utility::to_io_err;
 use gtk::glib;
 use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
 use gtk::prelude::*;
-use gtk::{Application, Builder};
 use std::io;
 use std::sync::mpsc::Sender;
+use crate::network_controller::TransactionDisplayInfo;
+use crate::raw_transaction::TransactionOrigin;
 
 pub mod components;
 
@@ -13,6 +14,7 @@ pub enum GtkMessage {
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
     TransactionInfo(Result<TransactionInfo, io::Error>),
+    UpdateOverview((Vec<TransactionDisplayInfo>, TransactionOrigin)),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -84,6 +86,9 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                     dialog.close();
                 }
             },
+            GtkMessage::UpdateOverview((transactions, origin)) => {
+                //update_overview(builder.clone(), transactions, origin);
+            }
         }
 
         // Returning false here would close the receiver

@@ -10,6 +10,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
+use crate::network_controller::TransactionDisplayInfo;
 
 use super::Message;
 
@@ -128,6 +129,20 @@ impl Block {
         self.validate_merkle_root()?;
 
         Ok(())
+    }
+
+    pub fn read_transactions_from(&self, address: &str) -> Vec< TransactionDisplayInfo >{
+        let mut transactions = vec!{};
+
+        for tx in &self.txns{
+            if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"){
+                let transaction_info: TransactionDisplayInfo = tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX");
+                transactions.push(transaction_info);
+            }
+
+        }
+
+        return transactions
     }
 
     pub fn all_from_file(file_name: &str) -> io::Result<BlockSet> {

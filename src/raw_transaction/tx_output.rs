@@ -50,6 +50,7 @@ impl TxOutput {
             Err(_) => false,
         }
     }
+    
 
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let value = u64::from_le_stream(cursor)?; // this is actually a float?

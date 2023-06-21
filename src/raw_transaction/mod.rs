@@ -171,21 +171,52 @@ impl RawTransaction {
         self.is_from_address(address) || self.is_destined_to_address(address)
     }
 
-    pub fn transaction_info_for(&self, address: &str, utxo_set: &UtxoSet) -> TransactionDisplayInfo{
-        /*
-        if tx.is_from_address("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"){
-            let spent_value = tx.tx_in.get_spent_value("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", self.utxo_set);
-            let change_value = tx.tx_out.get_change_value_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX");
-        } else if tx.is_destined_to_address("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string()){
-
-            let change_value = tx.tx_out.get_change_value_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string());
+    fn get_total_output_value(&self) -> u64 {
+        let mut total_value = 0_u64;
+        for output in &self.tx_out {
+            total_value =  total_value + output.value;
         }
-        */
+
+        total_value
+    }
+
+    fn get_change_value_for(&self, address: &str) -> u64 {
+        let mut total_value = 0_u64;
+        for output in &self.tx_out {
+            if output.destined_to(address){
+                total_value =  total_value + output.value;
+            }
+
+        }
+        total_value
+    }
+
+    pub fn get_hash(&self) -> [u8;32]{
+        let bytes = self.serialize();
+        let hash = double_hash(&bytes);
+        hash.to_byte_array()
+    }
+
+    pub fn transaction_info_for(&self, address: &str) -> TransactionDisplayInfo{
+
+        let mut role = TransactionRole::Sender;
+        let mut spent_value = 0;
+        let mut change_value = 0;
+
+        if self.is_from_address(address){
+            spent_value = self.get_total_output_value();
+
+        } else {
+            role = TransactionRole::Receiver;
+        }
+
+        change_value = self.get_change_value_for(address);
+
          return TransactionDisplayInfo{
-             role: TransactionRole::Receiver,
-             date: "".to_string(),
-             amount: 0,
-             hash: HashId::new([0_u8;32]),
+             role,
+             date: self.lock_time.to_string(),
+             amount: change_value - spent_value ,
+             hash: HashId::new(self.get_hash()),
          }
     }
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
