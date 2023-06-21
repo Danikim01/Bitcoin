@@ -19,8 +19,8 @@ use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
 
-use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
 use crate::network_controller::{TransactionDisplayInfo, TransactionRole};
+use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
 
 const SIGHASH_ALL: u32 = 1;
 
@@ -143,7 +143,7 @@ impl RawTransaction {
         Ok(())
     }
 
-    pub fn is_from_address(&self, address: &str) -> bool{
+    pub fn is_from_address(&self, address: &str) -> bool {
         match &self.tx_in {
             TxInputType::CoinBaseInput(_) => {}
             TxInputType::TxInput(tx_ins) => {
@@ -157,8 +157,7 @@ impl RawTransaction {
         false
     }
 
-
-    pub fn is_destined_to_address(&self, address: &str) -> bool{
+    pub fn is_destined_to_address(&self, address: &str) -> bool {
         for txout in &self.tx_out {
             if txout.destined_to(address) {
                 return true;
@@ -174,7 +173,7 @@ impl RawTransaction {
     fn get_total_output_value(&self) -> u64 {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
-            total_value =  total_value + output.value;
+            total_value = total_value + output.value;
         }
 
         total_value
@@ -183,41 +182,38 @@ impl RawTransaction {
     fn get_change_value_for(&self, address: &str) -> u64 {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
-            if output.destined_to(address){
-                total_value =  total_value + output.value;
+            if output.destined_to(address) {
+                total_value = total_value + output.value;
             }
-
         }
         total_value
     }
 
-    pub fn get_hash(&self) -> [u8;32]{
+    pub fn get_hash(&self) -> [u8; 32] {
         let bytes = self.serialize();
         let hash = double_hash(&bytes);
         hash.to_byte_array()
     }
 
-    pub fn transaction_info_for(&self, address: &str) -> TransactionDisplayInfo{
-
+    pub fn transaction_info_for(&self, address: &str) -> TransactionDisplayInfo {
         let mut role = TransactionRole::Sender;
         let mut spent_value = 0;
         let mut change_value = 0;
 
-        if self.is_from_address(address){
+        if self.is_from_address(address) {
             spent_value = self.get_total_output_value();
-
         } else {
             role = TransactionRole::Receiver;
         }
 
         change_value = self.get_change_value_for(address);
 
-         return TransactionDisplayInfo{
-             role,
-             date: self.lock_time.to_string(),
-             amount: change_value - spent_value ,
-             hash: HashId::new(self.get_hash()),
-         }
+        return TransactionDisplayInfo {
+            role,
+            date: self.lock_time.to_string(),
+            amount: change_value as i64 - spent_value as i64,
+            hash: HashId::new(self.get_hash()),
+        };
     }
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;

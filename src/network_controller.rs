@@ -35,7 +35,7 @@ pub enum TransactionRole {
 pub struct TransactionDisplayInfo {
     pub(crate) role: TransactionRole,
     pub(crate) date: String,
-    pub(crate) amount: u64,
+    pub(crate) amount: i64,
     pub(crate) hash: HashId,
 }
 
@@ -97,7 +97,10 @@ impl NetworkController {
 
     fn read_block(&mut self, block: Block) -> io::Result<()> {
         if self.blocks.contains_key(&block.hash()) {
-            return Ok(());
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "This block has already been received before",
+            ));
         }
 
         let days_old = block.get_days_old();
@@ -110,7 +113,8 @@ impl NetworkController {
             self.update_ui_status_bar("Up to date".to_string())?;
         }
 
-        block.validate(&mut self.utxo_set)?;
+        // block.validate(&mut self.utxo_set)?;
+        block.validate_unsafe(&mut self.utxo_set)?;
 
         self.update_ui_balance()?;
         Ok(())
@@ -137,11 +141,12 @@ impl NetworkController {
     }
 
     fn read_block_from_node(&mut self, block: Block) -> io::Result<()> {
-        self.read_block(block.clone())?;
+        if self.read_block(block.clone()).is_err() {
+            return Ok(()); // ignore invalid blocks
+        }
 
         block.save_to_file("tmp/blocks_backup.dat")?;
         self.blocks.insert(block.hash(), block);
-
         Ok(())
     }
 
@@ -422,8 +427,7 @@ impl OuterNetworkController {
         let handle = thread::spawn(move || -> io::Result<()> {
             loop {
                 let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
-                match node_receiver.recv().map_err(to_io_err)? {
-                    // closes all threads if it fails to read from channel
+                if let Err(result) = match node_receiver.recv().map_err(to_io_err)? {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers)
                     }
@@ -438,12 +442,14 @@ impl OuterNetworkController {
                     (peer_addr, Message::Ping(nonce)) => {
                         Self::handle_node_ping_message(t_inner, peer_addr, nonce)
                     }
-
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,
                         "Received unsupported message",
                     )),
-                }?;
+                } {
+                    // closes all threads if it fails to read from channel
+                    println!("Result: {:?}", result);
+                }
             }
         });
         Ok(handle)
