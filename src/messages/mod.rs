@@ -51,12 +51,13 @@ impl std::fmt::Display for HashId {
             "0x{}",
             self.hash
                 .iter()
-                .map(|num| format!("{:x}", num))
+                .map(|num| format!("{:02x}", num))
                 .collect::<Vec<String>>()
                 .join("")
         )
     }
 }
+
 struct HashIdIter<'a> {
     inner: std::slice::Iter<'a, u8>,
 }
@@ -166,7 +167,7 @@ pub trait Serialize {
     /// Builds message appending header with optional payload
     /// https://developer.bitcoin.org/reference/p2p_networking.html#message-headers
     fn build_message(&self, command: &str, payload: Option<Vec<u8>>) -> io::Result<Vec<u8>> {
-        let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes(); // SET TO ENV
+        let magic_value: [u8; 4] = 0x0b110907u32.to_be_bytes(); // PENDING: read from config
         let mut payload_size: [u8; 4] = 0_i32.to_le_bytes();
 
         let mut checksum: [u8; 32] = [0; 32];

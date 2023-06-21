@@ -15,7 +15,7 @@ use crate::utility::{double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::Hash;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
@@ -25,16 +25,7 @@ use crate::interface::{update_ui_label, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::thread;
-pub struct NetworkController {
-    headers: HashMap<HashId, BlockHeader>,
-    tallest_header: HashId,
-    blocks: BlockSet,
-    utxo_set: UtxoSet,
-    nodes: NodeController,
-    ui_sender: Sender<GtkMessage>,
-    wallet: Wallet,
-}
+use std::thread::{self, JoinHandle};
 
 pub enum TransactionRole {
     Receiver,
@@ -46,6 +37,16 @@ pub struct TransactionDisplayInfo {
     pub(crate) date: String,
     pub(crate) amount: u64,
     pub(crate) hash: HashId,
+}
+
+pub struct NetworkController {
+    headers: HashMap<HashId, BlockHeader>,
+    tallest_header: HashId,
+    blocks: BlockSet,
+    utxo_set: UtxoSet,
+    nodes: NodeController,
+    ui_sender: Sender<GtkMessage>,
+    wallet: Wallet,
 }
 
 impl NetworkController {
@@ -183,8 +184,9 @@ impl NetworkController {
         // store headers in hashmap, consuming headers
         let headers_hashmap = into_hashmap(headers.block_headers);
         for (header_hash, header) in headers_hashmap {
-            if self.headers.insert(header_hash, header).is_none() {
+            if let Vacant(entry) = self.headers.entry(header_hash) {
                 header.save_to_file("tmp/headers_backup.dat")?;
+                entry.insert(header);
             }
         }
         if self.headers.len() == previous_header_count {
@@ -198,7 +200,7 @@ impl NetworkController {
             VERBOSE,
         );
         // request next headers, and blocks for recieved headers
-        self.tallest_header = last_header; // last to get doesn't have to be tallest -- check this
+        self.tallest_header = last_header;
         if is_paginated {
             self.request_headers(self.tallest_header)?;
         }
@@ -253,7 +255,6 @@ impl NetworkController {
         let mut to_send = Vec::new();
         to_send.extend_from_slice(&message_header.serialize()?);
         to_send.extend_from_slice(&payload);
-
         self.nodes.send_to_specific(&peer_addr, &to_send)?;
         Ok(())
     }
@@ -416,12 +417,13 @@ impl OuterNetworkController {
     fn recv_node_messages(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
-    ) -> io::Result<()> {
+    ) -> io::Result<JoinHandle<io::Result<()>>> {
         let inner = self.inner.clone();
-        thread::spawn(move || -> io::Result<()> {
+        let handle = thread::spawn(move || -> io::Result<()> {
             loop {
                 let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
                 match node_receiver.recv().map_err(to_io_err)? {
+                    // closes all threads if it fails to read from channel
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers)
                     }
@@ -444,7 +446,7 @@ impl OuterNetworkController {
                 }?;
             }
         });
-        Ok(())
+        Ok(handle)
     }
 
     fn req_headers_periodically(&self) -> io::Result<()> {
