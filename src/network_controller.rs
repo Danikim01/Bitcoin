@@ -417,13 +417,18 @@ impl OuterNetworkController {
                     (peer_addr, Message::Ping(nonce)) => {
                         Self::handle_node_ping_message(t_inner, peer_addr, nonce)
                     }
+
                     _ => Err(io::Error::new(
                         io::ErrorKind::Other,
                         "Received unsupported message",
                     )),
                 } {
                     // closes all threads if it fails to read from channel
-                    println!("Result: {:?}", result);
+                    println!(
+                        "Network controller died due to unhandled error: {:?}",
+                        result
+                    );
+                    return Err(result);
                 }
             }
         });

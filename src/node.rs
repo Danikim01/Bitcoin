@@ -118,6 +118,7 @@ impl Listener {
 #[derive(Debug)]
 pub struct Node {
     pub stream: TcpStream,
+    pub address: SocketAddr,
     _listener: JoinHandle<io::Result<()>>,
 }
 
@@ -126,7 +127,7 @@ impl Node {
         stream: TcpStream,
         listener: JoinHandle<io::Result<()>>,
         ui_sender: Sender<GtkMessage>,
-    ) -> Self {
+    ) -> io::Result<Self> {
         let message = &format!("MAIN: Established connection with node: {:?}", stream) as &str;
         log(message, VERBOSE);
 
@@ -135,11 +136,13 @@ impl Node {
             "status_bar".to_string(),
             message.to_string(),
         )));
+        let address = stream.peer_addr()?;
 
-        Self {
+        Ok(Self {
             stream,
+            address,
             _listener: listener,
-        }
+        })
     }
 
     fn spawn(
@@ -149,7 +152,7 @@ impl Node {
     ) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
         let handle = thread::spawn(move || listener.log_listen());
-        Ok(Self::new(stream, handle, ui_sender))
+        Self::new(stream, handle, ui_sender)
     }
 
     fn _is_alive(&mut self) -> bool {
@@ -174,11 +177,10 @@ impl Node {
                 "Ipv6 is not supported",
             ));
         }
-        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
+        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(20, 0))?; // 20 seconds timeout
         Node::handshake(&mut stream)?;
-        let peer_addr: SocketAddr = stream.peer_addr()?;
         let node = Node::spawn(stream, writer_channel, ui_sender)?;
-        Ok((peer_addr, node))
+        Ok((node.address, node))
     }
 
     fn handshake(stream: &mut TcpStream) -> io::Result<()> {
@@ -216,9 +218,5 @@ impl Node {
         self.stream.write_all(payload)?;
         self.stream.flush()?;
         Ok(())
-    }
-
-    pub fn get_addr(&self) -> io::Result<SocketAddr> {
-        self.stream.peer_addr()
     }
 }
