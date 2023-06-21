@@ -36,12 +36,12 @@ pub struct NetworkController {
     wallet: Wallet,
 }
 
-pub enum TransactionRole{
+pub enum TransactionRole {
     Receiver,
-    Sender
+    Sender,
 }
 
-pub struct TransactionDisplayInfo{
+pub struct TransactionDisplayInfo {
     pub(crate) role: TransactionRole,
     pub(crate) date: String,
     pub(crate) amount: u64,
@@ -247,30 +247,26 @@ impl NetworkController {
         Ok(())
     }
 
+    fn generate_all_transactions(&mut self) -> Vec<TransactionDisplayInfo> {
+        let mut transactions = vec![];
 
-
-
-    fn generate_all_transactions(&mut self) -> Vec< TransactionDisplayInfo >{
-        let mut transactions = vec!{};
-
-
-        for (_,block) in &self.blocks{
-            for tx in &block.txns{
-                if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"){
-                    let transaction_info: TransactionDisplayInfo = tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", &self.utxo_set);
+        for (_, block) in &self.blocks {
+            for tx in &block.txns {
+                if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX") {
+                    let transaction_info: TransactionDisplayInfo = tx
+                        .transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", &self.utxo_set);
                     transactions.push(transaction_info);
                 }
-
             }
         }
 
-        return transactions
+        return transactions;
     }
 
     pub fn generate_transaction(&mut self, details: TransactionInfo) -> io::Result<()> {
         let tx: RawTransaction = self
             .wallet
-            .generate_transaction(&mut self.utxo_set, details)?;
+            .generate_transaction(&mut self.utxo_set, details.clone())?;
 
         // broadcast tx
         let tx_hash = double_hash(&tx.serialize()).to_byte_array();
@@ -289,7 +285,7 @@ impl NetworkController {
         // send bytes to all
         self.nodes.send_to_all(&bytes)?;
 
-        Ok(())
+        Ok(details)
     }
 
     pub fn start_sync(&mut self) -> io::Result<()> {
@@ -338,8 +334,12 @@ impl OuterNetworkController {
         transaction_info: TransactionInfo,
     ) -> io::Result<()> {
         let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
-        inner_lock.generate_transaction(transaction_info)?;
-        Ok(())
+        let result: Result<TransactionInfo, io::Error> =
+            inner_lock.generate_transaction(transaction_info);
+        inner_lock
+            .ui_sender
+            .send(GtkMessage::TransactionInfo(result))
+            .map_err(to_io_err)
     }
 
     fn recv_ui_messages(&self, ui_receiver: Receiver<ModelRequest>) -> io::Result<()> {

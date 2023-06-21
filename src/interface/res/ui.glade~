@@ -2,6 +2,46 @@
 <!-- Generated with glade 3.38.2 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
+  <object class="GtkDialog" id="dialog">
+    <property name="can-focus">False</property>
+    <property name="type-hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can-focus">False</property>
+            <property name="layout-style">end</property>
+            <child>
+              <placeholder/>
+            </child>
+            <child>
+              <placeholder/>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel" id="dialog_label">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="label" translatable="yes">label</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
   <object class="GtkWindow" id="main_window">
     <property name="width-request">950</property>
     <property name="height-request">700</property>
@@ -317,7 +357,7 @@
     <property name="halign">center</property>
     <property name="valign">start</property>
     <property name="margin-top">2</property>
-    <property name="column-spacing">2</property>
+    <property name="column-spacing">6</property>
     <property name="column-homogeneous">True</property>
     <child>
       <object class="GtkBox" id="overview_left_col">
@@ -329,9 +369,13 @@
           <object class="GtkLabel" id="balance_id">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
+            <property name="ypad">12</property>
             <property name="label" translatable="yes">Balances</property>
-            <property name="use-markup">True</property>
             <property name="justify">fill</property>
+            <property name="xalign">0</property>
+            <attributes>
+              <attribute name="weight" value="bold"/>
+            </attributes>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -349,7 +393,7 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Available:</property>
                 <property name="width-chars">20</property>
-                <property name="xalign">0.009999999776482582</property>
+                <property name="xalign">0</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -366,11 +410,30 @@
                 <property name="width-chars">0</property>
                 <property name="max-width-chars">0</property>
                 <property name="xalign">0.99000000953674316</property>
+                <attributes>
+                  <attribute name="weight" value="bold"/>
+                </attributes>
               </object>
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
                 <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="xpad">2</property>
+                <property name="label" translatable="yes">tBTC</property>
+                <attributes>
+                  <attribute name="weight" value="semibold"/>
+                </attributes>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
               </packing>
             </child>
           </object>
@@ -391,7 +454,7 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Pending:</property>
                 <property name="width-chars">20</property>
-                <property name="xalign">0.009999999776482582</property>
+                <property name="xalign">2.2351741291171123e-10</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -408,11 +471,30 @@
                 <property name="width-chars">0</property>
                 <property name="max-width-chars">0</property>
                 <property name="xalign">0.99000000953674316</property>
+                <attributes>
+                  <attribute name="weight" value="bold"/>
+                </attributes>
               </object>
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
                 <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="xpad">2</property>
+                <property name="label" translatable="yes">tBTC</property>
+                <attributes>
+                  <attribute name="weight" value="semibold"/>
+                </attributes>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
               </packing>
             </child>
           </object>
@@ -433,7 +515,10 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Total:</property>
                 <property name="width-chars">20</property>
-                <property name="xalign">0.009999999776482582</property>
+                <property name="xalign">2.2351741291171123e-10</property>
+                <attributes>
+                  <attribute name="weight" value="bold"/>
+                </attributes>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -450,11 +535,30 @@
                 <property name="width-chars">0</property>
                 <property name="max-width-chars">0</property>
                 <property name="xalign">0.99000000953674316</property>
+                <attributes>
+                  <attribute name="weight" value="bold"/>
+                </attributes>
               </object>
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
                 <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="xpad">2</property>
+                <property name="label" translatable="yes">tBTC</property>
+                <attributes>
+                  <attribute name="weight" value="semibold"/>
+                </attributes>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
               </packing>
             </child>
           </object>
@@ -479,7 +583,12 @@
           <object class="GtkLabel" id="recent_transactions_id">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
+            <property name="ypad">12</property>
             <property name="label" translatable="yes">Recent transactions</property>
+            <property name="xalign">2.2351741291171123e-10</property>
+            <attributes>
+              <attribute name="weight" value="bold"/>
+            </attributes>
           </object>
           <packing>
             <property name="expand">False</property>

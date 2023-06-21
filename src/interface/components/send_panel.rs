@@ -11,7 +11,7 @@ use std::sync::mpsc::Sender;
 
 use gtk::prelude::Cast;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransactionInfo {
     pub recipients: Vec<RecipientDetails>,
     pub fee: u64,
@@ -74,6 +74,7 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
         };
 
         let transaction_info = TransactionInfo { recipients, fee };
+
         match sender.send(ModelRequest::GenerateTransaction(transaction_info)) {
             Ok(_) => (),
             Err(_) => println!("could not send transaction details to model"),

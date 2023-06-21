@@ -1,17 +1,18 @@
 use crate::interface::components::send_panel::TransactionInfo;
+use crate::utility::to_io_err;
 use gtk::glib;
 use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
 use gtk::prelude::*;
+use gtk::{Application, Builder};
 use std::io;
 use std::sync::mpsc::Sender;
-
-use crate::utility::to_io_err;
 
 pub mod components;
 
 pub enum GtkMessage {
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
+    TransactionInfo(Result<TransactionInfo, io::Error>),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -63,6 +64,26 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                     builder_aux.object("balance_total_val").unwrap();
                 balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
             }
+            GtkMessage::TransactionInfo(result) => match result {
+                Ok(info) => {
+                    let dialog: gtk::MessageDialog = builder.clone().object("dialog").unwrap();
+                    let label: gtk::Label = builder.clone().object("dialog_label").unwrap();
+                    label.set_text(&format!("Transaction sent\ndetails:{:?}", info));
+                    dialog.set_modal(true);
+                    dialog.set_title("Transaction sent succesfully");
+                    dialog.run();
+                    dialog.close();
+                }
+                Err(e) => {
+                    let dialog: gtk::MessageDialog = builder.clone().object("dialog").unwrap();
+                    let label: gtk::Label = builder.clone().object("dialog_label").unwrap();
+                    label.set_text(&format!("Transaction error\ndetails:{:?}", e));
+                    dialog.set_modal(true);
+                    dialog.set_title("Transaction error");
+                    dialog.run();
+                    dialog.close();
+                }
+            },
         }
 
         // Returning false here would close the receiver
