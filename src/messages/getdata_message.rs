@@ -1,7 +1,7 @@
 use std::io::{self, Cursor};
 
 use crate::messages::utility::StreamRead;
-use crate::messages::{BlockHeader, Hashable, Serialize};
+use crate::messages::{BlockHeader, HashId, Hashable, Serialize};
 
 use super::utility::read_hash;
 use super::Inventories;
@@ -55,11 +55,11 @@ impl InvType {
 #[derive(Debug, Clone)]
 pub struct Inventory {
     pub inv_type: InvType,
-    pub hash: [u8; 32],
+    pub hash: HashId,
 }
 
 impl Inventory {
-    pub fn new(inv_type: InvType, hash: [u8; 32]) -> Self {
+    pub fn new(inv_type: InvType, hash: HashId) -> Self {
         Self { inv_type, hash }
     }
 
@@ -69,7 +69,7 @@ impl Inventory {
         // let mut hash_copy = self.hash;
         // hash_copy.reverse();
         // bytes.extend(&hash_copy);
-        bytes.extend(&self.hash);
+        bytes.extend(self.hash.iter());
         Ok(bytes)
     }
 }
@@ -149,7 +149,7 @@ impl Serialize for GetData {
         let mut inventories: Inventories = Vec::new();
         for _ in 0..count {
             let inv_type = i32::from_le_stream(&mut cursor)?;
-            let hash = read_hash(&mut cursor)?;
+            let hash = HashId::new(read_hash(&mut cursor)?);
 
             inventories.push(Inventory {
                 inv_type: InvType::from_u32(inv_type as u32)?,

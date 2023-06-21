@@ -89,7 +89,7 @@ impl Block {
         let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes); // clone txn_hashes if merkle proofing
         let root_hash = merkle_tree.get_root();
 
-        match self.block_header.merkle_root_hash == root_hash.to_byte_array() {
+        match self.block_header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
             true => {
                 // println!("Merkle root is valid!");
                 Ok(())
