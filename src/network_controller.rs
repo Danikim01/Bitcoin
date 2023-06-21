@@ -263,7 +263,10 @@ impl NetworkController {
         return transactions;
     }
 
-    pub fn generate_transaction(&mut self, details: TransactionInfo) -> io::Result<()> {
+    pub fn generate_transaction(
+        &mut self,
+        details: TransactionInfo,
+    ) -> io::Result<(TransactionInfo)> {
         let tx: RawTransaction = self
             .wallet
             .generate_transaction(&mut self.utxo_set, details.clone())?;
