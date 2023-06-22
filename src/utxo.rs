@@ -90,7 +90,9 @@ impl WalletUtxo {
             return;
         }
 
-        self.pending.utxos.remove(&utxo_id);
+        if let Some(pending) = self.pending.utxos.remove(&utxo_id) {
+            // notify ui that the utxo is no longer pending
+        }
         self.utxos.insert(utxo_id, utxo);
     }
 
