@@ -1,10 +1,11 @@
-use crate::config::Config;
 use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
 use crate::messages::utility::{read_from_varint, StreamRead};
 use crate::messages::{Message, Serialize, Services};
 use crate::utility::actual_timestamp_or_default;
 use std::io::{self, Cursor, Read};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+
+use super::constants;
 
 #[derive(Debug, Clone)]
 pub struct Version {
@@ -29,13 +30,12 @@ impl Default for Version {
         let version = LATEST_VERSION;
         let services = Services::new(0_u64);
         let timestamp = actual_timestamp_or_default();
-        let config = Config::from_file_or_default();
         let addr_recv_services = 0;
         let addr_recv_ip = Ipv6Addr::LOCALHOST;
-        let addr_recv_port = *config.get_port();
+        let addr_recv_port = constants::config::PORT;
         let _addr_trans_services = 0;
         let addr_trans_ip = Ipv6Addr::LOCALHOST;
-        let addr_trans_port = *config.get_port();
+        let addr_trans_port = constants::config::PORT;
         let nonce = 0;
         let _user_agent = "".to_string();
         let _start_height = 0;
