@@ -19,7 +19,7 @@ impl Logger {
             .expect("Failed to open log file");
         Self {
             log_file: Arc::new(Mutex::new(file)),
-            mode: config.get_log_level(),
+            mode: config.get_log_level().to_owned(),
         }
     }
 

@@ -52,6 +52,7 @@ pub mod config {
     pub const HEADERS_FILE: &str = "tmp/headers.bkp";
     pub const BLOCKS_FILE: &str = "tmp/blocks.bkp";
     pub const TCP_TIMEOUT: u64 = 30;
+    pub const START_TIMESTAMP: u32 = 1681095600;
     pub const PORT: u16 = 8333;
     pub const MAGIC: [u8; 4] = [0x0b, 0x11, 0x09, 0x07];
 }

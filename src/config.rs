@@ -1,5 +1,5 @@
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, TCP_TIMEOUT,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, TCP_TIMEOUT, START_TIMESTAMP
 };
 use std::fs::File;
 use std::io;
@@ -30,10 +30,10 @@ impl Config {
         Self {
             seed,
             start_timestamp,
-            log_level,    //
-            log_file,     //
-            headers_file, //
-            blocks_file,  //
+            log_level,
+            log_file,
+            headers_file,
+            blocks_file,
             tcp_timeout_seconds,
         }
     }
@@ -58,12 +58,12 @@ impl Config {
         self.start_timestamp
     }
 
-    pub fn get_hostname(&self) -> String {
-        self.seed.clone()
+    pub fn get_hostname(&self) -> &str {
+        &self.seed
     }
 
-    pub fn get_log_level(&self) -> String {
-        self.log_level.clone()
+    pub fn get_log_level(&self) -> &str {
+        &self.log_level
     }
 
     pub fn get_log_file(&self) -> &str {
@@ -83,17 +83,18 @@ impl Config {
         let reader = BufReader::new(file);
 
         let mut config = Config::default();
-        for (index, line) in reader.lines().enumerate() {
-            let line = line?;
-            match index {
-                0 => config.seed = line,
-                1 => config.start_timestamp = line.parse().unwrap_or(1681095600),
-                2 => config.log_level = line,
-                3 => config.log_file = line,
-                4 => config.headers_file = line,
-                5 => config.blocks_file = line,
-                6 => config.tcp_timeout_seconds = line.parse().unwrap_or(TCP_TIMEOUT),
-                _ => break,
+        for line in reader.lines() {
+            if let Some((key, value)) = line?.split_once('=') {
+                match key {
+                    "seed" => config.seed = value.to_owned(),
+                    "start_timestamp" => config.start_timestamp = value.parse().unwrap_or(START_TIMESTAMP),
+                    "log_level" => config.log_level = value.to_owned(),
+                    "log_file" => config.log_file = value.to_owned(),
+                    "headers_file" => config.headers_file = value.to_owned(),
+                    "blocks_file" => config.blocks_file = value.to_owned(),
+                    "tcp_timeout_seconds" => config.tcp_timeout_seconds = value.parse().unwrap_or(TCP_TIMEOUT),
+                    _ => continue,
+                }
             }
         }
         Ok(config)
