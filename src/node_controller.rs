@@ -16,8 +16,8 @@ pub struct NodeController {
     nodes: HashMap<SocketAddr, Node>,
 }
 
-fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
-    let node_discovery_hostname = Config::from_file()?.get_hostname();
+fn find_nodes(config: &Config) -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
+    let node_discovery_hostname = config.get_hostname();
     node_discovery_hostname.to_socket_addrs()
 }
 
@@ -25,11 +25,17 @@ impl NodeController {
     pub fn connect_to_peers(
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
         sender: Sender<GtkMessage>,
+        config: Config,
     ) -> Result<Self, io::Error> {
-        let node_addresses = find_nodes()?;
+        let node_addresses = find_nodes(&config)?;
         let mut nodes = HashMap::new();
         for node_addr in node_addresses {
-            match Node::try_from_addr(node_addr, writer_end.clone(), sender.clone()) {
+            match Node::try_from_addr(
+                node_addr,
+                writer_end.clone(),
+                sender.clone(),
+                config.clone(),
+            ) {
                 Ok((peer_addr, node)) => {
                     nodes.insert(peer_addr, node);
                     // break; // uncomment this to use a single node as peer
@@ -51,7 +57,7 @@ impl NodeController {
         Ok(())
     }
 
-    pub fn send_to_any(&mut self, payload: &Vec<u8>) -> io::Result<()> {
+    pub fn send_to_any(&mut self, payload: &Vec<u8>, config: &Config) -> io::Result<()> {
         let random_number: usize = random();
         let node_number = random_number % self.nodes.len();
         let random_node = self.nodes.values_mut().nth(node_number).unwrap();
@@ -65,14 +71,20 @@ impl NodeController {
                         e
                     ) as &str,
                     QUIET,
+                    config,
                 );
                 self.kill_node(node_address)?;
-                self.send_to_any(payload)
+                self.send_to_any(payload, config)
             }
         }
     }
 
-    pub fn send_to_specific(&mut self, peer: &SocketAddr, payload: &[u8]) -> io::Result<()> {
+    pub fn send_to_specific(
+        &mut self,
+        peer: &SocketAddr,
+        payload: &[u8],
+        config: &Config,
+    ) -> io::Result<()> {
         let node = match self.nodes.get_mut(peer) {
             Some(n) => n,
             None => {
@@ -89,6 +101,7 @@ impl NodeController {
                 log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
+                    config,
                 );
                 self.kill_node(node_address)?;
                 Err(io::Error::new(
@@ -99,7 +112,7 @@ impl NodeController {
         }
     }
 
-    pub fn send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
+    pub fn send_to_all(&mut self, payload: &[u8], config: &Config) -> io::Result<()> {
         let mut alive_nodes: Vec<SocketAddr> = vec![];
         for node in self.nodes.values_mut() {
             match node.send(payload) {
@@ -109,6 +122,7 @@ impl NodeController {
                 Err(e) => log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
+                    config,
                 ),
             }
         }

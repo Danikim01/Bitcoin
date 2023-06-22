@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::logger::log;
 use crate::messages::utility::StreamRead;
 use crate::messages::GetData;
@@ -32,14 +33,15 @@ impl Listener {
         }
     }
 
-    fn log_listen(mut self) -> io::Result<()> {
+    fn log_listen(mut self, config: &Config) -> io::Result<()> {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                log(&format!("{:?}", e) as &str, VERBOSE);
+                log(&format!("{:?}", e) as &str, VERBOSE, config);
                 log(
                     &format!("Listener for connection {:?} died.", self.stream) as &str,
                     VERBOSE,
+                    config,
                 );
                 // self.listen()
                 Err(e)
@@ -127,9 +129,10 @@ impl Node {
         stream: TcpStream,
         listener: JoinHandle<io::Result<()>>,
         ui_sender: Sender<GtkMessage>,
+        config: &Config,
     ) -> io::Result<Self> {
         let message = &format!("MAIN: Established connection with node: {:?}", stream) as &str;
-        log(message, VERBOSE);
+        log(message, VERBOSE, config);
 
         // update ui // handle error
         let _ = ui_sender.send(GtkMessage::UpdateLabel((
@@ -149,17 +152,19 @@ impl Node {
         stream: TcpStream,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
+        config: Config,
     ) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
-        let handle = thread::spawn(move || listener.log_listen());
-        Self::new(stream, handle, ui_sender)
+        let config_clone = config.clone();
+        let handle = thread::spawn(move || listener.log_listen(&config));
+        Self::new(stream, handle, ui_sender, &config_clone)
     }
 
-    fn _is_alive(&mut self) -> bool {
+    fn _is_alive(&mut self, config: &Config) -> bool {
         let mut buf = [0u8; 1];
-        log("is_alive: peeking", VERBOSE);
+        log("is_alive: peeking", VERBOSE, config);
         let bytes_read = self.stream.peek(&mut buf);
-        log("is_alive: done peeking", VERBOSE);
+        log("is_alive: done peeking", VERBOSE, config);
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,
@@ -170,6 +175,7 @@ impl Node {
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
+        config: Config,
     ) -> io::Result<(SocketAddr, Node)> {
         if !node_addr.is_ipv4() {
             return Err(io::Error::new(
@@ -177,9 +183,10 @@ impl Node {
                 "Ipv6 is not supported",
             ));
         }
-        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(20, 0))?; // 20 seconds timeout
+        let tcp_timeout = config.get_tcp_timeout();
+        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(tcp_timeout, 0))?;
         Node::handshake(&mut stream)?;
-        let node = Node::spawn(stream, writer_channel, ui_sender)?;
+        let node = Node::spawn(stream, writer_channel, ui_sender, config)?;
         Ok((node.address, node))
     }
 

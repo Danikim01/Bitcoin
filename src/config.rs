@@ -1,41 +1,57 @@
-use crate::messages::constants::config::PORT;
-use crate::messages::constants::config::{PATH, QUIET};
+use crate::messages::constants::config::{
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, TCP_TIMEOUT,
+};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 
+#[derive(Clone)]
 pub struct Config {
     seed: String,
-    port: u16,
     start_timestamp: u32,
-    logger_mode: String,
+    log_level: String,
+    log_file: String,
+    headers_file: String,
+    blocks_file: String,
+    tcp_timeout_seconds: u64,
 }
 
 impl Config {
-    pub fn _new(seed: String, port: u16, start_timestamp: u32, logger_mode: String) -> Config {
-        Config {
+    pub fn new(
+        seed: String,
+        start_timestamp: u32,
+        log_level: String,
+        log_file: String,
+        headers_file: String,
+        blocks_file: String,
+        tcp_timeout_seconds: u64,
+    ) -> Self {
+        Self {
             seed,
-            port,
             start_timestamp,
-            logger_mode,
+            log_level,    //
+            log_file,     //
+            headers_file, //
+            blocks_file,  //
+            tcp_timeout_seconds,
         }
     }
 
-    pub fn default() -> Config {
-        Config {
-            seed: "".to_string(),
-            port: "".to_string().parse().unwrap_or(PORT),
-            start_timestamp: 1,
-            logger_mode: QUIET.to_string(),
-        }
+    pub fn default() -> Self {
+        Self::new(
+            "".to_owned() + ":" + &format!("{}", PORT),
+            1,
+            QUIET.to_string(),
+            LOG_FILE.to_string(),
+            HEADERS_FILE.to_string(),
+            BLOCKS_FILE.to_string(),
+            TCP_TIMEOUT,
+        )
     }
 
-    pub fn _get_seed(&self) -> &String {
-        &self.seed
-    }
-
-    pub fn get_port(&self) -> &u16 {
-        &self.port
+    pub fn get_tcp_timeout(&self) -> u64 {
+        self.tcp_timeout_seconds
     }
 
     pub fn get_start_timestamp(&self) -> u32 {
@@ -43,15 +59,27 @@ impl Config {
     }
 
     pub fn get_hostname(&self) -> String {
-        self.seed.to_owned() + ":" + &self.port.to_string()
+        self.seed.clone()
     }
 
-    pub fn get_logger_mode(&self) -> String {
-        self.logger_mode.clone()
+    pub fn get_log_level(&self) -> String {
+        self.log_level.clone()
     }
 
-    pub fn from_file() -> Result<Config, io::Error> {
-        let file = File::open(PATH)?;
+    pub fn get_log_file(&self) -> &str {
+        &self.log_file
+    }
+
+    pub fn get_headers_file(&self) -> &str {
+        &self.headers_file
+    }
+
+    pub fn get_blocks_file(&self) -> &str {
+        &self.blocks_file
+    }
+
+    pub fn from_file(path: PathBuf) -> Result<Config, io::Error> {
+        let file = File::open(path)?;
         let reader = BufReader::new(file);
 
         let mut config = Config::default();
@@ -59,19 +87,15 @@ impl Config {
             let line = line?;
             match index {
                 0 => config.seed = line,
-                1 => config.port = line.parse().unwrap_or(PORT),
-                2 => config.start_timestamp = line.parse().unwrap_or(1681095600),
-                _ => config.logger_mode = line,
+                1 => config.start_timestamp = line.parse().unwrap_or(1681095600),
+                2 => config.log_level = line,
+                3 => config.log_file = line,
+                4 => config.headers_file = line,
+                5 => config.blocks_file = line,
+                6 => config.tcp_timeout_seconds = line.parse().unwrap_or(TCP_TIMEOUT),
+                _ => break,
             }
         }
-
         Ok(config)
-    }
-
-    pub fn from_file_or_default() -> Config {
-        match Config::from_file() {
-            Ok(config) => config,
-            Err(..) => Config::default(),
-        }
     }
 }

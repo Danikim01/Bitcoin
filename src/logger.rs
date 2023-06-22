@@ -11,15 +11,15 @@ struct Logger {
 }
 
 impl Logger {
-    fn new() -> Logger {
+    fn new(config: &Config) -> Self {
         let file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open("tmp/log.txt")
+            .open(config.get_log_file())
             .expect("Failed to open log file");
-        Logger {
+        Self {
             log_file: Arc::new(Mutex::new(file)),
-            mode: Config::from_file_or_default().get_logger_mode(),
+            mode: config.get_log_level(),
         }
     }
 
@@ -59,20 +59,20 @@ impl LazyLogger {
         }
     }
 
-    fn get_logger(&mut self) -> &Logger {
+    fn get_logger(&mut self, config: &Config) -> &Logger {
         self.once.call_once(|| {
-            let logger = Logger::new();
+            let logger = Logger::new(config);
             self.logger = Some(logger);
         });
         self.logger.as_ref().unwrap()
     }
 }
 
-pub fn log(message: &str, mode: &str) {
+pub fn log(message: &str, level: &str, config: &Config) {
     let mut lazy_logger = LazyLogger::new();
-    let logger = lazy_logger.get_logger();
+    let logger = lazy_logger.get_logger(config);
 
-    match mode {
+    match level {
         VERBOSE => logger.log_verbose(message),
         _ => logger.log_quiet(message),
     }
