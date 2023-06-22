@@ -47,8 +47,6 @@ impl Wallet {
         let secret_key =
             "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string();
-        // let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"; // NUESTRA
-        // let address = "mpTmaREX6juSwdcVGPyVx74GxWJ4AKQX3u"; // DE OTRO GRUPO
         Self {
             secret_key,
             address,
