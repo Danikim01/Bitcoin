@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::logger::log;
 use crate::messages::constants::config::QUIET;
 use crate::messages::Message;
 use crate::node::Node;
@@ -65,13 +64,12 @@ impl NodeController {
         match &mut random_node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
-                log(
+                config.get_logger().log(
                     &format!(
                         "Error writing to ANY TCPStream: {:?}, Killing connection and retrying.",
                         e
                     ) as &str,
                     QUIET,
-                    config,
                 );
                 self.kill_node(node_address)?;
                 self.send_to_any(payload, config)
@@ -98,10 +96,9 @@ impl NodeController {
         match &mut node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
-                log(
+                config.get_logger().log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
-                    config,
                 );
                 self.kill_node(node_address)?;
                 Err(io::Error::new(
@@ -119,10 +116,9 @@ impl NodeController {
                 Ok(_) => {
                     alive_nodes.push(node.address);
                 }
-                Err(e) => log(
+                Err(e) => config.get_logger().log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
-                    config,
                 ),
             }
         }

@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::logger::log;
 use crate::messages::utility::StreamRead;
 use crate::messages::GetData;
 use crate::messages::{
@@ -37,13 +36,11 @@ impl Listener {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                log(&format!("{:?}", e) as &str, VERBOSE, config);
-                log(
+                config.get_logger().log(&format!("{:?}", e) as &str, VERBOSE);
+                config.get_logger().log(
                     &format!("Listener for connection {:?} died.", self.stream) as &str,
                     VERBOSE,
-                    config,
                 );
-                // self.listen()
                 Err(e)
             }
         }
@@ -131,8 +128,8 @@ impl Node {
         ui_sender: Sender<GtkMessage>,
         config: &Config,
     ) -> io::Result<Self> {
-        let message = &format!("MAIN: Established connection with node: {:?}", stream) as &str;
-        log(message, VERBOSE, config);
+        let message = &format!("Established connection with node: {:?}", stream) as &str;
+        config.get_logger().log(message, VERBOSE);
 
         // update ui // handle error
         let _ = ui_sender.send(GtkMessage::UpdateLabel((
@@ -162,9 +159,9 @@ impl Node {
 
     fn _is_alive(&mut self, config: &Config) -> bool {
         let mut buf = [0u8; 1];
-        log("is_alive: peeking", VERBOSE, config);
+        config.get_logger().log("is_alive: peeking", VERBOSE);
         let bytes_read = self.stream.peek(&mut buf);
-        log("is_alive: done peeking", VERBOSE, config);
+        config.get_logger().log("is_alive: done peeking", VERBOSE);
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,

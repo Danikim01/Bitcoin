@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::logger::log;
 use crate::messages::constants::{
     commands::{PONG, TX},
     config::{MAGIC, VERBOSE},
@@ -135,7 +134,7 @@ impl NetworkController {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
             self.nodes.send_to_any(&get_data.serialize()?, config)?;
         }
-        log("Requesting blocks, sent GetData message.", VERBOSE, config);
+        config.get_logger().log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
 
@@ -177,13 +176,12 @@ impl NetworkController {
         if self.headers.len() == previous_header_count {
             return Ok(());
         }
-        log(
+        config.get_logger().log(
             &format!(
                 "Received header. New header count: {:?}",
                 self.headers.len()
             ),
             VERBOSE,
-            config,
         );
         // request next headers, and blocks for recieved headers
         self.tallest_header = last_header;

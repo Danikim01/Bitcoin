@@ -6,7 +6,7 @@ use std::process::exit;
 fn help() {
     eprintln!(
         "Usage:
-`$ ./nodo-rustico /path/to/nodo.conf`
+`$ ./nodo-rustico /path/to/node.conf`
 "
     );
 }
