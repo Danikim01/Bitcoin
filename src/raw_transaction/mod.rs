@@ -50,6 +50,7 @@ fn pub_key_from_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
     Ok(public_key.serialize().to_vec())
 }
 
+/// A struct that represents a raw transaction (includes version, inputs, outputs, and locktime)
 #[derive(Debug, Clone)]
 pub struct RawTransaction {
     pub version: u32,
@@ -60,6 +61,7 @@ pub struct RawTransaction {
     pub lock_time: u32,
 }
 
+/// Enum that represents the state of a transaction (pending or in a block)
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransactionOrigin {
     Block,
@@ -117,6 +119,7 @@ impl RawTransaction {
         Ok(bytes)
     }
 
+    /// Signs the input at the given index with the given private key
     pub fn sign_input(
         &mut self,
         secret_key: &str,
@@ -143,6 +146,7 @@ impl RawTransaction {
         Ok(())
     }
 
+    /// Checks if any of the inputs is from the given address
     pub fn is_from_address(&self, address: &str) -> bool {
         match &self.tx_in {
             TxInputType::CoinBaseInput(_) => {}
@@ -157,6 +161,7 @@ impl RawTransaction {
         false
     }
 
+    /// Checks if any of the outputs is destined to the given address
     pub fn is_destined_to_address(&self, address: &str) -> bool {
         for txout in &self.tx_out {
             if txout.destined_to(address) {
@@ -166,10 +171,12 @@ impl RawTransaction {
         false
     }
 
+    /// Checks if the given address is involved in the transaction (either as input or output)
     pub fn address_is_involved(&self, address: &str) -> bool {
         self.is_from_address(address) || self.is_destined_to_address(address)
     }
 
+    /// Returns the total output value of the transaction (sum of all output values)
     fn get_total_output_value(&self) -> u64 {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
@@ -179,6 +186,7 @@ impl RawTransaction {
         total_value
     }
 
+    /// Returns the change value for the given address (sum of all output values destined to the address)
     fn get_change_value_for(&self, address: &str) -> u64 {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
@@ -189,12 +197,14 @@ impl RawTransaction {
         total_value
     }
 
+    /// Returns the hash of the transaction
     pub fn get_hash(&self) -> [u8; 32] {
         let bytes = self.serialize();
         let hash = double_hash(&bytes);
         hash.to_byte_array()
     }
 
+    /// Returns the transaction info for the given address
     pub fn transaction_info_for(&self, address: &str) -> TransactionDisplayInfo {
         let mut role = TransactionRole::Sender;
         let mut spent_value = 0;
@@ -215,6 +225,8 @@ impl RawTransaction {
             hash: HashId::new(self.get_hash()),
         };
     }
+    
+    /// Read the coinbase transaction from the given bytes and returns a RawTransaction with only the coinbase input and the outputs
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;
@@ -293,6 +305,7 @@ impl RawTransaction {
         Ok(())
     }
 
+    /// Generates the UTXO for the given transaction and adds it to the given UTXO set
     pub fn generate_utxo(
         &self,
         utxo_set: &mut UtxoSet,
@@ -303,7 +316,7 @@ impl RawTransaction {
 
         Ok(())
     }
-
+    
     fn read_witnesses(cursor: &mut Cursor<&[u8]>, tx_in_count: u64) -> io::Result<()> {
         let mut witnesses = Vec::new();
         for _ in 0..tx_in_count {
@@ -318,6 +331,7 @@ impl RawTransaction {
         Ok(())
     }
 
+    /// Reads the transaction from the given bytes and returns a RawTransaction (supports segwit transactions BIP 144)
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
 
@@ -353,6 +367,7 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
+    /// Reads the given number of transactions from the given bytes and returns a vector of RawTransactions
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
         let mut raw_transactions = vec![];
 
@@ -364,6 +379,7 @@ impl RawTransaction {
         Ok(raw_transactions)
     }
 
+    /// Serializes the transaction into bytes
     pub fn serialize(&self) -> Vec<u8> {
         let mut transaction_bytes = vec![];
         transaction_bytes.extend(self.version.to_le_bytes());

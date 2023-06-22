@@ -10,6 +10,7 @@ use std::sync::mpsc::Sender;
 
 pub mod components;
 
+/// Enum with messages from the interface to the model
 pub enum GtkMessage {
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
@@ -19,6 +20,7 @@ pub enum GtkMessage {
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
 
+/// Enum with requests from the model to the interface
 pub enum ModelRequest {
     GenerateTransaction(TransactionInfo),
 }
@@ -34,6 +36,7 @@ pub fn update_ui_label(
         .map_err(to_io_err)
 }
 
+/// Called from the model, to update the balance label and show the transaction info dialog when the transaction is sent 
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
         match msg {
@@ -107,6 +110,8 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     });
 }
 
+
+/// Initializes the GTK interface
 pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> io::Result<()> {
     if gtk::init().is_err() {
         println!("Failed to initialize GTK.");

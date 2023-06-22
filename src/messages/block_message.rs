@@ -16,6 +16,7 @@ use super::Message;
 
 pub type BlockSet = HashMap<HashId, Block>;
 
+/// A struct that represents a block with a header and  a list of transactions.
 #[derive(Debug, Clone)]
 pub struct Block {
     pub block_header: BlockHeader,
@@ -105,6 +106,8 @@ impl Block {
         }
     }
 
+    /// Validates the block by checking the proof of work, merkle root, and generates utxos from the transactions outputs.
+    /// Adds to the utxo set only if the block is valid.
     pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         let mut utxo_set_snapshot = utxo_set.clone();
 
@@ -120,6 +123,7 @@ impl Block {
         Ok(())
     }
 
+    /// Validates the block by checking the proof of work, merkle root, and generates utxos from the transactions outputs.
     pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block)?;
@@ -131,6 +135,7 @@ impl Block {
         Ok(())
     }
 
+    /// Reads all transactions made from the given address and returns them in a vector of TransactionDisplayInfo.
     pub fn read_transactions_from(&self, address: &str) -> Vec< TransactionDisplayInfo >{
         let mut transactions = vec!{};
 
@@ -145,6 +150,7 @@ impl Block {
         return transactions
     }
 
+    /// Reads all transactions in the file and returns them in a BlockSet.
     pub fn all_from_file(file_name: &str) -> io::Result<BlockSet> {
         let mut block_set: BlockSet = HashMap::new();
 
@@ -177,6 +183,7 @@ impl Block {
         Ok(block_set)
     }
 
+    /// Serialize the block and then save it to the given file.
     pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
         let mut file = OpenOptions::new()
             .write(true)
@@ -193,6 +200,7 @@ impl Block {
         Ok(())
     }
 
+    /// Returns the age of the block in days.
     pub fn get_days_old(&self) -> u64 {
         let current_time = Utc::now().timestamp();
         let block_time = self.block_header.timestamp as i64;

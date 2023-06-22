@@ -12,6 +12,7 @@ use std::sync::mpsc;
 use crate::interface::GtkMessage;
 use gtk::glib::Sender;
 
+/// The NodeController struct is responsible for managing all the nodes and sending messages to them.
 pub struct NodeController {
     nodes: HashMap<SocketAddr, Node>,
 }
@@ -22,6 +23,7 @@ fn find_nodes() -> Result<std::vec::IntoIter<SocketAddr>, io::Error> {
 }
 
 impl NodeController {
+    /// Creates a new NodeController and connects to the peers.
     pub fn connect_to_peers(
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
         sender: Sender<GtkMessage>,
@@ -40,6 +42,7 @@ impl NodeController {
         Ok(Self { nodes })
     }
 
+    /// Kills a node and removes it from the list of nodes given its peer address.
     pub fn kill_node(&mut self, socket_addr: SocketAddr) -> io::Result<()> {
         self.nodes.remove(&socket_addr);
         if self.nodes.is_empty() {
@@ -51,6 +54,7 @@ impl NodeController {
         Ok(())
     }
 
+    /// Sends a message to a random node.
     pub fn send_to_any(&mut self, payload: &Vec<u8>) -> io::Result<()> {
         let random_number: usize = random();
         let node_number = random_number % self.nodes.len();
@@ -72,6 +76,7 @@ impl NodeController {
         }
     }
 
+    /// Sends a message to a specific node given its peer address.
     pub fn send_to_specific(&mut self, peer: &SocketAddr, payload: &[u8]) -> io::Result<()> {
         let node = match self.nodes.get_mut(peer) {
             Some(n) => n,
@@ -99,6 +104,7 @@ impl NodeController {
         }
     }
 
+    /// Broadcasts a message to all the nodes.
     pub fn send_to_all(&mut self, payload: &[u8]) -> io::Result<()> {
         let mut alive_nodes: Vec<SocketAddr> = vec![];
         for node in self.nodes.values_mut() {

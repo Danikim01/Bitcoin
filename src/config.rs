@@ -21,6 +21,7 @@ impl Config {
         }
     }
 
+    /// Returns a default config
     pub fn default() -> Config {
         Config {
             seed: "".to_string(),
@@ -34,22 +35,27 @@ impl Config {
         &self.seed
     }
 
+    /// Returns the port of the config
     pub fn get_port(&self) -> &u16 {
         &self.port
     }
 
+    /// Returns the start timestamp for sync
     pub fn get_start_timestamp(&self) -> u32 {
         self.start_timestamp
     }
 
+    /// Returns the hostname of the config
     pub fn get_hostname(&self) -> String {
         self.seed.to_owned() + ":" + &self.port.to_string()
     }
 
+    /// Returns the logger mode of the config (quiet, verbose)
     pub fn get_logger_mode(&self) -> String {
         self.logger_mode.clone()
     }
 
+    /// Reads the config from a file
     pub fn from_file() -> Result<Config, io::Error> {
         let file = File::open(PATH)?;
         let reader = BufReader::new(file);
@@ -68,6 +74,7 @@ impl Config {
         Ok(config)
     }
 
+    /// Reads the config from a file or returns a default config
     pub fn from_file_or_default() -> Config {
         match Config::from_file() {
             Ok(config) => config,

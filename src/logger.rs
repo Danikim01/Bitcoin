@@ -68,6 +68,7 @@ impl LazyLogger {
     }
 }
 
+/// Logs a message to the console and to the log file selected by the logger mode
 pub fn log(message: &str, mode: &str) {
     let mut lazy_logger = LazyLogger::new();
     let logger = lazy_logger.get_logger();

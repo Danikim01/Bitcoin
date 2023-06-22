@@ -32,6 +32,7 @@ pub enum TransactionRole {
     Sender,
 }
 
+/// Struct that holds the information to be displayed in the transaction list in the UI
 pub struct TransactionDisplayInfo {
     pub(crate) role: TransactionRole,
     pub(crate) date: String,
@@ -39,6 +40,7 @@ pub struct TransactionDisplayInfo {
     pub(crate) hash: HashId,
 }
 
+/// Structs of the network controller (main controller of the program)
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
@@ -50,6 +52,7 @@ pub struct NetworkController {
 }
 
 impl NetworkController {
+    /// Creates a new network controller from the given sender and writer
     pub fn new(
         ui_sender: Sender<GtkMessage>,
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
@@ -65,6 +68,7 @@ impl NetworkController {
         })
     }
 
+    /// Updates the UI with the given message
     pub fn update_ui_status_bar(&self, msg: String) -> io::Result<()> {
         update_ui_label(self.ui_sender.clone(), "status_bar".to_string(), msg)
     }
@@ -264,6 +268,7 @@ impl NetworkController {
         Ok(())
     }
 
+    /// Generates a transaction and broadcasts it to all peers given the transaction details
     pub fn generate_transaction(
         &mut self,
         details: TransactionInfo,
@@ -292,6 +297,8 @@ impl NetworkController {
         Ok(details)
     }
 
+    /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
+    /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self) -> io::Result<()> {
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
@@ -320,11 +327,14 @@ impl NetworkController {
         Ok(())
     }
 }
+
+/// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
 pub struct OuterNetworkController {
     inner: Arc<Mutex<NetworkController>>,
 }
 
 impl OuterNetworkController {
+    /// Creates a new OuterNetworkController given a ui_sender and a writer
     pub fn new(
         ui_sender: Sender<GtkMessage>,
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
@@ -476,7 +486,8 @@ impl OuterNetworkController {
         thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() });
         Ok(())
     }
-
+    
+    /// Starts the sync process and requests headers periodically.
     pub fn start_sync(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,

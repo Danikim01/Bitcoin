@@ -17,6 +17,7 @@ use crate::interface::GtkMessage;
 use crate::messages::constants::config::VERBOSE;
 use gtk::glib::Sender;
 
+/// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
 pub struct Listener {
     socket_addr: SocketAddr,
     stream: TcpStream,
@@ -115,6 +116,7 @@ impl Listener {
     }
 }
 
+/// The Node struct is responsible for spawning a listener thread and keeping track of the connection.
 #[derive(Debug)]
 pub struct Node {
     pub stream: TcpStream,
@@ -163,6 +165,7 @@ impl Node {
         }
     }
 
+    /// This function is used to establish a connection with a node. 
     pub fn try_from_addr(
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
@@ -212,12 +215,14 @@ impl Node {
         Ok(())
     }
 
+    /// This function is used to send a message to a node a payload.
     pub fn send(&mut self, payload: &[u8]) -> io::Result<()> {
         self.stream.write_all(payload)?;
         self.stream.flush()?;
         Ok(())
     }
 
+    /// Returns the address of the peer.
     pub fn get_addr(&self) -> io::Result<SocketAddr> {
         self.stream.peer_addr()
     }

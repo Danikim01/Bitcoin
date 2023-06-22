@@ -1,3 +1,4 @@
+/// Constants used in the headers messages module (e.g. message sizes, magic_bytes, etc.)
 pub mod header_constants {
     pub const HEADER_SIZE: usize = 24;
     pub const _START_STRING: [u8; 4] = [0xf9, 0xbe, 0xb4, 0xd9];
@@ -8,6 +9,7 @@ pub mod header_constants {
     pub const MAX_HEADER: usize = 2000;
 }
 
+/// Constants used in messages module (e.g. getheaders message, gedata message, etc.)
 pub mod messages {
     use super::super::HashId;
     pub const _MAX_INV_SIZE: usize = 50000;
@@ -21,6 +23,7 @@ pub mod messages {
     };
 }
 
+/// Constants with all valid commands in the bitcoin protocol in str format
 pub mod commands {
     pub const GETHEADERS: &str = "getheaders\0\0";
     pub const GETDATA: &str = "getdata\0\0\0\0\0";
@@ -39,10 +42,12 @@ pub mod commands {
     pub const TX: &str = "tx\0\0\0\0\0\0\0\0\0\0";
 }
 
+/// Constants with accepted version which is latest version
 pub mod version_constants {
     pub const LATEST_VERSION: i32 = 70015;
 }
 
+/// Constants with all config parameters
 pub mod config {
     pub const PATH: &str = "src/initial_config.txt";
     pub const PORT: u16 = 8333;

@@ -3,6 +3,7 @@ use crate::messages::{
     HashId, Serialize,
 };
 
+/// Struct that represents the data GetHeader message
 #[derive(Debug, Clone)]
 pub struct GetHeader {
     version: i32,
@@ -13,6 +14,7 @@ pub struct GetHeader {
 
 //default for genesis block
 impl Default for GetHeader {
+    /// Returns a `GetHeader` message with the default values for the genesis block.
     fn default() -> Self {
         Self::new(
             70015,
@@ -50,7 +52,8 @@ impl GetHeader {
         payload.extend(self.stop_hash.iter());
         Ok(payload)
     }
-
+    
+    /// Create a new getheaders from a last header hash
     pub fn from_last_header(last_header: HashId) -> Self {
         Self {
             version: 70015,

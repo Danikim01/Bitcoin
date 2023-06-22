@@ -8,6 +8,8 @@ mod top_bar;
 
 use crate::interface::ModelRequest;
 
+
+/// Initializes the components of the interface and returns the main window.
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<gtk::Window> {
     let window: gtk::Window = builder
         .object("main_window")

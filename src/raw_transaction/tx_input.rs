@@ -7,6 +7,8 @@ use bitcoin_hashes::{hash160, Hash};
 use std::io;
 use std::io::{Cursor, Error, ErrorKind, Read};
 
+
+/// Store a tx input (previous output, script sig, sequence)
 #[derive(Debug, Clone)]
 pub struct TxInput {
     pub previous_output: Outpoint,
@@ -16,6 +18,7 @@ pub struct TxInput {
 }
 
 impl TxInput {
+    /// Read the address from the script sig
     pub fn get_address(&self) -> io::Result<String> {
         let script_bytes = self.script_sig.clone();
         let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
@@ -38,6 +41,7 @@ impl TxInput {
         Ok(p2pkh_to_address(h160))
     }
 
+    /// Check if the input is destined to the given address    
     pub fn destined_from(&self, address: &str) -> bool {
         match self.get_address() {
             Ok(addr) => addr == address,
@@ -45,6 +49,7 @@ impl TxInput {
         }
     }
 
+    /// Deserialize a tx input from a byte Cursor
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let previous_output = Outpoint::from_bytes(cursor)?;
         let script_bytes = read_from_varint(cursor)?;
@@ -61,6 +66,7 @@ impl TxInput {
         Ok(tx_input)
     }
 
+    /// Deserialize a vector of tx inputs from a byte Cursor
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
         let mut tx_inputs = vec![];
 
@@ -71,6 +77,7 @@ impl TxInput {
         Ok(tx_inputs)
     }
 
+    /// Serialize a tx input to bytes
     pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self.previous_output.hash);
@@ -91,6 +98,7 @@ impl TxInput {
         bytes
     }
 
+    /// Serialize a vector of tx inputs to bytes
     pub fn serialize_vec(tx_inputs: &Vec<Self>) -> Vec<u8> {
         let mut bytes = vec![];
         for tx_input in tx_inputs {
@@ -100,6 +108,7 @@ impl TxInput {
     }
 }
 
+/// Represent outpoint (hash of previous utxo, index of previous utxo)
 #[derive(Debug, Clone)]
 pub struct Outpoint {
     pub hash: [u8; 32],
@@ -107,6 +116,7 @@ pub struct Outpoint {
 }
 
 impl Outpoint {
+    /// Deserialize an outpoint from a byte Cursor
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let hash = read_hash(cursor)?;
         let index = u32::from_le_stream(cursor)?;
@@ -115,6 +125,7 @@ impl Outpoint {
     }
 }
 
+/// Represent a tx input type (coinbase or tx input vector)
 #[derive(Debug, Clone)]
 pub enum TxInputType {
     CoinBaseInput(CoinBaseInput),
@@ -122,6 +133,7 @@ pub enum TxInputType {
 }
 
 impl TxInputType {
+    /// Deserialize a tx input type from a byte Cursor
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             TxInputType::CoinBaseInput(coinbase_input) => coinbase_input._serialize(),
@@ -130,6 +142,7 @@ impl TxInputType {
     }
 }
 
+/// Represent a coinbase input 
 #[derive(Debug, Clone)]
 pub struct CoinBaseInput {
     pub _hash: [u8; 32],
@@ -164,6 +177,7 @@ fn serialize_height(height: u32) -> Vec<u8> {
 }
 
 impl CoinBaseInput {
+    /// Deserialize a coinbase input from a byte Cursor
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> io::Result<Self> {
         let _hash = read_hash(cursor)?;
         let _index = u32::from_le_stream(cursor)?;
@@ -191,6 +205,7 @@ impl CoinBaseInput {
         Ok(coinbase_input)
     }
 
+    /// Serialize a coinbase input to bytes
     pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self._hash);

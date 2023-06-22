@@ -1,6 +1,7 @@
 use std::io;
 use std::io::{Cursor, Read};
 
+/// Convert a `u64` to a `Vec<u8>` with the varint format (https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers)
 //ver: https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 pub fn to_varint(value: u64) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -33,6 +34,7 @@ pub trait StreamRead {
         Self: Sized;
 }
 
+/// Implement StreamRead for all the integer types in order to read them from a stream
 // source: https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_trait_for_from_le_bytes_from_be_bytes/
 macro_rules! impl_StreamRead_for_ints (( $($int:ident),* ) => {
     $(

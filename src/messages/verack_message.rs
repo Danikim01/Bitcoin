@@ -3,18 +3,21 @@ use crate::messages::{MessageHeader, Serialize};
 use std::io;
 use std::net::TcpStream;
 
+/// Struct that represents the data VerAck message 
 #[derive(Debug, Clone)]
 pub struct VerAck {
     _message_header: MessageHeader,
 }
 
 impl VerAck {
+    /// Creates a new `VerAck` message with the default values.
     pub fn new() -> Self {
         Self {
             _message_header: MessageHeader::default(),
         }
     }
 
+    /// Reads the data from the stream and returns a `VerAck` message.
     pub fn from_stream(stream: &mut TcpStream) -> Result<Self, io::Error> {
         let message_header = MessageHeader::from_stream(stream)?;
         Ok(VerAck {

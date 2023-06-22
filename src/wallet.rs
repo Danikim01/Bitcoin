@@ -33,6 +33,7 @@ fn build_p2pkh_script(hashed_pk: Vec<u8>) -> Vec<u8> {
     pk_script
 }
 
+/// The Wallet struct is responsible for managing the wallet's secret key and address can be used to send transactions.
 #[derive(PartialEq, Debug)]
 pub struct Wallet {
     pub secret_key: String,
@@ -40,6 +41,8 @@ pub struct Wallet {
 }
 
 impl Wallet {
+
+    /// Login to the wallet with a secret key and address.
     pub fn login() -> Self {
         let secret_key =
             "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
@@ -52,6 +55,7 @@ impl Wallet {
         }
     }
 
+    /// Creates a new Wallet with a random secret key and address.
     pub fn _new() -> Self {
         let secp = Secp256k1::new();
         let (sk, addr) = secp.generate_keypair(&mut OsRng);
@@ -145,6 +149,9 @@ impl Wallet {
         Ok(txout)
     }
 
+    /// Generates a transaction from the wallet's utxos, filling the transaction with the given transaction info.
+    /// Removes the used utxos from the utxo set.
+    /// If the wallet does not have enough funds, returns an error.
     pub fn generate_transaction(
         &self,
         utxo_set: &mut UtxoSet,

@@ -3,6 +3,7 @@ use crate::messages::{utility::*, HashId, Hashable};
 use crate::utility::{double_hash, to_io_err};
 use std::io::{self, ErrorKind::InvalidData, Write};
 
+/// Block header struct as defined in the Bitcoin documentation.
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BlockHeader {
@@ -13,6 +14,7 @@ pub struct BlockHeader {
     pub nbits: u32,
     pub nonce: u32,
 }
+
 
 impl BlockHeader {
     pub fn new(
@@ -32,7 +34,8 @@ impl BlockHeader {
             nonce,
         }
     }
-
+    
+    /// Create a block header from a byte array (little endian).
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
         let version = i32::from_le_stream(cursor)?;
         let prev_block_hash = HashId::new(read_hash(cursor)?);
@@ -53,6 +56,7 @@ impl BlockHeader {
         Ok(actual_header)
     }
 
+    /// Deprecated
     pub fn _prev_hash(&self) -> &HashId {
         &self.merkle_root_hash
     }
@@ -60,7 +64,7 @@ impl BlockHeader {
     fn compare_target_threshold_and_hash(target: &HashId, hash: &HashId) -> std::cmp::Ordering {
         target.cmp(hash)
     }
-
+    
     pub fn validate_proof_of_work(&self) -> Result<(), std::io::Error> {
         let target_threshold: HashId = Self::nbits_to_target(self.nbits);
         let block_header_hash: HashId = self.hash();
@@ -98,6 +102,7 @@ impl BlockHeader {
         HashId::new(target_arr)
     }
 
+    /// Save the block header to a file.
     pub fn save_to_file(&self, file_name: &str) -> io::Result<()> {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
@@ -112,6 +117,7 @@ impl BlockHeader {
         Ok(())
     }
 
+    /// Serialize the block header to a byte array (little endian).
     pub fn serialize(&self) -> Vec<u8> {
         let mut header_bytes = vec![];
         header_bytes.extend(&self.version.to_le_bytes());
@@ -123,6 +129,7 @@ impl BlockHeader {
         header_bytes
     }
 
+    /// Create a block header from a byte array (little endian).
     pub fn deserialize(cursor: &mut Cursor<&[u8]>) -> io::Result<BlockHeader> {
         let version = i32::from_le_stream(cursor)?;
         let prev_block_hash = HashId::new(read_hash(cursor)?);

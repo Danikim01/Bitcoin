@@ -5,6 +5,7 @@ use crate::messages::constants::messages::MAX_PAYLOAD_SIZE;
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
 
+/// Struct that contains a message header of a generic message
 #[derive(Debug, Clone)]
 pub struct MessageHeader {
     pub start_string: [u8; START_STRING_SIZE],
@@ -25,6 +26,7 @@ impl Default for MessageHeader {
 }
 
 impl MessageHeader {
+    /// Returns a `MessageHeader` with the provided values.  
     pub fn new(
         start_string: [u8; START_STRING_SIZE],
         command_name: String,
@@ -39,6 +41,7 @@ impl MessageHeader {
         }
     }
 
+    /// Read a `MessageHeader` from a byte array.
     pub fn from_bytes(bytes: &[u8]) -> Result<MessageHeader, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
@@ -67,6 +70,7 @@ impl MessageHeader {
         ))
     }
 
+    /// Read a `MessageHeader` from a TcpStream.
     pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
         let mut magic_buffer = [0_u8; START_STRING_SIZE];
         stream.read(&mut magic_buffer)?;
@@ -79,6 +83,7 @@ impl MessageHeader {
         MessageHeader::from_bytes(&header_buffer)
     }
 
+    /// Validate the header of a message checking if the command name is valid.
     pub fn validate_header(&self) -> io::Result<()> {
         let commands = vec![
             GETHEADERS,
@@ -104,6 +109,7 @@ impl MessageHeader {
         Err(io::Error::new(io::ErrorKind::InvalidData, err_str)) // wrong error type
     }
 
+    /// Validate the payload size of a message checking if it is less than the maximum payload size (MAX_PAYLOAD_SIZE defined in constants.rs).
     fn validate_payload_size(&self) -> Result<(), io::Error> {
         if self.payload_size > MAX_PAYLOAD_SIZE {
             let err_str = format!(
@@ -119,6 +125,7 @@ impl MessageHeader {
         Ok(())
     }
 
+    /// Read the payload of a message from a TcpStream and return it as a byte array.
     pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
         self.validate_payload_size()?;
         let mut payload_buffer = vec![0_u8; self.payload_size as usize];
@@ -126,6 +133,7 @@ impl MessageHeader {
         Ok(payload_buffer)
     }
 
+    /// Serialize a `MessageHeader` into a byte array.
     pub fn serialize(&self) -> io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
 

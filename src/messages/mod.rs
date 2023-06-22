@@ -23,6 +23,7 @@ pub use headers_message::Headers;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
+/// A struct that represents a hash with 32 bytes to display in hexadecimal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HashId {
     hash: [u8; 32],

@@ -10,6 +10,7 @@ pub type UtxoId = [u8; 32];
 type Address = String;
 pub type Index = u32;
 
+/// Struct that represents a UTXOs pending to be spent
 #[derive(Debug, Clone)]
 pub struct PendingUtxo {
     pub utxos: HashMap<UtxoId, UtxoTransaction>,
@@ -17,6 +18,7 @@ pub struct PendingUtxo {
 }
 
 impl PendingUtxo {
+    /// Creates a new `PendingUtxo` with empty utxos and spent
     pub fn new() -> Self {
         Self {
             utxos: HashMap::new(),
@@ -25,6 +27,7 @@ impl PendingUtxo {
     }
 }
 
+/// Wallet that stores the UTXOs of the user (pending and spent)
 #[derive(Debug, Clone)]
 pub struct WalletUtxo {
     pub utxos: HashMap<UtxoId, UtxoTransaction>,
@@ -41,6 +44,7 @@ impl WalletUtxo {
         }
     }
 
+    /// Returns the UTXOs that are available to be spent
     pub fn get_available_utxos(&self) -> Vec<(UtxoId, UtxoTransaction)> {
         let mut available_utxos: Vec<(UtxoId, UtxoTransaction)> = Vec::new();
 
@@ -53,6 +57,7 @@ impl WalletUtxo {
         available_utxos
     }
 
+    /// Returns the sum of the UTXOs that are available to be spent
     pub fn get_balance(&self) -> u64 {
         let mut balance = 0;
 
@@ -65,6 +70,7 @@ impl WalletUtxo {
         balance
     }
 
+    /// Returns the sum of the UTXOs that are pending
     pub fn get_pending_balance(&self) -> u64 {
         let mut balance = 0;
 
@@ -77,6 +83,7 @@ impl WalletUtxo {
         balance
     }
 
+    /// Adds a UTXO to the wallet
     pub fn add_utxo(&mut self, utxo_id: UtxoId, utxo: UtxoTransaction, origin: TransactionOrigin) {
         if origin == TransactionOrigin::Pending {
             self.add_pending_utxo(utxo_id, utxo);
@@ -87,6 +94,7 @@ impl WalletUtxo {
         self.utxos.insert(utxo_id, utxo);
     }
 
+    /// Adds a spent UTXO to the wallet
     pub fn add_spent(&mut self, utxo_id: UtxoId, index: Index, origin: TransactionOrigin) {
         if origin == TransactionOrigin::Pending {
             self.add_pending_spent(utxo_id, index);
@@ -101,10 +109,12 @@ impl WalletUtxo {
         }
     }
 
+    /// Adds a pending UTXO to the wallet
     fn add_pending_utxo(&mut self, utxo_id: UtxoId, utxo: UtxoTransaction) {
         self.pending.utxos.insert(utxo_id, utxo);
     }
 
+    /// Adds a pending spent UTXO to the wallet
     fn add_pending_spent(&mut self, utxo_id: UtxoId, index: Index) {
         if let Some(spent) = self.pending.spent.get_mut(&utxo_id) {
             spent.push(index);
@@ -114,6 +124,7 @@ impl WalletUtxo {
     }
 }
 
+/// Struct that represents the UTXO set of the blockchain as a hashmap of wallets
 #[derive(Debug, Clone)]
 pub struct UtxoSet {
     pub set: HashMap<Address, WalletUtxo>,
@@ -137,6 +148,7 @@ impl UtxoSet {
         Vec::new()
     }
 
+    /// Gets the wallet balance for a given address (sum of available utxos)
     // Maybe we should combine this method with the one bellow
     pub fn get_wallet_balance(&self, address: &str) -> u64 {
         if let Some(wallet) = self.set.get(address) {
@@ -146,6 +158,7 @@ impl UtxoSet {
         0
     }
 
+    /// Gets the wallet pending balance for a given address (sum of pending utxos)
     // Maybe we should combine this method with the one above
     pub fn get_pending_wallet_balance(&self, address: &str) -> u64 {
         if let Some(wallet) = self.set.get(address) {
@@ -156,6 +169,7 @@ impl UtxoSet {
     }
 }
 
+/// Struct that represents a UTXO transaction (index, value, lock)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UtxoTransaction {
     pub index: u32,
@@ -163,6 +177,7 @@ pub struct UtxoTransaction {
     pub lock: Lock,
 }
 
+/// Translate a P2PKH address to an address
 pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
     let version_prefix: [u8; 1] = [0x6f];
 
@@ -176,6 +191,7 @@ pub fn p2pkh_to_address(p2pkh: [u8; 20]) -> String {
 }
 
 impl UtxoTransaction {
+    /// Returns the address of the UTXO
     pub fn get_address(&self) -> io::Result<String> {
         // iterate lock one byte at a time until 0x14 is found
         let mut cursor = Cursor::new(self.lock.clone());
@@ -191,6 +207,7 @@ impl UtxoTransaction {
         Ok(p2pkh_to_address(pk_hash))
     }
 
+    /// Returns the UTXO from a TxOutput
     pub fn from_tx_output(tx_output: &TxOutput, index: u32) -> io::Result<Self> {
         let value = tx_output.value;
         let lock = tx_output.pk_script.clone();
@@ -198,12 +215,14 @@ impl UtxoTransaction {
     }
 }
 
+/// Struct that represents a Utxo (list of UtxoTransactions)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Utxo {
     pub transactions: Vec<UtxoTransaction>,
 }
 
 impl Utxo {
+    /// Returns the UTXO from a RawTransaction
     pub fn from_raw_transaction(raw_transaction: &RawTransaction) -> io::Result<Utxo> {
         let mut utxo = Utxo {
             transactions: Vec::new(),

@@ -29,6 +29,7 @@ fn register_btn_panel_changer(
     Ok(())
 }
 
+/// Initializes the overview component of the interface.
 pub fn init(builder: gtk::Builder) -> io::Result<()> {
     let overview_btn: gtk::Button = builder
         .object("overview_btn")

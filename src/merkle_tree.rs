@@ -2,12 +2,14 @@ use crate::utility::double_hash;
 use bitcoin_hashes::sha256;
 use std::io::Error;
 
+/// Enum that represents the direction of a node in a merkle tree
 #[derive(Clone)]
 pub enum Direction {
     _Left,
     _Right,
 }
 
+/// Struct that represents a merkle proof
 #[derive(Clone)]
 pub struct MerkleProof {
     pub proof: Vec<(sha256::Hash, Direction)>,
@@ -32,7 +34,7 @@ impl MerkleProof {
             }
         }
     }
-
+    
     pub fn _generate_merkle_root(&self) -> sha256::Hash {
         if self.proof.is_empty() {
             return double_hash(b"foo");
@@ -43,6 +45,7 @@ impl MerkleProof {
     }
 }
 
+/// Struct that represents a merkle tree (as array of arrays of hashes)
 #[derive(Debug, PartialEq)]
 pub struct MerkleTree {
     pub tree: Vec<Vec<sha256::Hash>>,
@@ -77,14 +80,15 @@ impl MerkleTree {
         }
         hashes
     }
-
+    
+    /// Returns the root of the merkle tree
     pub fn get_root(&self) -> sha256::Hash {
         if self.tree.is_empty() {
             return double_hash(b"foo");
         }
         self.tree[self.tree.len() - 1][0]
     }
-
+    
     pub fn _merkle_root_from_hashes(hashes: Vec<sha256::Hash>) -> Result<sha256::Hash, Error> {
         if hashes.is_empty() {
             return Err(Error::new(
@@ -110,6 +114,7 @@ impl MerkleTree {
         Self::_merkle_root_from_hashes(combined_hashes)
     }
 
+    /// Generates a merkle tree from a list of hashes
     pub fn generate_from_hashes(hashes: Vec<sha256::Hash>) -> Self {
         if hashes.is_empty() {
             return Self { tree: Vec::new() };
@@ -138,7 +143,7 @@ impl MerkleTree {
         Self { tree }
     }
 
-    // Generates a Merkle proof for a given hash
+    /// Generates a Merkle proof for a given hash
     pub fn _generate_proof(&self, hash: sha256::Hash) -> Result<MerkleProof, Error> {
         let mut proof: Vec<(sha256::Hash, Direction)> = Vec::new();
         proof.push((hash, self._get_leaf_node_direction(hash)));

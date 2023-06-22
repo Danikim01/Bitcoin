@@ -12,6 +12,8 @@ use std::sync::mpsc::Sender;
 use gtk::prelude::Cast;
 
 #[derive(Debug, Clone)]
+
+/// Struct with transaction info (recipients and fee)
 pub struct TransactionInfo {
     pub recipients: Vec<RecipientDetails>,
     pub fee: u64,
@@ -136,6 +138,7 @@ fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
     Ok(())
 }
 
+/// Initialize send panel components 
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<()> {
     connect_send_btn(builder.clone(), sender)?;
     connect_clear_all_btn(builder.clone())?;
