@@ -1,7 +1,7 @@
 use crate::interface::components::overview::update_overview_transactions;
+use crate::interface::components::overview::{TransactionDisplayInfo, TransactionRole};
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::components::utils::create_notification_window;
-use crate::network_controller::TransactionDisplayInfo;
 use crate::raw_transaction::TransactionOrigin;
 use crate::utility::to_io_err;
 use gtk::glib;

@@ -21,25 +21,13 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 
 // gtk imports
+use crate::interface::components::overview::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::{update_ui_label, update_ui_status_bar, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-
-pub enum TransactionRole {
-    Receiver,
-    Sender,
-}
-
-/// Struct that holds the information to be displayed in the transaction list in the UI
-pub struct TransactionDisplayInfo {
-    pub(crate) role: TransactionRole,
-    pub(crate) date: String,
-    pub(crate) amount: i64,
-    pub(crate) hash: HashId,
-}
 
 /// Structs of the network controller (main controller of the program)
 pub struct NetworkController {
@@ -73,6 +61,17 @@ impl NetworkController {
         let (balance, pending) = self.read_wallet_balance()?;
         self.ui_sender
             .send(GtkMessage::UpdateBalance((balance, pending)))
+            .map_err(to_io_err)
+    }
+
+    fn update_ui_overview(&self, transaction: RawTransaction) -> io::Result<()> {
+        let transaction_info: TransactionDisplayInfo =
+            transaction.transaction_info_for(&self.wallet.address);
+        self.ui_sender
+            .send(GtkMessage::UpdateOverviewTransactions((
+                transaction_info,
+                TransactionOrigin::Pending,
+            )))
             .map_err(to_io_err)
     }
 
@@ -245,6 +244,9 @@ impl NetworkController {
 
             // get wallet balance and update UI
             self.update_ui_balance()?;
+
+            // add transaction to overview
+            self.update_ui_overview(transaction)?;
         }
         Ok(())
     }

@@ -1,12 +1,25 @@
+use crate::messages::HashId;
 use gtk::prelude::BuilderExtManual;
 use gtk::prelude::ImageExt;
 use gtk::prelude::LabelExt;
 use std::io;
 
-use crate::network_controller::TransactionDisplayInfo;
 use crate::raw_transaction::TransactionOrigin;
 
 use super::utils::append_to_limited_container;
+
+pub enum TransactionRole {
+    Receiver,
+    Sender,
+}
+
+/// Struct that holds the information to be displayed in the transaction list in the UI
+pub struct TransactionDisplayInfo {
+    pub(crate) role: TransactionRole,
+    pub(crate) date: String,
+    pub(crate) amount: i64,
+    pub(crate) hash: HashId,
+}
 
 fn get_transaction_widget(
     transaction: TransactionDisplayInfo,

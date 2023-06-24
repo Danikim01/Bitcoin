@@ -16,12 +16,12 @@ use gtk::glib::Sender;
 pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
+use crate::interface::components::overview::{TransactionDisplayInfo, TransactionRole};
 use crate::interface::GtkMessage;
 use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
 
-use crate::network_controller::{TransactionDisplayInfo, TransactionRole};
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
 
 const SIGHASH_ALL: u32 = 1;

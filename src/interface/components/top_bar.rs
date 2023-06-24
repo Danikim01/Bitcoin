@@ -35,6 +35,18 @@ pub fn init(builder: gtk::Builder) -> io::Result<()> {
         .object("overview_btn")
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get overview_btn object"))?;
 
+    let send_btn: gtk::Button = builder
+        .object("send_btn")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get send_btn object"))?;
+
+    let headers_btn: gtk::Button = builder
+        .object("headers_btn")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get send_btn object"))?;
+
+    let blocks_btn: gtk::Button = builder
+        .object("blocks_btn")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get send_btn object"))?;
+
     let transactions_btn: gtk::Button = builder.object("transactions_btn").ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::Other,
@@ -42,13 +54,11 @@ pub fn init(builder: gtk::Builder) -> io::Result<()> {
         )
     })?;
 
-    let send_btn: gtk::Button = builder
-        .object("send_btn")
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get send_btn object"))?;
-
     register_btn_panel_changer(builder.clone(), overview_btn, "overview_panel")?;
+    register_btn_panel_changer(builder.clone(), send_btn, "send_panel")?;
+    register_btn_panel_changer(builder.clone(), headers_btn, "headers_panel")?;
+    register_btn_panel_changer(builder.clone(), blocks_btn, "blocks_panel")?;
     register_btn_panel_changer(builder.clone(), transactions_btn, "transactions_panel")?;
-    register_btn_panel_changer(builder, send_btn, "send_panel")?;
 
     Ok(())
 }

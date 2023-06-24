@@ -1,9 +1,9 @@
 use super::Message;
+use crate::interface::components::overview::TransactionDisplayInfo;
 use crate::interface::GtkMessage;
 use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
-use crate::network_controller::TransactionDisplayInfo;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::double_hash;
 use crate::utility::to_io_err;
@@ -145,6 +145,7 @@ impl Block {
                 ui_sender,
                 active_addr,
             )?;
+            Self::update_ui(ui_sender, active_addr, txn)?;
         }
 
         self.block_header.validate_proof_of_work()?;
