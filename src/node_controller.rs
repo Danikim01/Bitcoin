@@ -34,7 +34,7 @@ impl NodeController {
             match Node::try_from_addr(node_addr, writer_end.clone(), sender.clone()) {
                 Ok((peer_addr, node)) => {
                     nodes.insert(peer_addr, node);
-                    break; // uncomment this to use a single node as peer
+                    // break; // uncomment this to use a single node as peer
                 }
                 Err(..) => continue,
             }
