@@ -209,7 +209,7 @@ impl RawTransaction {
     }
 
     /// Returns the total output value of the transaction (sum of all output values)
-    fn get_total_output_value(&self) -> u64 {
+    pub fn get_total_output_value(&self) -> u64 {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
             total_value += output.value;
@@ -257,7 +257,7 @@ impl RawTransaction {
 
         let naive: NaiveDateTime = match NaiveDateTime::from_timestamp_opt(timestamp as i64, 0) {
             Some(naive) => naive,
-            None => NaiveDateTime::default(),
+            None => Utc::now().naive_utc(),
         };
         let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
         let newdate = datetime.format("%Y-%m-%d %H:%M:%S");

@@ -15,6 +15,7 @@ use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::Hash;
+use chrono::Utc;
 use std::collections::{hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::sync::mpsc::{self, Receiver};
@@ -40,6 +41,7 @@ pub struct NetworkController {
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
     wallet: Wallet,
+    tx_read: HashMap<[u8; 32], ()>,
 }
 
 impl NetworkController {
@@ -56,6 +58,7 @@ impl NetworkController {
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone())?,
             ui_sender,
             wallet: Wallet::login()?,
+            tx_read: HashMap::new(),
         })
     }
 
@@ -75,7 +78,7 @@ impl NetworkController {
     fn update_ui_overview(&mut self, transaction: &RawTransaction) -> io::Result<()> {
         let transaction_info: TransactionDisplayInfo = transaction.transaction_info_for(
             &self.wallet.address,
-            transaction.lock_time,
+            Utc::now().timestamp() as u32,
             &mut self.utxo_set,
         );
         self.ui_sender
@@ -139,9 +142,6 @@ impl NetworkController {
             Some(&self.wallet.address),
         )?;
 
-        // get data from block and update ui
-        let data = table_data_from_block(&block);
-        self.update_ui_table(GtkTable::Blocks, data)?;
         self.update_ui_balance()?;
 
         self.blocks.insert(block.hash(), block);
@@ -255,6 +255,12 @@ impl NetworkController {
     }
 
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
+        // get data from tx and update ui
+        let tx_hash: [u8; 32] = transaction.get_hash();
+        if self.tx_read.contains_key(&tx_hash) {
+            return Ok(());
+        }
+
         if transaction.address_is_involved(&self.wallet.address) {
             transaction.generate_utxo(
                 &mut self.utxo_set,
@@ -268,11 +274,13 @@ impl NetworkController {
 
             // add transaction to overview
             self.update_ui_overview(&transaction)?;
-
-            // get data from tx and update ui
-            let data = table_data_from_tx(&transaction);
-            self.update_ui_table(GtkTable::Transactions, data)?;
         }
+
+        // if self.tx_read
+        let data = table_data_from_tx(&transaction);
+        self.update_ui_table(GtkTable::Transactions, data)?;
+
+        self.tx_read.insert(tx_hash, ());
         Ok(())
     }
 

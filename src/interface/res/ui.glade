@@ -72,7 +72,7 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="label" translatable="yes">Transaction count</property>
-            <property name="xalign">1</property>
+            <property name="xalign">0.89999997615814209</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -104,6 +104,7 @@
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
+                <property name="spacing">4</property>
                 <child>
                   <placeholder/>
                 </child>
@@ -115,6 +116,65 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="top-attach">1</property>
+      </packing>
+    </child>
+  </object>
+  <object class="GtkBox" id="blocks_table_row_template">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Height</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Date</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">False</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Hash</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">3</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Transaction count</property>
+        <property name="xalign">0.89999997615814209</property>
+      </object>
+      <packing>
+        <property name="expand">True</property>
+        <property name="fill">True</property>
+        <property name="position">4</property>
       </packing>
     </child>
   </object>
@@ -172,7 +232,7 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="label" translatable="yes">Hash</property>
-            <property name="xalign">1</property>
+            <property name="xalign">0.89999997615814209</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -204,6 +264,7 @@
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
+                <property name="spacing">4</property>
                 <child>
                   <placeholder/>
                 </child>
@@ -215,6 +276,52 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="top-attach">1</property>
+      </packing>
+    </child>
+  </object>
+  <object class="GtkBox" id="headers_table_row_template">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Height</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">False</property>
+        <property name="position">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Date</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">False</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Hash</property>
+        <property name="xalign">0.89999997615814209</property>
+      </object>
+      <packing>
+        <property name="expand">True</property>
+        <property name="fill">True</property>
+        <property name="position">3</property>
       </packing>
     </child>
   </object>
@@ -1495,8 +1602,8 @@
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Amount (BTC)</property>
-            <property name="xalign">1</property>
+            <property name="label" translatable="yes">Amount (tBTC)</property>
+            <property name="xalign">0.8000000119209289</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -1528,6 +1635,7 @@
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
+                <property name="spacing">4</property>
                 <child>
                   <placeholder/>
                 </child>
@@ -1539,6 +1647,50 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="top-attach">1</property>
+      </packing>
+    </child>
+  </object>
+  <object class="GtkBox" id="transactions_table_row_template">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Date</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">False</property>
+        <property name="position">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Hash</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="width-request">180</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Amount (BTC)</property>
+        <property name="xalign">0.89999997615814209</property>
+      </object>
+      <packing>
+        <property name="expand">True</property>
+        <property name="fill">True</property>
+        <property name="position">3</property>
       </packing>
     </child>
   </object>
