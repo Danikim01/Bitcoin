@@ -2,12 +2,12 @@ use gtk::prelude::BuilderExtManual;
 use std::io;
 use std::sync::mpsc::Sender;
 
-mod overview;
+pub mod overview;
 pub mod send_panel;
 mod top_bar;
+pub mod utils;
 
 use crate::interface::ModelRequest;
-
 
 /// Initializes the components of the interface and returns the main window.
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<gtk::Window> {

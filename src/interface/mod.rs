@@ -1,4 +1,6 @@
+use crate::interface::components::overview::update_overview_transactions;
 use crate::interface::components::send_panel::TransactionInfo;
+use crate::interface::components::utils::create_notification_window;
 use crate::network_controller::TransactionDisplayInfo;
 use crate::raw_transaction::TransactionOrigin;
 use crate::utility::to_io_err;
@@ -10,24 +12,31 @@ use std::sync::mpsc::Sender;
 
 pub mod components;
 
-/// Enum with messages from the interface to the model
+/// Enum with messages from the model to the interface
 pub enum GtkMessage {
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
     TransactionInfo(Result<TransactionInfo, io::Error>),
-    UpdateOverview((Vec<TransactionDisplayInfo>, TransactionOrigin)),
+    UpdateOverviewTransactions((TransactionDisplayInfo, TransactionOrigin)),
+    /// type, notification title, notification message
+    CreateNotification((gtk::MessageType, String, String)),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
 
-/// Enum with requests from the model to the interface
+/// Enum with requests from the interface to the model
 pub enum ModelRequest {
     GenerateTransaction(TransactionInfo),
 }
 
+/// called from the model, to update the status bar in the ui
+pub fn update_ui_status_bar(sender: &GtkSender<GtkMessage>, msg: String) -> io::Result<()> {
+    update_ui_label(sender, "status_bar".to_string(), msg)
+}
+
 /// called from the model, to update the text of a specific label
 pub fn update_ui_label(
-    sender: GtkSender<GtkMessage>,
+    sender: &GtkSender<GtkMessage>,
     label: String,
     text: String,
 ) -> io::Result<()> {
@@ -36,7 +45,7 @@ pub fn update_ui_label(
         .map_err(to_io_err)
 }
 
-/// Called from the model, to update the balance label and show the transaction info dialog when the transaction is sent 
+/// Called from the model, to update the balance label and show the transaction info dialog when the transaction is sent
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
         match msg {
@@ -69,6 +78,7 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                     builder_aux.object("balance_total_val").unwrap();
                 balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
             }
+            // change this to CreateNotification later
             GtkMessage::TransactionInfo(result) => match result {
                 Ok(info) => {
                     let dialog = gtk::MessageDialog::new(
@@ -99,8 +109,12 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                     dialog.close();
                 }
             },
-            GtkMessage::UpdateOverview((transactions, origin)) => {
-                //update_overview(builder.clone(), transactions, origin);
+            GtkMessage::UpdateOverviewTransactions((transaction, origin)) => {
+                let builder_aux = builder.clone();
+                update_overview_transactions(builder_aux, transaction, origin);
+            }
+            GtkMessage::CreateNotification((t, title, msg)) => {
+                create_notification_window(t, &title, &msg);
             }
         }
 
@@ -109,7 +123,6 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
         glib::Continue(true)
     });
 }
-
 
 /// Initializes the GTK interface
 pub fn init(receiver: GtkReceiver<GtkMessage>, sender: Sender<ModelRequest>) -> io::Result<()> {

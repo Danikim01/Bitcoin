@@ -11,9 +11,8 @@ use std::sync::mpsc::Sender;
 
 use gtk::prelude::Cast;
 
-#[derive(Debug, Clone)]
-
 /// Struct with transaction info (recipients and fee)
+#[derive(Debug, Clone)]
 pub struct TransactionInfo {
     pub recipients: Vec<RecipientDetails>,
     pub fee: u64,
@@ -103,7 +102,7 @@ fn connect_clear_all_btn(builder: gtk::Builder) -> io::Result<()> {
         // add one empty recipient
         let glade_src = include_str!("../res/ui.glade");
         let inner_builder = gtk::Builder::from_string(glade_src);
-        let new_recipient: gtk::Box = inner_builder
+        let new_recipient: gtk::Widget = inner_builder
             .object("transaction_info_template")
             .expect("could not find transaction recipient template");
 
@@ -128,7 +127,7 @@ fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
         let inner_builder = gtk::Builder::from_string(glade_src);
 
         // get recipient template from builder
-        let new_recipient: gtk::Box = inner_builder
+        let new_recipient: gtk::Widget = inner_builder
             .object("transaction_info_template")
             .expect("could not find transaction recipient template");
 
@@ -138,7 +137,7 @@ fn connect_append_btn(builder: gtk::Builder) -> io::Result<()> {
     Ok(())
 }
 
-/// Initialize send panel components 
+/// Initialize send panel components
 pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<()> {
     connect_send_btn(builder.clone(), sender)?;
     connect_clear_all_btn(builder.clone())?;

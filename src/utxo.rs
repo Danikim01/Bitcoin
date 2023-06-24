@@ -1,6 +1,9 @@
+use crate::interface::GtkMessage;
 use crate::raw_transaction::TransactionOrigin;
 use crate::raw_transaction::{tx_output::TxOutput, RawTransaction};
-use crate::utility::double_hash;
+use crate::utility::to_io_err;
+use crate::utility::{_encode_hex, double_hash};
+use gtk::glib::Sender;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::{self, Read};
@@ -98,17 +101,33 @@ impl WalletUtxo {
         utxo: UtxoTransaction,
         origin: TransactionOrigin,
         index: u32,
-    ) {
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
+    ) -> io::Result<()> {
         if origin == TransactionOrigin::Pending {
             self.add_pending_utxo(utxo_id, utxo);
-            return;
+            return Ok(());
         }
 
-        if let Some(pending) = self.pending.utxos.remove(&utxo_id) {
-            // notify ui that the utxo is no longer pending
-            println!("pending utxo is now confirmed!");
+        if let Some(_pending) = self.pending.utxos.remove(&utxo_id) {
+            if let Some(addr) = active_addr {
+                if addr == utxo.get_address()? {
+                    println!("pending utxo is now confirmed!");
+                    if let Some(sender) = ui_sender {
+                        let msg = format!("Transaction {} is now confirmed", _encode_hex(&utxo_id));
+                        let _ui = sender
+                            .send(GtkMessage::CreateNotification((
+                                gtk::MessageType::Info,
+                                "Confirmed".to_string(),
+                                msg,
+                            )))
+                            .map_err(to_io_err);
+                    }
+                }
+            }
         }
         self.utxos.insert((utxo_id, index), utxo);
+        Ok(())
     }
 
     /// Adds a spent UTXO to the wallet
@@ -276,7 +295,7 @@ mod tests {
         // read tx_a that generates utxoA
         let bytes = _decode_hex("020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500").unwrap();
         let tx_a = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
-        tx_a.generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+        tx_a.generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
             .unwrap();
 
         assert_eq!(
@@ -287,7 +306,7 @@ mod tests {
         // read tx_b that generates utxoB, but spends utxoA
         let bytes = _decode_hex("0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000").unwrap();
         let tx_b = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
-        tx_b.generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+        tx_b.generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
             .unwrap();
 
         assert_eq!(
@@ -298,7 +317,7 @@ mod tests {
         // read pending tx_c that generates utxoC
         let bytes = _decode_hex("020000000001011caf1fc6e053c6048b7108c3d22be0f57f95cc676ae688ef22e7793d853afd860100000000fdffffff02c81d1e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ace6964cbe010000001976a914bbfb2d931dd19e1d3a503d0bfaba40cc2d3203fb88ac024730440220239f9521c30a2bb7df61011e0486712ab01a5fb43009ff872023051433f94a93022044f647c595894eba610b9089db5f34faea06aa0c58a684220c755fc38929f29201210394e3ae4d013b556c51d514a77ac5b5aae2f4e81edaedb192fc8b45b7a97d52ac9b2f2500").unwrap();
         let tx_c = RawTransaction::from_bytes(&mut Cursor::new(&bytes)).unwrap();
-        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Pending)
+        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Pending, None, None)
             .unwrap(); // generate as pending
 
         assert_eq!(
@@ -312,7 +331,7 @@ mod tests {
         );
 
         // read txC that generated utxoC
-        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, Some("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"))
             .unwrap();
 
         // pending balance should now be 0

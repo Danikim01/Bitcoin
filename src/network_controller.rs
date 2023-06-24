@@ -19,9 +19,10 @@ use std::collections::{hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
+
 // gtk imports
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::interface::{update_ui_label, GtkMessage, ModelRequest};
+use crate::interface::{update_ui_label, update_ui_status_bar, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -64,23 +65,8 @@ impl NetworkController {
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone())?,
             ui_sender,
-            wallet: Wallet::login(),
+            wallet: Wallet::login()?,
         })
-    }
-
-    /// Updates the UI with the given message
-    pub fn update_ui_status_bar(&self, msg: String) -> io::Result<()> {
-        update_ui_label(self.ui_sender.clone(), "status_bar".to_string(), msg)
-    }
-
-    fn update_ui_overview_transactions(
-        &self,
-        transactions_info: Vec<TransactionDisplayInfo>,
-        origin: TransactionOrigin,
-    ) -> io::Result<()> {
-        self.ui_sender
-            .send(GtkMessage::UpdateOverview((transactions_info, origin)))
-            .map_err(to_io_err)
     }
 
     fn update_ui_balance(&self) -> io::Result<()> {
@@ -109,34 +95,37 @@ impl NetworkController {
 
         let days_old = block.get_days_old();
         if days_old > 0 {
-            self.update_ui_status_bar(format!(
-                "Reading blocks, {:?} days behind",
-                block.get_days_old()
-            ))?;
+            update_ui_status_bar(
+                &self.ui_sender,
+                format!("Reading blocks, {:?} days behind", block.get_days_old()),
+            )?;
         } else {
-            self.update_ui_status_bar("Up to date".to_string())?;
+            update_ui_status_bar(&self.ui_sender, "Up to date".to_string())?;
         }
 
-        // block.validate(&mut self.utxo_set)?;
-        block.validate_unsafe(&mut self.utxo_set)?;
+        block.validate(
+            &mut self.utxo_set,
+            Some(&self.ui_sender),
+            Some(&self.wallet.address),
+        )?;
 
         self.update_ui_balance()?;
         Ok(())
     }
 
-    fn read_block_unsafe(&mut self, block: Block) -> io::Result<()> {
+    fn read_block_from_backup(&mut self, block: Block) -> io::Result<()> {
         if self.blocks.contains_key(&block.hash()) {
             return Ok(());
         }
 
-        self.update_ui_status_bar("Reading backup blocks...".to_string())?;
+        update_ui_status_bar(&self.ui_sender, "Reading backup blocks...".to_string())?;
 
-        block.validate_unsafe(&mut self.utxo_set)?;
+        block.validate_from_backup(
+            &mut self.utxo_set,
+            Some(&self.ui_sender),
+            Some(&self.wallet.address),
+        )?;
 
-        let transactions = block.read_transactions_from(&self.wallet.address);
-        if !transactions.is_empty() {
-            self.update_ui_overview_transactions(transactions, TransactionOrigin::Block)?;
-        }
         self.blocks.insert(block.hash(), block);
 
         self.update_ui_balance()?;
@@ -247,7 +236,12 @@ impl NetworkController {
 
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
         if transaction.address_is_involved(&self.wallet.address) {
-            transaction.generate_utxo(&mut self.utxo_set, TransactionOrigin::Pending)?;
+            transaction.generate_utxo(
+                &mut self.utxo_set,
+                TransactionOrigin::Pending,
+                Some(&self.ui_sender),
+                None,
+            )?;
 
             // get wallet balance and update UI
             self.update_ui_balance()?;
@@ -302,16 +296,22 @@ impl NetworkController {
     pub fn start_sync(&mut self) -> io::Result<()> {
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
-            self.update_ui_status_bar("Found blocks backup file, reading blocks...".to_string())?;
+            update_ui_status_bar(
+                &self.ui_sender,
+                "Found blocks backup file, reading blocks...".to_string(),
+            )?;
             for (_, block) in blocks.into_iter() {
-                self.read_block_unsafe(block)?;
+                self.read_block_from_backup(block)?;
             }
-            self.update_ui_status_bar("Read blocks from backup file.".to_string())?;
+            update_ui_status_bar(&self.ui_sender, "Read blocks from backup file.".to_string())?;
         }
 
         // attempt to read headers from backup file
         if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
-            self.update_ui_status_bar("Reading headers from backup file...".to_string())?;
+            update_ui_status_bar(
+                &self.ui_sender,
+                "Reading headers from backup file...".to_string(),
+            )?;
             self.tallest_header = headers.last_header_hash();
             self.headers = into_hashmap(headers.clone().block_headers);
 
@@ -319,8 +319,11 @@ impl NetworkController {
             let init_tp_timestamp: u32 = Config::from_file()?.get_start_timestamp();
             headers.trim_timestamp(init_tp_timestamp);
 
-            self.update_ui_status_bar("Read headers from backup file.".to_string())?;
-        } // else init ibd
+            update_ui_status_bar(
+                &self.ui_sender,
+                "Read headers from backup file.".to_string(),
+            )?;
+        }
 
         self.request_headers(self.tallest_header)?; // with ibd this goes on the else clause
 
@@ -486,7 +489,7 @@ impl OuterNetworkController {
         thread::spawn(move || -> io::Result<()> { inner.lock().map_err(to_io_err)?.start_sync() });
         Ok(())
     }
-    
+
     /// Starts the sync process and requests headers periodically.
     pub fn start_sync(
         &self,

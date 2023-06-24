@@ -1,18 +1,19 @@
+use super::Message;
+use crate::interface::GtkMessage;
 use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
+use crate::network_controller::TransactionDisplayInfo;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::double_hash;
 use crate::utility::to_io_err;
 use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
 use chrono::Utc;
+use gtk::glib::Sender;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use crate::network_controller::TransactionDisplayInfo;
-
-use super::Message;
 
 pub type BlockSet = HashMap<HashId, Block>;
 
@@ -106,13 +107,44 @@ impl Block {
         }
     }
 
+    fn update_ui(
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
+        txn: &RawTransaction,
+    ) -> io::Result<()> {
+        if let Some(addr) = active_addr {
+            if txn.address_is_involved(addr) {
+                let transaction_info: TransactionDisplayInfo = txn.transaction_info_for(addr);
+                if let Some(ui_sender) = ui_sender {
+                    ui_sender
+                        .send(GtkMessage::UpdateOverviewTransactions((
+                            transaction_info,
+                            TransactionOrigin::Block,
+                        )))
+                        .map_err(to_io_err)?
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Validates the block by checking the proof of work, merkle root, and generates utxos from the transactions outputs.
     /// Adds to the utxo set only if the block is valid.
-    pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+    pub fn validate(
+        &self,
+        utxo_set: &mut UtxoSet,
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
+    ) -> io::Result<()> {
         let mut utxo_set_snapshot = utxo_set.clone();
 
         for txn in self.txns.iter() {
-            txn.generate_utxo(&mut utxo_set_snapshot, TransactionOrigin::Block)?;
+            txn.generate_utxo(
+                &mut utxo_set_snapshot,
+                TransactionOrigin::Block,
+                ui_sender,
+                active_addr,
+            )?;
         }
 
         self.block_header.validate_proof_of_work()?;
@@ -124,9 +156,15 @@ impl Block {
     }
 
     /// Validates the block by checking the proof of work, merkle root, and generates utxos from the transactions outputs.
-    pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+    pub fn validate_from_backup(
+        &self,
+        utxo_set: &mut UtxoSet,
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
+    ) -> io::Result<()> {
         for txn in self.txns.iter() {
-            txn.generate_utxo(utxo_set, TransactionOrigin::Block)?;
+            txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
+            Self::update_ui(ui_sender, active_addr, txn)?;
         }
 
         self.block_header.validate_proof_of_work()?;
@@ -136,18 +174,18 @@ impl Block {
     }
 
     /// Reads all transactions made from the given address and returns them in a vector of TransactionDisplayInfo.
-    pub fn read_transactions_from(&self, address: &str) -> Vec< TransactionDisplayInfo >{
-        let mut transactions = vec!{};
+    pub fn read_transactions_from(&self, address: &str) -> Vec<TransactionDisplayInfo> {
+        let mut transactions = vec![];
 
-        for tx in &self.txns{
-            if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"){
-                let transaction_info: TransactionDisplayInfo = tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX");
+        for tx in &self.txns {
+            if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX") {
+                let transaction_info: TransactionDisplayInfo =
+                    tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX");
                 transactions.push(transaction_info);
             }
-
         }
 
-        return transactions
+        return transactions;
     }
 
     /// Reads all transactions in the file and returns them in a BlockSet.
@@ -230,7 +268,7 @@ mod tests {
             let message = Block::deserialize(&bytes).unwrap();
             let mut utxo_set: UtxoSet = UtxoSet::new();
             if let Message::Block(block) = message {
-                block.validate(&mut utxo_set)?;
+                block.validate(&mut utxo_set, None, None)?;
                 assert_eq!(block.txn_count, block.txns.len());
             };
         }

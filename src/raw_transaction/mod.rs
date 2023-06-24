@@ -12,9 +12,11 @@ use std::{
     str::FromStr,
 };
 
+use gtk::glib::Sender;
 pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
+use crate::interface::GtkMessage;
 use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
@@ -281,6 +283,8 @@ impl RawTransaction {
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
     ) -> io::Result<()> {
         let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
         let new_utxo = Utxo::from_raw_transaction(self)?;
@@ -290,14 +294,25 @@ impl RawTransaction {
                 Ok(a) => a,
                 _ => "no_address".to_string(),
             };
-
             match utxo_set.set.get_mut(&address) {
-                Some(wallet) => {
-                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone(), index)
-                }
+                Some(wallet) => wallet.add_utxo(
+                    new_utxo_id,
+                    utxo_transaction.clone(),
+                    origin.clone(),
+                    index,
+                    ui_sender,
+                    active_addr,
+                )?,
                 None => {
                     let mut wallet = WalletUtxo::new();
-                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone(), index);
+                    wallet.add_utxo(
+                        new_utxo_id,
+                        utxo_transaction.clone(),
+                        origin.clone(),
+                        index,
+                        None,
+                        None,
+                    )?;
                     utxo_set.set.insert(address, wallet);
                 }
             }
@@ -312,9 +327,11 @@ impl RawTransaction {
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
     ) -> io::Result<()> {
         self.generate_utxo_in(utxo_set, origin.clone())?;
-        self.generate_utxo_out(utxo_set, origin)?;
+        self.generate_utxo_out(utxo_set, origin, ui_sender, active_addr)?;
 
         Ok(())
     }
