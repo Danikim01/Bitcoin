@@ -2,10 +2,13 @@ use gtk::prelude::BuilderExtManual;
 use std::io;
 use std::sync::mpsc::Sender;
 
+mod blocks_panel;
+mod headers_panel;
 pub mod overview_panel;
 pub mod send_panel;
 pub mod table;
 mod top_bar;
+mod transactions_panel;
 pub mod utils;
 
 use crate::interface::ModelRequest;

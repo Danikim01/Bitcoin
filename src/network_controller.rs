@@ -22,7 +22,9 @@ use std::sync::Mutex;
 
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::interface::components::table::{GtkTable, RowData};
+use crate::interface::components::table::{
+    table_data_from_block, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
+};
 use crate::interface::{update_ui_status_bar, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::net::SocketAddr;
@@ -57,10 +59,9 @@ impl NetworkController {
         })
     }
 
-    fn update_ui_table(&self) -> io::Result<()> {
-        let row_data = RowData::TransactionData("foo".to_string());
+    fn update_ui_table(&self, table: GtkTable, data: GtkTableData) -> io::Result<()> {
         self.ui_sender
-            .send(GtkMessage::UpdateTable((GtkTable::Transactions, row_data)))
+            .send(GtkMessage::UpdateTable((table, data)))
             .map_err(to_io_err)
     }
 
@@ -71,9 +72,12 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    fn update_ui_overview(&mut self, transaction: RawTransaction) -> io::Result<()> {
-        let transaction_info: TransactionDisplayInfo =
-            transaction.transaction_info_for(&self.wallet.address, transaction.lock_time, &mut self.utxo_set);
+    fn update_ui_overview(&mut self, transaction: &RawTransaction) -> io::Result<()> {
+        let transaction_info: TransactionDisplayInfo = transaction.transaction_info_for(
+            &self.wallet.address,
+            transaction.lock_time,
+            &mut self.utxo_set,
+        );
         self.ui_sender
             .send(GtkMessage::UpdateOverviewTransactions((
                 transaction_info,
@@ -116,7 +120,8 @@ impl NetworkController {
         )?;
 
         // get data from block and update ui
-        self.update_ui_table()?;
+        let data = table_data_from_block(&block);
+        self.update_ui_table(GtkTable::Blocks, data)?;
         self.update_ui_balance()?;
         Ok(())
     }
@@ -134,12 +139,12 @@ impl NetworkController {
             Some(&self.wallet.address),
         )?;
 
-        self.blocks.insert(block.hash(), block);
-
         // get data from block and update ui
-        self.update_ui_table()?;
+        let data = table_data_from_block(&block);
+        self.update_ui_table(GtkTable::Blocks, data)?;
         self.update_ui_balance()?;
 
+        self.blocks.insert(block.hash(), block);
         Ok(())
     }
 
@@ -190,7 +195,7 @@ impl NetworkController {
         let is_paginated = headers.is_paginated();
 
         // store headers in hashmap, consuming headers
-        let headers_hashmap = into_hashmap(headers.block_headers);
+        let headers_hashmap = into_hashmap(headers.clone().block_headers);
         for (header_hash, header) in headers_hashmap {
             if let Vacant(entry) = self.headers.entry(header_hash) {
                 header.save_to_file("tmp/headers_backup.dat")?;
@@ -202,7 +207,8 @@ impl NetworkController {
         }
 
         // get data from headers and update ui
-        self.update_ui_table()?;
+        let data = table_data_from_headers(&headers);
+        self.update_ui_table(GtkTable::Headers, data)?;
 
         log(
             &format!(
@@ -261,10 +267,11 @@ impl NetworkController {
             self.update_ui_balance()?;
 
             // add transaction to overview
-            self.update_ui_overview(transaction)?;
+            self.update_ui_overview(&transaction)?;
 
             // get data from tx and update ui
-            self.update_ui_table()?;
+            let data = table_data_from_tx(&transaction);
+            self.update_ui_table(GtkTable::Transactions, data)?;
         }
         Ok(())
     }
