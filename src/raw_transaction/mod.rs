@@ -207,7 +207,7 @@ impl RawTransaction {
     }
 
     /// Returns the transaction info for the given address
-    pub fn transaction_info_for(&self, address: &str) -> TransactionDisplayInfo {
+    pub fn transaction_info_for(&self, address: &str, timestamp: u32) -> TransactionDisplayInfo {
         let mut role = TransactionRole::Sender;
         let mut spent_value = 0;
         let mut change_value = 0;
@@ -222,7 +222,7 @@ impl RawTransaction {
 
         return TransactionDisplayInfo {
             role,
-            date: self.lock_time.to_string(),
+            date: timestamp.to_string(),
             amount: change_value as i64 - spent_value as i64,
             hash: HashId::new(self.get_hash()),
         };
@@ -593,5 +593,17 @@ mod tests {
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         assert!(transaction.address_is_involved(address));
         assert!(!transaction.address_is_involved("foo"));
+    }
+
+
+    #[test]
+    fn test_raw_transaction_has_value_negative() {
+        let transaction_bytes = _decode_hex("01000000011f7a653077f23ae7646e56f76febb8e9cbc6602f1fe9cbbd9869cefcf283ef12000000006a47304402207bc12fca3fffb5b3685cb52f17fd119cdb9e950e9829c9d3afffc023f38ca7cf02202b4692529921f6fa3ffde0e7089018a439f7230058e55c7c513d39afd3dc3a55012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff02e8030000000000001976a914c4bedb9284b049b57d8b7ed8c32a2405a175ddcb88ac56311e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
+        let transaction =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes.unwrap())).unwrap();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+
+        let transaction_info = transaction.transaction_info_for(address, 0);
+        assert_eq!(transaction_info.amount, -1000);
     }
 }

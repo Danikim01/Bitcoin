@@ -66,7 +66,7 @@ impl NetworkController {
 
     fn update_ui_overview(&self, transaction: RawTransaction) -> io::Result<()> {
         let transaction_info: TransactionDisplayInfo =
-            transaction.transaction_info_for(&self.wallet.address);
+            transaction.transaction_info_for(&self.wallet.address, transaction.lock_time);
         self.ui_sender
             .send(GtkMessage::UpdateOverviewTransactions((
                 transaction_info,
