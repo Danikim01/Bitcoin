@@ -301,7 +301,7 @@ impl NetworkController {
                 .ui_sender
                 .send(GtkMessage::CreateNotification((
                     gtk::MessageType::Error,
-                    "Failed transaction broadcasting error".to_string(),
+                    "Failed broadcasting transaction".to_string(),
                     format!("{}", e),
                 )))
                 .map_err(to_io_err),

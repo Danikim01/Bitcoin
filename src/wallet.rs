@@ -25,15 +25,23 @@ fn hash_address(address: &str) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn build_p2pkh_script(hashed_pk: Vec<u8>) -> Vec<u8> {
+fn build_p2pkh_script(hashed_pk: Vec<u8>) -> io::Result<Vec<u8>> {
+    if hashed_pk.len() < 21 {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Invalid address",
+        ));
+    }
+    
+    let hpk = hashed_pk[1..21].to_vec();
     let mut pk_script = Vec::new();
     pk_script.push(0x76); // OP_DUP
     pk_script.push(0xa9); // OP_HASH160
     pk_script.push(0x14); // Push 20 bytes
-    pk_script.extend_from_slice(&hashed_pk);
+    pk_script.extend_from_slice(&hpk);
     pk_script.push(0x88); // OP_EQUALVERIFY
     pk_script.push(0xac); // OP_CHECKSIG
-    pk_script
+    Ok(pk_script)
 }
 
 /// The Wallet struct is responsible for managing the wallet's secret key and address can be used to send transactions.
@@ -146,7 +154,7 @@ impl Wallet {
         //  the first txout is destined for the receiver
         for (recv_addr, _label, spec_amount) in transaction_info.recipients {
             let recv_hashed_pk = hash_address(&recv_addr)?;
-            let first_pk_script = build_p2pkh_script(recv_hashed_pk[1..21].to_vec());
+            let first_pk_script = build_p2pkh_script(recv_hashed_pk)?;
             txout.push(TxOutput {
                 value: spec_amount,
                 pk_script_bytes: first_pk_script.len() as u64,
@@ -155,7 +163,7 @@ impl Wallet {
         }
         //  the last txout is our "change"
         let self_hashed_pk = hash_address(&self.address)?;
-        let second_pk_script = build_p2pkh_script(self_hashed_pk[1..21].to_vec());
+        let second_pk_script = build_p2pkh_script(self_hashed_pk)?;
         let value: u64 = match used_balance > (amount + transaction_info.fee) {
             true => used_balance - amount - transaction_info.fee,
             false => 0,
