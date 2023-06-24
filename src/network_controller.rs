@@ -11,7 +11,7 @@ use crate::messages::{
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{double_hash, into_hashmap, to_io_err};
+use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::Hash;
@@ -265,32 +265,47 @@ impl NetworkController {
     }
 
     /// Generates a transaction and broadcasts it to all peers given the transaction details
-    pub fn generate_transaction(
-        &mut self,
-        details: TransactionInfo,
-    ) -> io::Result<TransactionInfo> {
-        let tx: RawTransaction = self
+    pub fn generate_transaction(&mut self, details: TransactionInfo) -> io::Result<()> {
+        let tx = self
             .wallet
-            .generate_transaction(&mut self.utxo_set, details.clone())?;
+            .generate_transaction(&mut self.utxo_set, details.clone());
 
-        // broadcast tx
-        let tx_hash = double_hash(&tx.serialize()).to_byte_array();
+        match tx {
+            Ok(tx) => {
+                let tx_hash = double_hash(&tx.serialize()).to_byte_array();
 
-        let payload = tx.serialize();
-        let mut bytes = MessageHeader::new(
-            MAGIC,
-            TX.to_string(),
-            payload.len() as u32,
-            [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
-        )
-        .serialize()?;
+                let payload = tx.serialize();
+                let mut bytes = MessageHeader::new(
+                    MAGIC,
+                    TX.to_string(),
+                    payload.len() as u32,
+                    [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
+                )
+                .serialize()?;
 
-        bytes.extend(payload);
+                bytes.extend(payload);
 
-        // send bytes to all
-        self.nodes.send_to_all(&bytes)?;
+                // send bytes to all
+                self.nodes.send_to_all(&bytes)?;
 
-        Ok(details)
+                // notify ui
+                self.ui_sender
+                    .send(GtkMessage::CreateNotification((
+                        gtk::MessageType::Info,
+                        "Transaction broadcasted".to_string(),
+                        format!("Transaction hash: {}", _encode_hex(&tx_hash)),
+                    )))
+                    .map_err(to_io_err)
+            }
+            Err(e) => self
+                .ui_sender
+                .send(GtkMessage::CreateNotification((
+                    gtk::MessageType::Error,
+                    "Failed transaction broadcasting error".to_string(),
+                    format!("{}", e),
+                )))
+                .map_err(to_io_err),
+        }
     }
 
     /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
@@ -353,12 +368,7 @@ impl OuterNetworkController {
         transaction_info: TransactionInfo,
     ) -> io::Result<()> {
         let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
-        let result: Result<TransactionInfo, io::Error> =
-            inner_lock.generate_transaction(transaction_info);
-        inner_lock
-            .ui_sender
-            .send(GtkMessage::TransactionInfo(result))
-            .map_err(to_io_err)
+        inner_lock.generate_transaction(transaction_info)
     }
 
     fn recv_ui_messages(&self, ui_receiver: Receiver<ModelRequest>) -> io::Result<()> {
