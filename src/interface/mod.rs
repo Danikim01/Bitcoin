@@ -16,7 +16,6 @@ pub mod components;
 pub enum GtkMessage {
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
-    TransactionInfo(Result<TransactionInfo, io::Error>),
     UpdateOverviewTransactions((TransactionDisplayInfo, TransactionOrigin)),
     /// type, notification title, notification message
     CreateNotification((gtk::MessageType, String, String)),
@@ -78,37 +77,6 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                     builder_aux.object("balance_total_val").unwrap();
                 balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
             }
-            // change this to CreateNotification later
-            GtkMessage::TransactionInfo(result) => match result {
-                Ok(info) => {
-                    let dialog = gtk::MessageDialog::new(
-                        None::<&gtk::Window>,
-                        gtk::DialogFlags::empty(),
-                        gtk::MessageType::Info,
-                        gtk::ButtonsType::Ok,
-                        &format!("Transaction sent\ndetails:{:?}", info),
-                    );
-                    dialog.set_default_size(150, 100);
-                    dialog.set_modal(true);
-                    dialog.set_title("Transaction sent succesfully");
-                    dialog.run();
-                    dialog.close();
-                }
-                Err(e) => {
-                    let dialog = gtk::MessageDialog::new(
-                        None::<&gtk::Window>,
-                        gtk::DialogFlags::empty(),
-                        gtk::MessageType::Error,
-                        gtk::ButtonsType::Ok,
-                        &format!("Transaction failed\nreason:{:?}", e),
-                    );
-                    dialog.set_default_size(150, 100);
-                    dialog.set_modal(true);
-                    dialog.set_title("Error: Transaction failed");
-                    dialog.run();
-                    dialog.close();
-                }
-            },
             GtkMessage::UpdateOverviewTransactions((transaction, origin)) => {
                 let builder_aux = builder.clone();
                 update_overview_transactions(builder_aux, transaction, origin);
