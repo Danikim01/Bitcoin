@@ -47,12 +47,12 @@ impl Wallet {
     /// Login to the wallet with a secret key.
     pub fn login() -> io::Result<Self> {
         // primary
-        let secret_key =
-            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
+        // let secret_key =
+        //     "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
 
         // secondary
-        // let secret_key =
-        //     "8DA6A9C5075623AAA6A857CE1AD0AEC523F51F2E4BC3E94451F5811B964028BF".to_string();
+        let secret_key =
+            "8DA6A9C5075623AAA6A857CE1AD0AEC523F51F2E4BC3E94451F5811B964028BF".to_string();
 
         // eval move this to a separate function
         let secp = Secp256k1::new();

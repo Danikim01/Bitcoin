@@ -13,17 +13,17 @@
     <property name="row-spacing">2</property>
     <property name="column-homogeneous">True</property>
     <child>
-      <object class="GtkBox" id="transactions_filters2">
+      <object class="GtkBox" id="blocks_filters">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <child>
-          <object class="GtkLabel" id="transaction_status_id2">
+          <object class="GtkLabel" id="blocks_height_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">blocks</property>
+            <property name="label" translatable="yes">Height</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -32,7 +32,7 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="transaction_date_id2">
+          <object class="GtkLabel" id="blocks_date_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
@@ -45,24 +45,11 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="transaction_type_id2">
+          <object class="GtkLabel" id="blocks_label_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Type</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkLabel" id="transaction_label_id2">
-            <property name="width-request">180</property>
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Label</property>
+            <property name="label" translatable="yes">Hash</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -71,11 +58,11 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="transaction_amount_id2">
+          <object class="GtkLabel" id="blocks_amount_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Amount (BTC)</property>
+            <property name="label" translatable="yes">Transaction count</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -110,15 +97,15 @@
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <child>
-          <object class="GtkLabel" id="headers_status_id">
+          <object class="GtkLabel" id="headers_height_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">headers</property>
+            <property name="label" translatable="yes">Height</property>
           </object>
           <packing>
             <property name="expand">False</property>
-            <property name="fill">True</property>
+            <property name="fill">False</property>
             <property name="position">0</property>
           </packing>
         </child>
@@ -136,42 +123,16 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="transaction_type_id1">
+          <object class="GtkLabel" id="headers_hash_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Type</property>
+            <property name="label" translatable="yes">Hash</property>
           </object>
           <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkLabel" id="transaction_label_id1">
-            <property name="width-request">180</property>
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Label</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
+            <property name="expand">True</property>
             <property name="fill">True</property>
             <property name="position">3</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkLabel" id="transaction_amount_id1">
-            <property name="width-request">180</property>
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Amount (BTC)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">4</property>
           </packing>
         </child>
       </object>
@@ -1426,19 +1387,6 @@
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <child>
-          <object class="GtkLabel" id="transaction_status_id">
-            <property name="width-request">180</property>
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">transactions</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
           <object class="GtkLabel" id="transaction_date_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
@@ -1452,24 +1400,11 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="transaction_type_id">
-            <property name="width-request">180</property>
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Type</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
           <object class="GtkLabel" id="transaction_label_id">
             <property name="width-request">180</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Label</property>
+            <property name="label" translatable="yes">Hash</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -1485,7 +1420,7 @@
             <property name="label" translatable="yes">Amount (BTC)</property>
           </object>
           <packing>
-            <property name="expand">False</property>
+            <property name="expand">True</property>
             <property name="fill">True</property>
             <property name="position">4</property>
           </packing>
