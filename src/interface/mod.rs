@@ -1,5 +1,5 @@
 use crate::interface::components::overview_panel::update_overview_transactions;
-use crate::interface::components::overview_panel::{TransactionDisplayInfo};
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::components::utils::create_notification_window;
 use crate::raw_transaction::TransactionOrigin;
@@ -10,6 +10,7 @@ use gtk::prelude::*;
 use std::io;
 use std::sync::mpsc::Sender;
 
+use self::components::table::{GtkTable, RowData};
 pub mod components;
 
 /// Enum with messages from the model to the interface
@@ -19,6 +20,7 @@ pub enum GtkMessage {
     UpdateOverviewTransactions((TransactionDisplayInfo, TransactionOrigin)),
     /// type, notification title, notification message
     CreateNotification((gtk::MessageType, String, String)),
+    UpdateTable((GtkTable, RowData)),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -83,6 +85,9 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
             }
             GtkMessage::CreateNotification((t, title, msg)) => {
                 create_notification_window(t, &title, &msg);
+            }
+            GtkMessage::UpdateTable((table, row_data)) => {
+                println!("should modify a table");
             }
         }
 

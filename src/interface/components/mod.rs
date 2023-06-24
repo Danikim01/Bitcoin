@@ -4,6 +4,7 @@ use std::sync::mpsc::Sender;
 
 pub mod overview_panel;
 pub mod send_panel;
+pub mod table;
 mod top_bar;
 pub mod utils;
 

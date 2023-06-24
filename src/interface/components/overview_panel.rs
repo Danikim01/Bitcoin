@@ -121,7 +121,10 @@ pub fn update_overview_transactions(
         );
     }
 
-    if already_added(&overview_transaction_container, &transaction.hash.to_string()) {
+    if already_added(
+        &overview_transaction_container,
+        &transaction.hash.to_string(),
+    ) {
         return;
     }
 

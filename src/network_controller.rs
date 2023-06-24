@@ -20,9 +20,9 @@ use std::io;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Mutex;
 
-// gtk imports
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
+use crate::interface::components::table::{GtkTable, RowData};
 use crate::interface::{update_ui_status_bar, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::net::SocketAddr;
@@ -55,6 +55,13 @@ impl NetworkController {
             ui_sender,
             wallet: Wallet::login()?,
         })
+    }
+
+    fn update_ui_table(&self) -> io::Result<()> {
+        let row_data = RowData::TransactionData("foo".to_string());
+        self.ui_sender
+            .send(GtkMessage::UpdateTable((GtkTable::Transactions, row_data)))
+            .map_err(to_io_err)
     }
 
     fn update_ui_balance(&self) -> io::Result<()> {
@@ -108,6 +115,8 @@ impl NetworkController {
             Some(&self.wallet.address),
         )?;
 
+        // get data from block and update ui
+        self.update_ui_table()?;
         self.update_ui_balance()?;
         Ok(())
     }
@@ -127,6 +136,8 @@ impl NetworkController {
 
         self.blocks.insert(block.hash(), block);
 
+        // get data from block and update ui
+        self.update_ui_table()?;
         self.update_ui_balance()?;
 
         Ok(())
@@ -189,6 +200,10 @@ impl NetworkController {
         if self.headers.len() == previous_header_count {
             return Ok(());
         }
+
+        // get data from headers and update ui
+        self.update_ui_table()?;
+
         log(
             &format!(
                 "Received header. New header count: {:?}",
@@ -247,6 +262,9 @@ impl NetworkController {
 
             // add transaction to overview
             self.update_ui_overview(transaction)?;
+
+            // get data from tx and update ui
+            self.update_ui_table()?;
         }
         Ok(())
     }
