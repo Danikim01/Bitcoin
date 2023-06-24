@@ -1,34 +1,35 @@
+use std::collections::{hash_map::Entry::Vacant, hash_map::Entry::Occupied, HashMap};
+use std::io;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex, mpsc::{self, Receiver}};
+use std::thread::{self, JoinHandle};
+use bitcoin_hashes::Hash;
+use gtk::glib::Sender;
 use crate::config::Config;
+use crate::interface::{GtkMessage, ModelRequest, TransactionDetails};
+use crate::messages::{
+    Block, BlockHeader, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
+    InvType, Inventory, Message, MessageHeader, Serialize,
+};
 use crate::messages::constants::{
     commands::{PONG, TX},
     config::{MAGIC, VERBOSE},
     messages::GENESIS_HASHID,
-};
-use crate::messages::{
-    Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
-    InvType, Inventory, Message, MessageHeader, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
-use bitcoin_hashes::Hash;
-use std::collections::{hash_map::Entry::Vacant, HashMap};
-use std::io;
-use std::sync::mpsc::{self, Receiver};
-use std::sync::Mutex;
-// gtk imports
-use crate::interface::{GtkMessage, ModelRequest, TransactionDetails};
-use gtk::glib::Sender;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+
+pub type BlockSet = HashMap<HashId, Block>;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
     tallest_header: HashId,
-    blocks: BlockSet,
+    valid_blocks: BlockSet, // valid blocks downloaded so far
+    blocks_on_hold: BlockSet, // downloaded blocks for which we don't have the previous block, and can't be added to valid_blocks just yet
+    pending_blocks: HashMap<HashId, Vec<HashId>>, // Vec of downloaded blocks that have a common prev_block which hasn't been downloaded, for each prev_block_hash
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
@@ -44,7 +45,9 @@ impl NetworkController {
         Ok(Self {
             headers: HashMap::new(),
             tallest_header: GENESIS_HASHID,
-            blocks: HashMap::new(),
+            valid_blocks: BlockSet::new(),
+            blocks_on_hold: BlockSet::new(),
+            pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config)?,
             ui_sender,
@@ -77,51 +80,74 @@ impl NetworkController {
         Ok(balance)
     }
 
-    fn read_block(&mut self, block: Block) -> io::Result<()> {
-        if self.blocks.contains_key(&block.hash()) {
+    fn read_backup_block(&mut self, block: Block) -> io::Result<()> {
+        // if we have a clean backup, validating isn't necessary
+        if self.validate_block(&block).is_err() {
+            return Ok(()); // ignore invalid or duplicate blocks
+        }
+        if self.valid_blocks.contains_key(&block.header.prev_block_hash) {
+            self.add_to_valid_blocks(block);
+        } else {
+            self.put_block_on_hold(block);
+        }
+        Ok(())
+    }
+
+    fn read_incoming_block(&mut self, block: Block, config: &Config) -> io::Result<()> {
+        if self.validate_block(&block).is_err() {
+            return Ok(()); // ignore invalid or duplicate blocks
+        }
+        block.save_to_file(config.get_blocks_file())?;
+        if self.valid_blocks.contains_key(&block.header.prev_block_hash) {
+            self.add_to_valid_blocks(block);
+        } else {
+            self.put_block_on_hold(block);
+        }
+        Ok(())
+    }
+
+    fn validate_block(&mut self, block: &Block) -> io::Result<()> {
+        if self.valid_blocks.contains_key(&block.hash()) || self.blocks_on_hold.contains_key(&block.hash()) {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 "This block has already been received before",
             ));
         }
-
-        let days_old = block.get_days_old();
-        if days_old > 0 {
-            self.update_status_bar(format!(
-                "Reading blocks, {:?} days behind",
-                block.get_days_old()
-            ))?;
-        } else {
-            self.update_status_bar("Up to date".to_string())?;
-        }
-
-        // validation does not yet include checks por UTXO spending, only checks proof of work
+        // validation only checks proof of work
+        // Also saves and consumes UTXOs for later spending 
         block.validate(&mut self.utxo_set)?;
         Ok(())
     }
 
-    fn read_block_unsafe(&mut self, block: Block) -> io::Result<()> {
-        if self.blocks.contains_key(&block.hash()) {
-            return Ok(());
+    fn add_to_valid_blocks(&mut self, block: Block) {
+        let days_old = block.get_days_old();
+        if days_old > 0 {
+            let _ = self.update_status_bar(format!(
+                "Reading blocks, {:?} days behind",
+                block.get_days_old()
+            ));
+        } else {
+            let _ = self.update_status_bar("Up to date".to_string());
         }
-
-        self.update_status_bar("Reading backup blocks".to_string())?;
-
-        // validation does not yet include checks por UTXO spending, only checks proof of work
-        block.validate_unsafe(&mut self.utxo_set)?;
-        self.blocks.insert(block.hash(), block);
-
-        Ok(())
+        let block_hash = block.hash();
+        self.valid_blocks.insert(block_hash, block);
+        // if there where blocks on hold waiting for this one, validate them
+        if let Some(blocked_blocks) = self.pending_blocks.remove(&block_hash) {
+            for block_hash in blocked_blocks {
+                if let Some(block) = self.blocks_on_hold.remove(&block_hash) {
+                    self.add_to_valid_blocks(block)
+                }
+            }
+        }
     }
 
-    fn read_block_from_node(&mut self, block: Block, config: &Config) -> io::Result<()> {
-        if self.read_block(block.clone()).is_err() {
-            return Ok(()); // ignore invalid blocks
+    fn put_block_on_hold(&mut self, block: Block) {
+        // add to pending blocks the previous block, mark this block as blocked by the previous one
+        match self.pending_blocks.entry(block.header.prev_block_hash) {
+            Vacant(entry) => {entry.insert(vec![block.hash()]);},
+            Occupied(mut entry) => entry.get_mut().push(block.hash())
         }
-
-        block.save_to_file(config.get_blocks_file())?;
-        self.blocks.insert(block.hash(), block);
-        Ok(())
+        self.blocks_on_hold.insert(block.hash(), block);
     }
 
     fn request_blocks(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
@@ -141,7 +167,7 @@ impl NetworkController {
     fn retain_missing_headers(&self, headers: &mut Headers) {
         headers
             .block_headers
-            .retain(|header| !self.blocks.contains_key(&header.hash()));
+            .retain(|header| !self.valid_blocks.contains_key(&header.hash()));
     }
 
     /// requests block for headers after given timestamp
@@ -281,7 +307,7 @@ impl NetworkController {
         if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
             self.update_status_bar("Found blocks backup file, reading blocks...".to_string())?;
             for (_, block) in blocks.into_iter() {
-                self.read_block_unsafe(block)?;
+                self.read_backup_block(block)?;
             }
             self.update_status_bar("Read blocks from backup file.".to_string())?;
         }
@@ -363,7 +389,7 @@ impl OuterNetworkController {
         t_inner
             .lock()
             .map_err(to_io_err)?
-            .read_block_from_node(block, config)
+            .read_incoming_block(block, config)
     }
 
     fn handle_node_headers_message(

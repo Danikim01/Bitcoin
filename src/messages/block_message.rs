@@ -1,73 +1,20 @@
-use crate::io::{self, Cursor};
-use crate::messages::MerkleTree;
-use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
-use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::double_hash;
-use crate::utility::to_io_err;
-use crate::utxo::UtxoSet;
-use bitcoin_hashes::{sha256, Hash};
-use chrono::Utc;
+use std::io::{self, Cursor, Read, Write};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
-
-use super::Message;
+use bitcoin_hashes::{sha256, Hash};
+use chrono::Utc;
+use crate::raw_transaction::{RawTransaction, TransactionOrigin};
+use crate::utility::{double_hash, to_io_err};
+use crate::utxo::UtxoSet;
+use super::{Message, utility::*, MerkleTree, BlockHeader, HashId, Hashable, Serialize};
 
 pub type BlockSet = HashMap<HashId, Block>;
 
 #[derive(Debug, Clone)]
 pub struct Block {
-    pub block_header: BlockHeader,
+    pub header: BlockHeader,
     pub txn_count: usize,
     pub txns: Vec<RawTransaction>,
-}
-
-// https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
-impl Serialize for Block {
-    fn serialize(&self) -> io::Result<Vec<u8>> {
-        let mut bytes: Vec<u8> = vec![];
-
-        let header_bytes = self.block_header.serialize();
-        bytes.extend(header_bytes);
-        let txn_count_bytes = to_compact_size_bytes(self.txn_count as u64);
-        bytes.extend(txn_count_bytes);
-
-        for txn in self.txns.iter() {
-            let txn_bytes = txn.serialize();
-            bytes.extend(txn_bytes);
-        }
-
-        Ok(bytes)
-    }
-
-    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
-        let mut cursor = Cursor::new(bytes);
-
-        let block_header = BlockHeader::from_bytes(&mut cursor)?;
-        let txn_count = read_from_varint(&mut cursor)?;
-
-        let mut txns = vec![];
-
-        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
-        txns.push(coinbase_transaction);
-
-        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
-        txns.extend(other_txns);
-
-        let block = Block {
-            block_header,
-            txn_count: txn_count as usize,
-            txns,
-        };
-
-        Ok(Message::Block(block))
-    }
-}
-
-impl Hashable for Block {
-    fn hash(&self) -> HashId {
-        self.block_header.hash()
-    }
 }
 
 impl Block {
@@ -89,7 +36,7 @@ impl Block {
         let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes); // clone txn_hashes if merkle proofing
         let root_hash = merkle_tree.get_root();
 
-        match self.block_header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
+        match self.header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
             true => {
                 // println!("Merkle root is valid!");
                 Ok(())
@@ -104,14 +51,14 @@ impl Block {
         }
     }
 
-    pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+    pub fn _validate_using_snapshot(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         let mut utxo_set_snapshot = utxo_set.clone();
 
         for txn in self.txns.iter() {
             txn.generate_utxo(&mut utxo_set_snapshot, TransactionOrigin::Block)?;
         }
 
-        self.block_header.validate_proof_of_work()?;
+        self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
 
         *utxo_set = utxo_set_snapshot;
@@ -119,12 +66,12 @@ impl Block {
         Ok(())
     }
 
-    pub fn validate_unsafe(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
+    pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block)?;
         }
 
-        self.block_header.validate_proof_of_work()?;
+        self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
 
         Ok(())
@@ -142,13 +89,9 @@ impl Block {
                 while cursor.position() < file_size {
                     // read block size
                     let block_size = read_from_varint(&mut cursor)?;
-                    // create buffer of block size
+                    // read buffer of block size
                     let mut block_bytes = vec![0; block_size as usize];
-
-                    // read block bytes
                     cursor.read_exact(&mut block_bytes)?;
-
-                    // deserialize block
                     let block_msg = Block::deserialize(&block_bytes)?;
 
                     if let Message::Block(block) = block_msg {
@@ -180,9 +123,48 @@ impl Block {
 
     pub fn get_days_old(&self) -> u64 {
         let current_time = Utc::now().timestamp();
-        let block_time = self.block_header.timestamp as i64;
+        let block_time = self.header.timestamp as i64;
         let age = (current_time - block_time) / 86400;
         age as u64
+    }
+}
+
+// https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
+impl Serialize for Block {
+    fn serialize(&self) -> io::Result<Vec<u8>> {
+        let mut bytes: Vec<u8> = vec![];
+        let header_bytes = self.header.serialize();
+        bytes.extend(header_bytes);
+        let txn_count_bytes = to_compact_size_bytes(self.txn_count as u64);
+        bytes.extend(txn_count_bytes);
+        for txn in self.txns.iter() {
+            let txn_bytes = txn.serialize();
+            bytes.extend(txn_bytes);
+        }
+        Ok(bytes)
+    }
+
+    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
+        let mut cursor = Cursor::new(bytes);
+        let header = BlockHeader::from_bytes(&mut cursor)?;
+        let txn_count = read_from_varint(&mut cursor)?;
+        let mut txns = vec![];
+        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
+        txns.push(coinbase_transaction);
+        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
+        txns.extend(other_txns);
+        let block = Block {
+            header,
+            txn_count: txn_count as usize,
+            txns,
+        };
+        Ok(Message::Block(block))
+    }
+}
+
+impl Hashable for Block {
+    fn hash(&self) -> HashId {
+        self.header.hash()
     }
 }
 

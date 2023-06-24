@@ -6,12 +6,13 @@ use std::io::{self, ErrorKind::InvalidData, Write};
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BlockHeader {
-    pub version: i32,
+    version: i32,
     pub prev_block_hash: HashId,
     pub merkle_root_hash: HashId,
     pub timestamp: u32,
-    pub nbits: u32,
-    pub nonce: u32,
+    nbits: u32,
+    nonce: u32,
+    hash: HashId,
 }
 
 impl BlockHeader {
@@ -23,6 +24,18 @@ impl BlockHeader {
         nbits: u32,
         nonce: u32,
     ) -> Self {
+        // calculate blockHeader hash
+        let mut bytes = vec![];
+        bytes.extend(version.to_le_bytes());
+        bytes.extend(prev_block_hash.iter());
+        bytes.extend(merkle_root_hash.iter());
+        bytes.extend(timestamp.to_le_bytes());
+        bytes.extend(nbits.to_le_bytes());
+        bytes.extend(nonce.to_le_bytes());
+        let hash = double_hash(&bytes);
+        let mut hash_bytes = [0u8; 32];
+        hash_bytes.copy_from_slice(&hash[..]);
+        // initialize BlockHeader with its HashId
         Self {
             version,
             prev_block_hash,
@@ -30,6 +43,7 @@ impl BlockHeader {
             timestamp,
             nbits,
             nonce,
+            hash: HashId::new(hash_bytes),
         }
     }
 
@@ -145,10 +159,7 @@ impl BlockHeader {
 
 impl Hashable for BlockHeader {
     fn hash(&self) -> HashId {
-        let hash = double_hash(&self.serialize());
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash[..]);
-        HashId::new(bytes)
+        self.hash
     }
 }
 
