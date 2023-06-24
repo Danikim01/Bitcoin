@@ -41,7 +41,6 @@ pub struct Wallet {
 }
 
 impl Wallet {
-
     /// Login to the wallet with a secret key and address.
     pub fn login() -> Self {
         let secret_key =
@@ -301,5 +300,22 @@ mod tests {
 
         let expected = "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000";
         assert_eq!(expected, _encode_hex(&bytes));
+    }
+
+    #[test]
+    fn test_send_to_self() {
+        let wallet: Wallet = Wallet::login();
+        let mut utxo_set: UtxoSet = UtxoSet::new();
+
+        let transaction_bytes = _decode_hex(
+            "01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
+        ).unwrap();
+        let transaction = RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes)).unwrap();
+        transaction
+            .generate_utxo(&mut utxo_set, TransactionOrigin::Block)
+            .unwrap();
+
+        let balance = utxo_set.get_wallet_balance(&wallet.address);
+        assert_eq!(balance, 1905236 + 10000);
     }
 }

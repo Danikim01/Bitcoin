@@ -225,7 +225,7 @@ impl RawTransaction {
             hash: HashId::new(self.get_hash()),
         };
     }
-    
+
     /// Read the coinbase transaction from the given bytes and returns a RawTransaction with only the coinbase input and the outputs
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
@@ -284,6 +284,7 @@ impl RawTransaction {
     ) -> io::Result<()> {
         let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
         let new_utxo = Utxo::from_raw_transaction(self)?;
+        let mut index = 0;
         for utxo_transaction in &new_utxo.transactions {
             let address = match utxo_transaction.get_address() {
                 Ok(a) => a,
@@ -292,14 +293,15 @@ impl RawTransaction {
 
             match utxo_set.set.get_mut(&address) {
                 Some(wallet) => {
-                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone())
+                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone(), index)
                 }
                 None => {
                     let mut wallet = WalletUtxo::new();
-                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone());
+                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone(), index);
                     utxo_set.set.insert(address, wallet);
                 }
             }
+            index += 1;
         }
 
         Ok(())
@@ -316,7 +318,7 @@ impl RawTransaction {
 
         Ok(())
     }
-    
+
     fn read_witnesses(cursor: &mut Cursor<&[u8]>, tx_in_count: u64) -> io::Result<()> {
         let mut witnesses = Vec::new();
         for _ in 0..tx_in_count {

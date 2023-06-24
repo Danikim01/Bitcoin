@@ -30,7 +30,7 @@ impl PendingUtxo {
 /// Wallet that stores the UTXOs of the user (pending and spent)
 #[derive(Debug, Clone)]
 pub struct WalletUtxo {
-    pub utxos: HashMap<UtxoId, UtxoTransaction>,
+    pub utxos: HashMap<(UtxoId, Index), UtxoTransaction>,
     pub spent: HashMap<UtxoId, Vec<Index>>,
     pub pending: PendingUtxo,
 }
@@ -48,8 +48,12 @@ impl WalletUtxo {
     pub fn get_available_utxos(&self) -> Vec<(UtxoId, UtxoTransaction)> {
         let mut available_utxos: Vec<(UtxoId, UtxoTransaction)> = Vec::new();
 
-        for (utxo_id, utxo) in &self.utxos {
-            if !self.spent.contains_key(utxo_id) {
+        for ((utxo_id, index), utxo) in &self.utxos {
+            if let Some(spent) = self.spent.get(utxo_id) {
+                if !spent.contains(index) {
+                    available_utxos.push((*utxo_id, utxo.clone()));
+                }
+            } else {
                 available_utxos.push((*utxo_id, utxo.clone()));
             }
         }
@@ -61,8 +65,12 @@ impl WalletUtxo {
     pub fn get_balance(&self) -> u64 {
         let mut balance = 0;
 
-        for (utxo_id, utxo) in &self.utxos {
-            if !self.spent.contains_key(utxo_id) {
+        for ((utxo_id, index), utxo) in &self.utxos {
+            if let Some(spent) = self.spent.get(utxo_id) {
+                if !spent.contains(index) {
+                    balance += utxo.value;
+                }
+            } else {
                 balance += utxo.value;
             }
         }
@@ -84,7 +92,13 @@ impl WalletUtxo {
     }
 
     /// Adds a UTXO to the wallet
-    pub fn add_utxo(&mut self, utxo_id: UtxoId, utxo: UtxoTransaction, origin: TransactionOrigin) {
+    pub fn add_utxo(
+        &mut self,
+        utxo_id: UtxoId,
+        utxo: UtxoTransaction,
+        origin: TransactionOrigin,
+        index: u32,
+    ) {
         if origin == TransactionOrigin::Pending {
             self.add_pending_utxo(utxo_id, utxo);
             return;
@@ -94,7 +108,7 @@ impl WalletUtxo {
             // notify ui that the utxo is no longer pending
             println!("pending utxo is now confirmed!");
         }
-        self.utxos.insert(utxo_id, utxo);
+        self.utxos.insert((utxo_id, index), utxo);
     }
 
     /// Adds a spent UTXO to the wallet
