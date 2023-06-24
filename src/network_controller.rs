@@ -23,7 +23,7 @@ use std::sync::Mutex;
 // gtk imports
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::interface::{update_ui_label, update_ui_status_bar, GtkMessage, ModelRequest};
+use crate::interface::{update_ui_status_bar, GtkMessage, ModelRequest};
 use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;

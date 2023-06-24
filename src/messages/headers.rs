@@ -73,13 +73,13 @@ impl MessageHeader {
     /// Read a `MessageHeader` from a TcpStream.
     pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
         let mut magic_buffer = [0_u8; START_STRING_SIZE];
-        stream.read(&mut magic_buffer)?;
+        stream.read_exact(&mut magic_buffer)?;
         while magic_buffer != MAGIC {
-            stream.read(&mut magic_buffer)?;
+            stream.read_exact(&mut magic_buffer)?;
         }
 
         let mut header_buffer = [0_u8; HEADER_SIZE - START_STRING_SIZE];
-        stream.read(&mut header_buffer)?;
+        stream.read_exact(&mut header_buffer)?;
         MessageHeader::from_bytes(&header_buffer)
     }
 

@@ -1,5 +1,5 @@
 use crate::interface::components::overview_panel::update_overview_transactions;
-use crate::interface::components::overview_panel::{TransactionDisplayInfo, TransactionRole};
+use crate::interface::components::overview_panel::{TransactionDisplayInfo};
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::components::utils::create_notification_window;
 use crate::raw_transaction::TransactionOrigin;

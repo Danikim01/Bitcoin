@@ -87,7 +87,7 @@ fn get_transaction_widget(
     let timestamp_label: gtk::Label = inner_builder
         .object("overview_transaction_template_timestamp")
         .unwrap();
-    timestamp_label.set_text(&transaction.date.to_string());
+    timestamp_label.set_text(&transaction.date);
 
     let origin_img: gtk::Image = inner_builder
         .object("overview_transaction_template_img")

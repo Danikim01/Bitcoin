@@ -11,6 +11,7 @@ use std::{
     io::{Error, Read},
     str::FromStr,
 };
+use chrono::{DateTime, NaiveDateTime, Utc};
 
 use gtk::glib::Sender;
 pub mod tx_input;
@@ -182,7 +183,7 @@ impl RawTransaction {
     fn get_total_output_value(&self) -> u64 {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
-            total_value = total_value + output.value;
+            total_value += output.value;
         }
 
         total_value
@@ -220,12 +221,16 @@ impl RawTransaction {
 
         change_value = self.get_change_value_for(address);
 
-        return TransactionDisplayInfo {
+        let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+        let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+        let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
+
+        TransactionDisplayInfo {
             role,
-            date: timestamp.to_string(),
+            date: newdate.to_string(),
             amount: change_value as i64 - spent_value as i64,
             hash: HashId::new(self.get_hash()),
-        };
+        }
     }
 
     /// Read the coinbase transaction from the given bytes and returns a RawTransaction with only the coinbase input and the outputs
@@ -429,6 +434,7 @@ mod tests {
 
     use super::*;
     use std::fs;
+    use crate::wallet::Wallet;
 
     #[test]
     fn test_compactsize_serialization_u16() {
@@ -604,6 +610,22 @@ mod tests {
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
         let transaction_info = transaction.transaction_info_for(address, 0);
+
         assert_eq!(transaction_info.amount, -1000);
     }
+
+    /*
+    #[test]
+    fn test_raw_transaction_to_self_has_positive_value() {
+        let transaction_bytes = _decode_hex(
+            "01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
+        ).unwrap();
+        let transaction = RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes)).unwrap();
+
+        println!("Value is {:?}", transaction.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", 0).amount);
+        //assert_eq!(transaction.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", 0).amount, 10000);
+
+
+    }
+    */
 }
