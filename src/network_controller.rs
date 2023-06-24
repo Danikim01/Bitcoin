@@ -64,9 +64,9 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    fn update_ui_overview(&self, transaction: RawTransaction) -> io::Result<()> {
+    fn update_ui_overview(&mut self, transaction: RawTransaction) -> io::Result<()> {
         let transaction_info: TransactionDisplayInfo =
-            transaction.transaction_info_for(&self.wallet.address, transaction.lock_time);
+            transaction.transaction_info_for(&self.wallet.address, transaction.lock_time, &mut self.utxo_set);
         self.ui_sender
             .send(GtkMessage::UpdateOverviewTransactions((
                 transaction_info,

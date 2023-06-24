@@ -112,10 +112,11 @@ impl Block {
         active_addr: Option<&str>,
         txn: &RawTransaction,
         timestamp: u32,
+        utxo_set: &mut UtxoSet,
     ) -> io::Result<()> {
         if let Some(addr) = active_addr {
             if txn.address_is_involved(addr) {
-                let transaction_info: TransactionDisplayInfo = txn.transaction_info_for(addr, timestamp);
+                let transaction_info: TransactionDisplayInfo = txn.transaction_info_for(addr, timestamp, utxo_set);
                 if let Some(ui_sender) = ui_sender {
                     ui_sender
                         .send(GtkMessage::UpdateOverviewTransactions((
@@ -146,7 +147,7 @@ impl Block {
                 ui_sender,
                 active_addr,
             )?;
-            Self::update_ui(ui_sender, active_addr, txn, self.block_header.timestamp)?;
+            Self::update_ui(ui_sender, active_addr, txn, self.block_header.timestamp, utxo_set)?;
         }
 
         self.block_header.validate_proof_of_work()?;
@@ -166,7 +167,7 @@ impl Block {
     ) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
-            Self::update_ui(ui_sender, active_addr, txn, self.block_header.timestamp)?;
+            Self::update_ui(ui_sender, active_addr, txn, self.block_header.timestamp, utxo_set)?;
         }
 
         self.block_header.validate_proof_of_work()?;
@@ -182,7 +183,7 @@ impl Block {
         for tx in &self.txns {
             if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX") {
                 let transaction_info: TransactionDisplayInfo =
-                    tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", self.block_header.timestamp);
+                    tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", self.block_header.timestamp, &mut UtxoSet { set: Default::default() });
                 transactions.push(transaction_info);
             }
         }

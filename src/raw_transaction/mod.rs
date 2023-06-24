@@ -5,7 +5,7 @@ use crate::messages::utility::{
 use crate::messages::{HashId, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
-use crate::utxo::{Utxo, UtxoSet, WalletUtxo};
+use crate::utxo::{Index, Utxo, UtxoId, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
 use std::{
     io::{Error, Read},
@@ -179,6 +179,35 @@ impl RawTransaction {
         self.is_from_address(address) || self.is_destined_to_address(address)
     }
 
+    fn get_input_value(&self, address: &str, utxoset: &UtxoSet, txin: &TxInput) -> u64 {
+        let mut value = 0_u64;
+        if !txin.destined_from(address) {
+            return value;
+        }
+
+        let tx_previous = &txin.previous_output;
+        if let Some(wallet) = utxoset.set.get(address){
+            if let Some(UtxoTransaction) = wallet.utxos.get(&(tx_previous.hash, tx_previous.index)){
+                value += UtxoTransaction.value;
+            }
+        }
+        value
+    }
+
+    fn get_total_input_value(&self, address: &str, utxoset: &UtxoSet) -> u64 {
+        let mut total_value = 0_u64;
+        match &self.tx_in {
+            TxInputType::CoinBaseInput(_) => {}
+            TxInputType::TxInput(tx_ins) => {
+                for txin in tx_ins {
+                    total_value += self.get_input_value(address, utxoset, txin);
+                }
+            }
+        }
+        total_value
+    }
+
+
     /// Returns the total output value of the transaction (sum of all output values)
     fn get_total_output_value(&self) -> u64 {
         let mut total_value = 0_u64;
@@ -208,13 +237,13 @@ impl RawTransaction {
     }
 
     /// Returns the transaction info for the given address
-    pub fn transaction_info_for(&self, address: &str, timestamp: u32) -> TransactionDisplayInfo {
+    pub fn transaction_info_for(&self, address: &str, timestamp: u32, utxo_set: &mut UtxoSet) -> TransactionDisplayInfo {
         let mut role = TransactionRole::Sender;
         let mut spent_value = 0;
         let mut change_value = 0;
 
         if self.is_from_address(address) {
-            spent_value = self.get_total_output_value();
+            spent_value = self.get_total_input_value(address, utxo_set);
         } else {
             role = TransactionRole::Receiver;
         }
@@ -604,28 +633,33 @@ mod tests {
 
     #[test]
     fn test_raw_transaction_has_value_negative() {
-        let transaction_bytes = _decode_hex("01000000011f7a653077f23ae7646e56f76febb8e9cbc6602f1fe9cbbd9869cefcf283ef12000000006a47304402207bc12fca3fffb5b3685cb52f17fd119cdb9e950e9829c9d3afffc023f38ca7cf02202b4692529921f6fa3ffde0e7089018a439f7230058e55c7c513d39afd3dc3a55012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff02e8030000000000001976a914c4bedb9284b049b57d8b7ed8c32a2405a175ddcb88ac56311e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
+        let transaction_bytes = _decode_hex("01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
         let transaction =
             RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes.unwrap())).unwrap();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
-        let transaction_info = transaction.transaction_info_for(address, 0);
+        let txin = match transaction.tx_in.clone() {
+            TxInputType::TxInput(txin) => txin[0].clone(),
+            _ => panic!("not a TxInputType::TxInput"),
+        };
 
-        assert_eq!(transaction_info.amount, -1000);
+        let previous_output = (txin.previous_output.hash, txin.previous_output.index);
+        let utxo_tx = UtxoTransaction{
+            index: txin.previous_output.index,
+            value: 1925236,
+            lock: vec![],
+        };
+
+        let mut wallet = WalletUtxo::new();
+        wallet.utxos.insert(previous_output, utxo_tx);
+
+        let mut utxo_set = UtxoSet::new();
+        utxo_set.set.insert("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string(),wallet);
+
+
+
+        let transaction_info = transaction.transaction_info_for(address, 0, &mut utxo_set);
+
+        assert_eq!(transaction_info.amount, -10000);
     }
-
-    /*
-    #[test]
-    fn test_raw_transaction_to_self_has_positive_value() {
-        let transaction_bytes = _decode_hex(
-            "01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
-        ).unwrap();
-        let transaction = RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes)).unwrap();
-
-        println!("Value is {:?}", transaction.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", 0).amount);
-        //assert_eq!(transaction.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", 0).amount, 10000);
-
-
-    }
-    */
 }
