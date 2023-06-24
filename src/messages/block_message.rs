@@ -1,5 +1,5 @@
 use super::Message;
-use crate::interface::components::overview::TransactionDisplayInfo;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::GtkMessage;
 use crate::io::{self, Cursor};
 use crate::merkle_tree::MerkleTree;

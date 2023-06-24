@@ -15,10 +15,10 @@ pub enum TransactionRole {
 
 /// Struct that holds the information to be displayed in the transaction list in the UI
 pub struct TransactionDisplayInfo {
-    pub(crate) role: TransactionRole,
-    pub(crate) date: String,
-    pub(crate) amount: i64,
-    pub(crate) hash: HashId,
+    pub role: TransactionRole,
+    pub date: String,
+    pub amount: i64,
+    pub hash: HashId,
 }
 
 fn get_transaction_widget(

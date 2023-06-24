@@ -16,7 +16,7 @@ use gtk::glib::Sender;
 pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
-use crate::interface::components::overview::{TransactionDisplayInfo, TransactionRole};
+use crate::interface::components::overview_panel::{TransactionDisplayInfo, TransactionRole};
 use crate::interface::GtkMessage;
 use tx_output::TxOutput;
 
