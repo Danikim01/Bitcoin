@@ -176,21 +176,6 @@ impl Block {
         Ok(())
     }
 
-    /// Reads all transactions made from the given address and returns them in a vector of TransactionDisplayInfo.
-    pub fn read_transactions_from(&self, address: &str) -> Vec<TransactionDisplayInfo> {
-        let mut transactions = vec![];
-
-        for tx in &self.txns {
-            if tx.address_is_involved("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX") {
-                let transaction_info: TransactionDisplayInfo =
-                    tx.transaction_info_for("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX", self.block_header.timestamp, &mut UtxoSet { set: Default::default() });
-                transactions.push(transaction_info);
-            }
-        }
-
-        return transactions;
-    }
-
     /// Reads all transactions in the file and returns them in a BlockSet.
     pub fn all_from_file(file_name: &str) -> io::Result<BlockSet> {
         let mut block_set: BlockSet = HashMap::new();

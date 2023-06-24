@@ -7,11 +7,11 @@ use crate::messages::{HashId, Serialize};
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Index, Utxo, UtxoId, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use std::{
     io::{Error, Read},
     str::FromStr,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
 
 use gtk::glib::Sender;
 pub mod tx_input;
@@ -186,8 +186,9 @@ impl RawTransaction {
         }
 
         let tx_previous = &txin.previous_output;
-        if let Some(wallet) = utxoset.set.get(address){
-            if let Some(UtxoTransaction) = wallet.utxos.get(&(tx_previous.hash, tx_previous.index)){
+        if let Some(wallet) = utxoset.set.get(address) {
+            if let Some(UtxoTransaction) = wallet.utxos.get(&(tx_previous.hash, tx_previous.index))
+            {
                 value += UtxoTransaction.value;
             }
         }
@@ -206,7 +207,6 @@ impl RawTransaction {
         }
         total_value
     }
-
 
     /// Returns the total output value of the transaction (sum of all output values)
     fn get_total_output_value(&self) -> u64 {
@@ -237,7 +237,12 @@ impl RawTransaction {
     }
 
     /// Returns the transaction info for the given address
-    pub fn transaction_info_for(&self, address: &str, timestamp: u32, utxo_set: &mut UtxoSet) -> TransactionDisplayInfo {
+    pub fn transaction_info_for(
+        &self,
+        address: &str,
+        timestamp: u32,
+        utxo_set: &mut UtxoSet,
+    ) -> TransactionDisplayInfo {
         let mut role = TransactionRole::Sender;
         let mut spent_value = 0;
         let mut change_value = 0;
@@ -250,7 +255,10 @@ impl RawTransaction {
 
         change_value = self.get_change_value_for(address);
 
-        let naive = NaiveDateTime::from_timestamp(timestamp as i64, 0);
+        let naive: NaiveDateTime = match NaiveDateTime::from_timestamp_opt(timestamp as i64, 0) {
+            Some(naive) => naive,
+            None => NaiveDateTime::default(),
+        };
         let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
         let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
 
@@ -462,8 +470,8 @@ mod tests {
     use crate::utility::_decode_hex;
 
     use super::*;
-    use std::fs;
     use crate::wallet::Wallet;
+    use std::fs;
 
     #[test]
     fn test_compactsize_serialization_u16() {
@@ -630,7 +638,6 @@ mod tests {
         assert!(!transaction.address_is_involved("foo"));
     }
 
-
     #[test]
     fn test_raw_transaction_has_value_negative() {
         let transaction_bytes = _decode_hex("01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
@@ -644,7 +651,7 @@ mod tests {
         };
 
         let previous_output = (txin.previous_output.hash, txin.previous_output.index);
-        let utxo_tx = UtxoTransaction{
+        let utxo_tx = UtxoTransaction {
             index: txin.previous_output.index,
             value: 1925236,
             lock: vec![],
@@ -654,9 +661,9 @@ mod tests {
         wallet.utxos.insert(previous_output, utxo_tx);
 
         let mut utxo_set = UtxoSet::new();
-        utxo_set.set.insert("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string(),wallet);
-
-
+        utxo_set
+            .set
+            .insert("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string(), wallet);
 
         let transaction_info = transaction.transaction_info_for(address, 0, &mut utxo_set);
 

@@ -93,7 +93,6 @@
       <object class="GtkScrolledWindow">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
-        <property name="shadow-type">in</property>
         <property name="propagate-natural-width">True</property>
         <property name="propagate-natural-height">True</property>
         <child>
@@ -194,7 +193,6 @@
       <object class="GtkScrolledWindow">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
-        <property name="shadow-type">in</property>
         <property name="propagate-natural-width">True</property>
         <property name="propagate-natural-height">True</property>
         <child>
@@ -1125,7 +1123,6 @@
       <object class="GtkScrolledWindow" id="transaction_recipients">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
-        <property name="shadow-type">in</property>
         <property name="min-content-width">0</property>
         <property name="min-content-height">450</property>
         <property name="propagate-natural-width">True</property>
@@ -1520,7 +1517,6 @@
       <object class="GtkScrolledWindow">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
-        <property name="shadow-type">in</property>
         <property name="propagate-natural-width">True</property>
         <property name="propagate-natural-height">True</property>
         <child>

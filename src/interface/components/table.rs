@@ -1,3 +1,5 @@
+use chrono::Local;
+
 use crate::messages::{Block, Headers};
 use crate::raw_transaction::RawTransaction;
 
@@ -21,16 +23,23 @@ pub enum GtkTableData {
 
 /// Receive a raw transaction and parse it's data to a RowData::TransactionData
 pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
-    GtkTableData::TransactionData("foo".to_string())
+    // need date, hash and amount
+    let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
+
+    GtkTableData::TransactionData(date)
 }
 
 /// Receive a block and parse it's data to a RowData::BlocksData
 pub fn table_data_from_block(block: &Block) -> GtkTableData {
+    // need height, date, hash and tx count
+
     GtkTableData::BlocksData("foo".to_string())
 }
 
 /// Receive a header and parse it's data to a RowData::HeadersData
 pub fn table_data_from_headers(headers: &Headers) -> GtkTableData {
+    // need height, date and hash
+    
     GtkTableData::HeadersData("foo".to_string())
 }
 
