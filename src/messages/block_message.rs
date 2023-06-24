@@ -84,6 +84,12 @@ impl Block {
         txn_hashes
     }
 
+    pub fn get_hash(&self) -> io::Result<[u8; 32]> {
+        let bytes = self.serialize()?;
+        let hash = double_hash(&bytes);
+        Ok(hash.to_byte_array())
+    }
+
     fn validate_merkle_root(&self) -> io::Result<()> {
         // hash all transactions in the block
         let txn_hashes = self.hash_transactions();
@@ -116,7 +122,8 @@ impl Block {
     ) -> io::Result<()> {
         if let Some(addr) = active_addr {
             if txn.address_is_involved(addr) {
-                let transaction_info: TransactionDisplayInfo = txn.transaction_info_for(addr, timestamp, utxo_set);
+                let transaction_info: TransactionDisplayInfo =
+                    txn.transaction_info_for(addr, timestamp, utxo_set);
                 if let Some(ui_sender) = ui_sender {
                     ui_sender
                         .send(GtkMessage::UpdateOverviewTransactions((
@@ -147,7 +154,13 @@ impl Block {
                 ui_sender,
                 active_addr,
             )?;
-            Self::update_ui(ui_sender, active_addr, txn, self.block_header.timestamp, utxo_set)?;
+            Self::update_ui(
+                ui_sender,
+                active_addr,
+                txn,
+                self.block_header.timestamp,
+                utxo_set,
+            )?;
         }
 
         self.block_header.validate_proof_of_work()?;
@@ -167,7 +180,13 @@ impl Block {
     ) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
-            Self::update_ui(ui_sender, active_addr, txn, self.block_header.timestamp, utxo_set)?;
+            Self::update_ui(
+                ui_sender,
+                active_addr,
+                txn,
+                self.block_header.timestamp,
+                utxo_set,
+            )?;
         }
 
         self.block_header.validate_proof_of_work()?;

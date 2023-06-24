@@ -123,7 +123,7 @@ impl NetworkController {
         )?;
 
         // get data from block and update ui
-        let data = table_data_from_block(&block);
+        let data = table_data_from_block(&block)?;
         self.update_ui_table(GtkTable::Blocks, data)?;
         self.update_ui_balance()?;
         Ok(())

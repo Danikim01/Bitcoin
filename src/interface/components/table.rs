@@ -1,6 +1,6 @@
 use chrono::Local;
 
-use crate::messages::{Block, Headers};
+use crate::messages::{Block, Headers, Serialize};
 use crate::raw_transaction::RawTransaction;
 use crate::utility::_encode_hex;
 
@@ -39,15 +39,15 @@ pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
 }
 
 /// Receive a block and parse it's data to a RowData::BlocksData
-pub fn table_data_from_block(block: &Block) -> GtkTableData {
+pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
     // need height, date, hash and tx count
+    let height = "1".to_string();
+    let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
+    let hash_bytes = &block.get_hash()?;
+    let hash = _encode_hex(hash_bytes);
+    let tx_count = block.txn_count.to_string();
 
-    GtkTableData::BlocksData(
-        "foo".to_string(),
-        "foo".to_string(),
-        "foo".to_string(),
-        "foo".to_string(),
-    )
+    Ok(GtkTableData::BlocksData(height, date, hash, tx_count))
 }
 
 /// Receive a header and parse it's data to a RowData::HeadersData

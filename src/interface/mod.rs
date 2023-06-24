@@ -48,47 +48,50 @@ pub fn update_ui_label(
 }
 
 fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
-    // format balances as (balance / 100000000.0)
+    // Format balances as (balance / 100000000.0)
     let balance = balance as f64 / 100000000.0;
     let pending = pending as f64 / 100000000.0;
 
-    // get balances labels and update them
-    let balance_available_val: gtk::Label = builder.object("balance_available_val").unwrap();
-    balance_available_val.set_text(format!("{:.8}", balance).as_str());
+    // Get balances labels and update them
+    if let Some(balance_available_val) = builder.object::<gtk::Label>("balance_available_val") {
+        balance_available_val.set_text(format!("{:.8}", balance).as_str());
+    }
 
-    let balance_pending_val: gtk::Label = builder.object("balance_pending_val").unwrap();
-    balance_pending_val.set_text(format!("{:.8}", pending).as_str());
+    if let Some(balance_pending_val) = builder.object::<gtk::Label>("balance_pending_val") {
+        balance_pending_val.set_text(format!("{:.8}", pending).as_str());
+    }
 
-    let transaction_balance_label: gtk::Label =
-        builder.object("transaction_balance_label").unwrap();
-    transaction_balance_label.set_text(format!("{:.8}", balance).as_str()); // should it be balance or balance and pending?
+    if let Some(transaction_balance_label) =
+        builder.object::<gtk::Label>("transaction_balance_label")
+    {
+        transaction_balance_label.set_text(format!("{:.8}", balance).as_str()); // Should it be balance or balance and pending?
+    }
 
-    let balance_total_val: gtk::Label = builder.object("balance_total_val").unwrap();
-    balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
+    if let Some(balance_total_val) = builder.object::<gtk::Label>("balance_total_val") {
+        balance_total_val.set_text(format!("{:.8}", balance + pending).as_str());
+    }
 }
 
 /// Receiver that listen from messages from the model
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
+        let builder_aux = builder.clone();
         match msg {
             GtkMessage::UpdateLabel((label, text)) => {
-                let builder_aux = builder.clone();
-                let label: gtk::Label = builder_aux.object(label.as_str()).unwrap();
-                label.set_text(text.as_str());
+                if let Some(label) = builder_aux.object::<gtk::Label>(label.as_str()) {
+                    label.set_text(text.as_str());
+                }
             }
             GtkMessage::UpdateBalance((balance, pending)) => {
-                let builder_aux = builder.clone();
                 update_balance(builder_aux, balance, pending);
             }
             GtkMessage::UpdateOverviewTransactions((transaction, origin)) => {
-                let builder_aux = builder.clone();
                 update_overview_transactions(builder_aux, transaction, origin);
             }
             GtkMessage::CreateNotification((t, title, msg)) => {
                 create_notification_window(t, &title, &msg);
             }
             GtkMessage::UpdateTable((table, data)) => {
-                let builder_aux = builder.clone();
                 table_append_data(builder_aux, table, data);
             }
         }
