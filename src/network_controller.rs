@@ -151,10 +151,6 @@ impl NetworkController {
     }
 
     fn request_blocks(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
-        if headers.count == 0 {
-            return Ok(());
-        }
-
         let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
@@ -179,8 +175,18 @@ impl NetworkController {
     ) -> io::Result<()> {
         headers.trim_timestamp(timestamp);
         self.retain_missing_headers(&mut headers);
-        self.request_blocks(&mut headers, config)?;
-        Ok(())
+        if headers.count == 0 {
+            return Ok(());
+        }
+        // since every block needs to come after a valid block, create a "genesis" validated block
+        if self.valid_blocks.is_empty() {
+            let first_downloadable_header = headers.block_headers[0];
+            if let Some(previous_header) = self.headers.get(&first_downloadable_header.prev_block_hash) {
+                let genesis_block = Block::new(*previous_header, 0, vec![]);
+                self.valid_blocks.insert(genesis_block.hash(), genesis_block);
+            }
+        }
+        self.request_blocks(&mut headers, config)
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {

@@ -18,6 +18,10 @@ pub struct Block {
 }
 
 impl Block {
+    pub fn new(header: BlockHeader, txn_count: usize, txns: Vec<RawTransaction>) -> Self {
+        Self { header, txn_count, txns }
+    }
+
     fn hash_transactions(&self) -> Vec<sha256::Hash> {
         let mut txn_hashes: Vec<sha256::Hash> = vec![];
         self.txns.iter().for_each(|txn| {
