@@ -44,12 +44,6 @@ impl Block {
         txn_hashes
     }
 
-    pub fn get_hash(&self) -> io::Result<[u8; 32]> {
-        let bytes = self.serialize()?;
-        let hash = double_hash(&bytes);
-        Ok(hash.to_byte_array())
-    }
-
     fn validate_merkle_root(&self) -> io::Result<()> {
         // hash all transactions in the block
         let txn_hashes = self.hash_transactions();

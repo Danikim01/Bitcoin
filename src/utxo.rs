@@ -1,23 +1,20 @@
 use crate::interface::GtkMessage;
-use crate::raw_transaction::TransactionOrigin;
-use crate::raw_transaction::{tx_output::TxOutput, RawTransaction};
-use crate::utility::to_io_err;
-use crate::utility::{double_hash, encode_hex};
+use crate::messages::HashId;
+use crate::raw_transaction::{tx_output::TxOutput, RawTransaction, TransactionOrigin};
+use crate::utility::{double_hash, to_io_err};
 use gtk::glib::Sender;
 use std::collections::HashMap;
-use std::io::Cursor;
-use std::io::{self, Read};
+use std::io::{self, Cursor, Read};
 
 pub type Lock = Vec<u8>;
-pub type UtxoId = [u8; 32];
 type Address = String;
 pub type Index = u32;
 
 /// Struct that represents a UTXOs pending to be spent
 #[derive(Debug, Clone)]
 pub struct PendingUtxo {
-    pub utxos: HashMap<UtxoId, UtxoTransaction>,
-    pub spent: HashMap<UtxoId, Vec<Index>>,
+    pub utxos: HashMap<HashId, UtxoTransaction>,
+    pub spent: HashMap<HashId, Vec<Index>>,
 }
 
 impl PendingUtxo {
@@ -33,8 +30,8 @@ impl PendingUtxo {
 /// Wallet that stores the UTXOs of the user (pending and spent)
 #[derive(Debug, Clone)]
 pub struct WalletUtxo {
-    pub utxos: HashMap<(UtxoId, Index), UtxoTransaction>,
-    pub spent: HashMap<UtxoId, Vec<Index>>,
+    pub utxos: HashMap<(HashId, Index), UtxoTransaction>,
+    pub spent: HashMap<HashId, Vec<Index>>,
     pub pending: PendingUtxo,
 }
 
@@ -48,8 +45,8 @@ impl WalletUtxo {
     }
 
     /// Returns the UTXOs that are available to be spent
-    pub fn get_available_utxos(&self) -> Vec<(UtxoId, UtxoTransaction)> {
-        let mut available_utxos: Vec<(UtxoId, UtxoTransaction)> = Vec::new();
+    pub fn get_available_utxos(&self) -> Vec<(HashId, UtxoTransaction)> {
+        let mut available_utxos: Vec<(HashId, UtxoTransaction)> = Vec::new();
 
         for ((utxo_id, index), utxo) in &self.utxos {
             if let Some(spent) = self.spent.get(utxo_id) {
@@ -97,7 +94,7 @@ impl WalletUtxo {
     /// Adds a UTXO to the wallet
     pub fn add_utxo(
         &mut self,
-        utxo_id: UtxoId,
+        utxo_id: HashId,
         utxo: UtxoTransaction,
         origin: TransactionOrigin,
         index: u32,
@@ -114,7 +111,7 @@ impl WalletUtxo {
                 if addr == utxo.get_address()? {
                     println!("pending utxo is now confirmed!");
                     if let Some(sender) = ui_sender {
-                        let msg = format!("Transaction {} is now confirmed", encode_hex(&utxo_id));
+                        let msg = format!("Transaction {} is now confirmed", utxo_id);
                         let _ui = sender
                             .send(GtkMessage::CreateNotification((
                                 gtk::MessageType::Info,
@@ -131,7 +128,7 @@ impl WalletUtxo {
     }
 
     /// Adds a spent UTXO to the wallet
-    pub fn add_spent(&mut self, utxo_id: UtxoId, index: Index, origin: TransactionOrigin) {
+    pub fn add_spent(&mut self, utxo_id: HashId, index: Index, origin: TransactionOrigin) {
         if origin == TransactionOrigin::Pending {
             self.add_pending_spent(utxo_id, index);
             return;
@@ -146,12 +143,12 @@ impl WalletUtxo {
     }
 
     /// Adds a pending UTXO to the wallet
-    fn add_pending_utxo(&mut self, utxo_id: UtxoId, utxo: UtxoTransaction) {
+    fn add_pending_utxo(&mut self, utxo_id: HashId, utxo: UtxoTransaction) {
         self.pending.utxos.insert(utxo_id, utxo);
     }
 
     /// Adds a pending spent UTXO to the wallet
-    fn add_pending_spent(&mut self, utxo_id: UtxoId, index: Index) {
+    fn add_pending_spent(&mut self, utxo_id: HashId, index: Index) {
         if let Some(spent) = self.pending.spent.get_mut(&utxo_id) {
             spent.push(index);
         } else {
@@ -174,7 +171,7 @@ impl UtxoSet {
     }
 
     /// returns available utxos for a given address
-    pub fn get_wallet_available_utxos(&self, address: &str) -> Vec<(UtxoId, UtxoTransaction)> {
+    pub fn get_wallet_available_utxos(&self, address: &str) -> Vec<(HashId, UtxoTransaction)> {
         if let Some(wallet) = self.set.get(address) {
             return wallet.get_available_utxos();
         }

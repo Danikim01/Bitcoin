@@ -150,14 +150,14 @@ impl Serialize for GetData {
         Ok(message)
     }
 
-    fn deserialize(bytes: &[u8]) -> Result<Message, std::io::Error> {
+    fn deserialize(bytes: &[u8]) -> io::Result<Message> {
         let mut cursor = Cursor::new(bytes);
 
         let count = read_from_varint(&mut cursor)? as usize;
         let mut inventories: Inventories = Vec::new();
         for _ in 0..count {
             let inv_type = i32::from_le_stream(&mut cursor)?;
-            let hash = HashId::new(read_hash(&mut cursor)?);
+            let hash = read_hash(&mut cursor)?;
 
             inventories.push(Inventory {
                 inv_type: InvType::from_u32(inv_type as u32)?,

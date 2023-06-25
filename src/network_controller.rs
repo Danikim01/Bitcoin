@@ -11,10 +11,9 @@ use crate::messages::{
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{double_hash, encode_hex, to_io_err};
+use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
-use bitcoin_hashes::Hash;
 use chrono::Utc;
 use gtk::glib::Sender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -44,7 +43,7 @@ pub struct NetworkController {
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
     wallet: Wallet,
-    tx_read: HashMap<[u8; 32], ()>,
+    tx_read: HashMap<HashId, ()>,
 }
 
 impl NetworkController {
@@ -143,10 +142,26 @@ impl NetworkController {
     }
 
     fn read_backup_block(&mut self, block: Block) {
-        self.add_to_valid_blocks(block)
+        if self.validate_block(&block).is_err() {
+            return; // ignore invalid or duplicate blocks
+        }
+        if self
+            .valid_blocks
+            .contains_key(&block.header.prev_block_hash)
+        {
+            self.add_to_valid_blocks(block);
+        } else {
+            self.put_block_on_hold(block);
+        }
     }
 
     fn read_incoming_block(&mut self, block: Block, config: &Config) -> io::Result<()> {
+        println!(
+            "Valid block size: {}, OnHold: {}, Pending: {}",
+            self.valid_blocks.len(),
+            self.blocks_on_hold.len(),
+            self.pending_blocks.len()
+        );
         if self.validate_block(&block).is_err() {
             return Ok(()); // ignore invalid or duplicate blocks
         }
@@ -262,7 +277,8 @@ impl NetworkController {
     fn read_backup_headers(&mut self, mut headers: Headers, config: &Config) -> io::Result<()> {
         let prev_header_count = self.headers.len();
         // save new headers to hashmap and backup file
-        for mut header in headers.clone().block_headers {
+        let mut new_headers = vec![];
+        for mut header in headers.block_headers {
             match self.headers.get(&header.prev_block_hash) {
                 Some(parent_header) => {
                     header.height = parent_header.height + 1;
@@ -270,12 +286,14 @@ impl NetworkController {
                 None => continue, // ignore header if prev_header is unknown
             }
             if let Vacant(entry) = self.headers.entry(header.hash()) {
+                new_headers.push(header);
                 entry.insert(header);
                 if header.height > self.tallest_header.height {
                     self.tallest_header = header
                 }
             }
         }
+
         if prev_header_count == self.headers.len() {
             return Ok(());
         }
@@ -284,12 +302,14 @@ impl NetworkController {
             VERBOSE,
         );
         // request blocks mined after given date
+        headers = Headers::new(new_headers.len(), new_headers);
         headers.trim_timestamp(config.get_start_timestamp());
         self.request_blocks(headers, config)
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
         let prev_header_count = self.headers.len();
+        println!("Headers size: {}", prev_header_count);
         // save new headers to hashmap and backup file
         let mut new_headers: Vec<BlockHeader> = vec![];
         for mut header in headers.block_headers {
@@ -357,7 +377,7 @@ impl NetworkController {
 
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
         // get data from tx and update ui
-        let tx_hash: [u8; 32] = transaction.get_hash();
+        let tx_hash: HashId = transaction.get_hash();
         if self.tx_read.contains_key(&tx_hash) {
             return Ok(());
         }
@@ -397,7 +417,7 @@ impl NetworkController {
 
         match tx {
             Ok(tx) => {
-                let tx_hash = double_hash(&tx.serialize()).to_byte_array();
+                let tx_hash = double_hash(&tx.serialize());
 
                 let payload = tx.serialize();
                 let mut bytes = MessageHeader::new(
@@ -416,7 +436,10 @@ impl NetworkController {
                 self.notify_ui_message(
                     gtk::MessageType::Info,
                     "Transaction broadcasted",
-                    &format!("Transaction hash: {}", encode_hex(&tx_hash)),
+                    &format!(
+                        "Transaction hash: {}",
+                        HashId::from_hash(tx_hash)
+                    ),
                 )
             }
             Err(e) => self.notify_ui_message(

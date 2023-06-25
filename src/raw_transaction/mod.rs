@@ -229,10 +229,9 @@ impl RawTransaction {
     }
 
     /// Returns the hash of the transaction
-    pub fn get_hash(&self) -> [u8; 32] {
-        let bytes = self.serialize();
-        let hash = double_hash(&bytes);
-        hash.to_byte_array()
+    pub fn get_hash(&self) -> HashId {
+        let hash = double_hash(&self.serialize());
+        HashId::from_hash(hash)
     }
 
     /// Returns the transaction info for the given address
@@ -257,7 +256,7 @@ impl RawTransaction {
             role,
             date: date_from_timestamp(timestamp),
             amount: change_value as i64 - spent_value as i64,
-            hash: HashId::new(self.get_hash()),
+            hash: self.get_hash(),
         }
     }
 
@@ -326,7 +325,7 @@ impl RawTransaction {
         ui_sender: Option<&Sender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
-        let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
+        let new_utxo_id = HashId::from_hash(double_hash(&self.serialize()));
         let new_utxo = Utxo::from_raw_transaction(self)?;
         for (index, utxo_transaction) in new_utxo.transactions.iter().enumerate() {
             let address = Self::get_utxo_addr(utxo_transaction);

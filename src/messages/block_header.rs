@@ -68,8 +68,8 @@ impl BlockHeader {
     /// Create a block header from a byte array (little endian).
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
         let version = i32::from_le_stream(cursor)?;
-        let prev_block_hash = HashId::new(read_hash(cursor)?);
-        let merkle_root_hash = HashId::new(read_hash(cursor)?);
+        let prev_block_hash = read_hash(cursor)?;
+        let merkle_root_hash = read_hash(cursor)?;
         let timestamp = u32::from_le_stream(cursor)?;
         let nbits = u32::from_le_stream(cursor)?;
         let nonce = u32::from_le_stream(cursor)?;

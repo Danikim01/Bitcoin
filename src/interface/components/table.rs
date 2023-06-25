@@ -2,7 +2,6 @@ use chrono::Local;
 
 use crate::messages::{Block, BlockHeader, Hashable};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::encode_hex;
 
 use super::blocks_panel::add_data_to_blocks_table;
 use super::headers_panel::add_data_to_headers_table;
@@ -21,11 +20,11 @@ pub enum GtkTable {
 
 /// Enum with the different types of data that can be added to a table
 pub enum GtkTableData {
-    /// height, date, hash, tx count (all as String)
+    /// height, date, hash, tx count
     Blocks(String, String, String, String),
     /// height, date, hash (all as String)
     Headers(String, String, String),
-    /// date, hash, amount (all as String)
+    /// date, hash, amount
     Transaction(String, String, String),
 }
 
@@ -33,23 +32,26 @@ pub enum GtkTableData {
 pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
     // need date, hash and amount
     let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
-    let hash_bytes = &tx.get_hash();
-    let hash = encode_hex(hash_bytes);
+    let hash = tx.get_hash();
     let amount = format!("{:.8}", tx.get_total_output_value() as f64 / 100000000.0);
 
-    GtkTableData::Transaction(date, hash, amount)
+    GtkTableData::Transaction(date, hash.to_string(), amount)
 }
 
 /// Receive a block and parse it's data to a RowData::BlocksData
 pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
     // need height, date, hash and tx count
-    let height = "1".to_string();
-    let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
-    let hash_bytes = &block.get_hash()?;
-    let hash = encode_hex(hash_bytes);
+    let height = block.header.height.to_string();
+    let date = Local::now().format("%Y-%m-%d %H:%M").to_string();
+    let hash = block.hash();
     let tx_count = block.txn_count.to_string();
 
-    Ok(GtkTableData::Blocks(height, date, hash, tx_count))
+    Ok(GtkTableData::Blocks(
+        height,
+        date,
+        hash.to_string(),
+        tx_count,
+    ))
 }
 
 /// Receive a header and parse it's data to a RowData::HeadersData

@@ -1,3 +1,4 @@
+use super::HashId;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use std::io;
 use std::io::{Cursor, Read};
@@ -56,10 +57,10 @@ macro_rules! impl_StreamRead_for_ints (( $($int:ident),* ) => {
 
 impl_StreamRead_for_ints!(u8, u16, u32, u64, i32, i64, u128);
 
-pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
+pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> io::Result<HashId> {
     let mut hash = [0u8; 32];
     cursor.read_exact(&mut hash)?;
-    Ok(hash)
+    Ok(HashId::new(hash))
 }
 
 pub fn date_from_timestamp(timestamp: u32) -> String {
@@ -71,7 +72,7 @@ pub fn date_from_timestamp(timestamp: u32) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
-pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
+pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> io::Result<u64> {
     let first_byte = u8::from_le_stream(cursor)?;
 
     match first_byte {
@@ -151,6 +152,6 @@ mod tests {
         let result = read_hash(&mut cursor);
 
         assert_eq!(result.is_ok(), true);
-        assert_eq!(result.unwrap(), data);
+        assert_eq!(result.unwrap(), HashId::new(data));
     }
 }

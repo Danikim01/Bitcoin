@@ -1,18 +1,12 @@
 use crate::interface::components::send_panel::TransactionInfo;
-use crate::utility::double_hash;
-use crate::utxo::UtxoId;
-use crate::{
-    raw_transaction::{
-        tx_input::{Outpoint, TxInput, TxInputType},
-        tx_output::TxOutput,
-        RawTransaction,
-    },
-    utxo::UtxoTransaction,
+use crate::messages::HashId;
+use crate::raw_transaction::{
+    tx_input::{Outpoint, TxInput, TxInputType},
+    tx_output::TxOutput,
+    RawTransaction,
 };
-use crate::{
-    utility::to_io_err,
-    utxo::{Lock, UtxoSet},
-};
+use crate::utility::{double_hash, to_io_err};
+use crate::utxo::{Lock, UtxoSet, UtxoTransaction};
 use bitcoin_hashes::{hash160, Hash};
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
@@ -88,9 +82,9 @@ impl Wallet {
 
     fn fill_needed(
         amount: u64,
-        available_utxos: Vec<(UtxoId, UtxoTransaction)>,
-    ) -> (Vec<(UtxoId, UtxoTransaction, Lock)>, u64) {
-        let mut used_utxos: Vec<(UtxoId, UtxoTransaction, Lock)> = Vec::new();
+        available_utxos: Vec<(HashId, UtxoTransaction)>,
+    ) -> (Vec<(HashId, UtxoTransaction, Lock)>, u64) {
+        let mut used_utxos: Vec<(HashId, UtxoTransaction, Lock)> = Vec::new();
         let mut used_balance: u64 = 0;
         for (utxo_id, utxo) in available_utxos {
             used_balance += utxo.value;
@@ -110,7 +104,7 @@ impl Wallet {
         amount: u64,
     ) -> io::Result<(Vec<TxInput>, u64, Vec<Lock>)> {
         // get available utxos
-        let available_utxos: Vec<(UtxoId, UtxoTransaction)> =
+        let available_utxos: Vec<(HashId, UtxoTransaction)> =
             utxo_set.get_wallet_available_utxos(&self.address);
 
         if available_utxos.is_empty() {
@@ -216,7 +210,7 @@ impl Wallet {
 mod tests {
     use crate::{
         raw_transaction::{RawTransaction, TransactionOrigin},
-        utility::{_decode_hex, encode_hex},
+        utility::{_decode_hex, _encode_hex},
     };
 
     use super::*;
@@ -328,7 +322,7 @@ mod tests {
         assert_eq!(res.tx_out[1].value, 1705366); // deducted fee of 10000
 
         let expected = "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000";
-        assert_eq!(expected, encode_hex(&bytes));
+        assert_eq!(expected, _encode_hex(&bytes));
     }
 
     #[test]

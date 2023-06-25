@@ -38,11 +38,15 @@ impl HashId {
         Self { hash }
     }
 
+    pub fn from_hash(hash: sha256::Hash) -> Self {
+        Self::new(hash.to_byte_array())
+    }
+
     pub fn default() -> Self {
         Self { hash: [0u8; 32] }
     }
 
-    fn iter(&self) -> HashIdIter {
+    pub fn iter(&self) -> HashIdIter {
         HashIdIter {
             inner: self.hash.iter(),
         }
@@ -64,7 +68,7 @@ impl std::fmt::Display for HashId {
     }
 }
 
-struct HashIdIter<'a> {
+pub struct HashIdIter<'a> {
     inner: std::slice::Iter<'a, u8>,
 }
 

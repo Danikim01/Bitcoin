@@ -1,11 +1,10 @@
-use crate::messages::utility::StreamRead;
+use crate::messages::{utility::StreamRead, HashId};
 use crate::raw_transaction::{
     read_coinbase_script, read_from_varint, read_hash, to_compact_size_bytes,
 };
 use crate::utxo::p2pkh_to_address;
 use bitcoin_hashes::{hash160, Hash};
-use std::io;
-use std::io::{Cursor, Error, ErrorKind, Read};
+use std::io::{self, Cursor, Error, ErrorKind, Read};
 
 /// Store a tx input (previous output, script sig, sequence)
 #[derive(Debug, Clone)]
@@ -79,7 +78,7 @@ impl TxInput {
     /// Serialize a tx input to bytes
     pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
-        bytes.extend_from_slice(&self.previous_output.hash);
+        bytes.extend(self.previous_output.hash.iter());
         bytes.extend_from_slice(&self.previous_output.index.to_le_bytes());
 
         // this is needed in case the script bytes is 0
@@ -110,7 +109,7 @@ impl TxInput {
 /// Represent outpoint (hash of previous utxo, index of previous utxo)
 #[derive(Debug, Clone)]
 pub struct Outpoint {
-    pub hash: [u8; 32],
+    pub hash: HashId,
     pub index: u32,
 }
 
@@ -144,7 +143,7 @@ impl TxInputType {
 /// Represent a coinbase input
 #[derive(Debug, Clone)]
 pub struct CoinBaseInput {
-    pub _hash: [u8; 32],
+    pub _hash: HashId,
     pub _index: u32,
     pub _script_bytes: u64,
     pub _height: u32,
@@ -207,7 +206,7 @@ impl CoinBaseInput {
     /// Serialize a coinbase input to bytes
     pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
-        bytes.extend_from_slice(&self._hash);
+        bytes.extend(self._hash.iter());
         bytes.extend_from_slice(&self._index.to_le_bytes());
         bytes.extend_from_slice(&to_compact_size_bytes(self._script_bytes));
         // bytes.extend_from_slice(remove_right_zero_bytes(&self._height.to_le_bytes()));
@@ -256,7 +255,7 @@ mod tests {
         assert_eq!(coinbase_transaction.version, 1);
         assert_eq!(coinbase_transaction.tx_in_count, 1);
         if let TxInputType::CoinBaseInput(coinbase_input) = coinbase_transaction.tx_in {
-            assert_eq!(coinbase_input._hash, [0u8; 32]);
+            assert_eq!(coinbase_input._hash, HashId::default());
             assert_eq!(coinbase_input._index, 0xffffffff);
             assert_eq!(coinbase_input._script_bytes, 29);
             assert_eq!(coinbase_input._height, 1281295);
