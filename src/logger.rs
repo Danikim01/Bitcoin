@@ -1,4 +1,4 @@
-use crate::messages::constants::config::{LOG_FILE, QUIET, VERBOSE};
+use crate::messages::constants::config::VERBOSE;
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -21,10 +21,6 @@ impl Logger {
             log_file: Arc::new(Mutex::new(file)),
             mode: log_level,
         }
-    }
-
-    pub fn default() -> Self {
-        Self::new(LOG_FILE.to_owned(), QUIET.to_owned())
     }
 
     fn log_verbose(&self, message: &str) {

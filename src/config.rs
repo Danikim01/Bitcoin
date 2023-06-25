@@ -1,8 +1,9 @@
 use crate::logger::Logger;
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
 };
 use crate::messages::HashId;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
@@ -20,38 +21,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(
-        seed: String,
-        start_timestamp: u32,
-        headers_file: String,
-        blocks_file: String,
-        tcp_timeout_seconds: u64,
-        logger: Logger,
-        genesis_hash: HashId,
-    ) -> Self {
-        Self {
-            seed,
-            start_timestamp,
-            headers_file,
-            blocks_file,
-            tcp_timeout_seconds,
-            logger,
-            genesis_hash,
-        }
-    }
-
-    pub fn default() -> Self {
-        Self::new(
-            "".to_owned() + ":" + &format!("{}", PORT),
-            1,
-            HEADERS_FILE.to_string(),
-            BLOCKS_FILE.to_string(),
-            TCP_TIMEOUT,
-            Logger::default(),
-            HashId::default(),
-        )
-    }
-
     pub fn get_tcp_timeout(&self) -> u64 {
         self.tcp_timeout_seconds
     }
@@ -81,34 +50,43 @@ impl Config {
         self.genesis_hash
     }
 
+    fn remove_or(hashmap: &mut HashMap<String, String>, key: &str, default: &str) -> String {
+        hashmap.remove(key).unwrap_or(default.to_string())
+    }
+
+    fn from_hashmap(mut values: HashMap<String, String>) -> io::Result<Config> {
+        Ok(Config {
+            seed: Config::remove_or(&mut values, "seed", ""),
+            start_timestamp: Config::remove_or(&mut values, "start_timestamp", "")
+                .parse()
+                .unwrap_or(START_TIMESTAMP),
+            logger: Logger::new(
+                Config::remove_or(&mut values, "log_file", LOG_FILE),
+                Config::remove_or(&mut values, "log_level", QUIET),
+            ),
+            headers_file: Config::remove_or(&mut values, "headers_file", HEADERS_FILE),
+            blocks_file: Config::remove_or(&mut values, "blocks_file", BLOCKS_FILE),
+            tcp_timeout_seconds: Config::remove_or(&mut values, "tcp_timeout_seconds", "")
+                .parse()
+                .unwrap_or(TCP_TIMEOUT),
+            genesis_hash: Self::hash_from_string(&Config::remove_or(
+                &mut values,
+                "genesis_hash",
+                "",
+            ))?,
+        })
+    }
+
     pub fn from_file(path: PathBuf) -> io::Result<Config> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
-
-        let mut config = Config::default();
-        let mut log_file = LOG_FILE.to_owned();
-        let mut log_level = QUIET.to_owned();
+        let mut values = HashMap::new();
         for line in reader.lines() {
             if let Some((key, value)) = line?.split_once('=') {
-                match key {
-                    "seed" => config.seed = value.to_owned(),
-                    "start_timestamp" => {
-                        config.start_timestamp = value.parse().unwrap_or(START_TIMESTAMP)
-                    }
-                    "log_file" => log_file = value.to_owned(),
-                    "log_level" => log_level = value.to_owned(),
-                    "headers_file" => config.headers_file = value.to_owned(),
-                    "blocks_file" => config.blocks_file = value.to_owned(),
-                    "tcp_timeout_seconds" => {
-                        config.tcp_timeout_seconds = value.parse().unwrap_or(TCP_TIMEOUT)
-                    }
-                    "genesis_hash" => config.genesis_hash = Self::hash_from_string(value)?,
-                    _ => continue,
-                }
+                values.insert(key.to_owned(), value.to_owned());
             }
         }
-        config.logger = Logger::new(log_file, log_level);
-        Ok(config)
+        Config::from_hashmap(values)
     }
 
     fn hash_from_string(string: &str) -> io::Result<HashId> {

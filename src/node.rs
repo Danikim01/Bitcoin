@@ -96,7 +96,7 @@ impl Listener {
         loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             if message_header.validate_header().is_err() {
-                println!(
+                eprintln!(
                     "Invalid or unimplemented header: {:?}, ignoring message",
                     message_header
                 );

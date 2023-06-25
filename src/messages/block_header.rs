@@ -60,7 +60,7 @@ impl BlockHeader {
             timestamp: 0_u32,
             nbits: 0_u32,
             nonce: 0_u32,
-            hash: hash,
+            hash,
             height: 0,
         }
     }

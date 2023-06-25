@@ -44,7 +44,7 @@ impl Headers {
 
     /// Doesn't check headers size, only use if you know the headers' block_headers is not empty.
     pub fn last_header_hash_unchecked(&self) -> HashId {
-        return self.block_headers[self.block_headers.len() - 1].hash();
+        self.block_headers[self.block_headers.len() - 1].hash()
     }
 
     /// Returns a Headers struct with all the headers contained in the file

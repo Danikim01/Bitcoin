@@ -11,7 +11,7 @@ use crate::messages::{
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{encode_hex, double_hash, to_io_err};
+use crate::utility::{double_hash, encode_hex, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::Hash;
@@ -127,14 +127,14 @@ impl NetworkController {
 
         Ok((balance, pending_balance))
     }
-    fn get_best_headers<'l>(&'l mut self, amount: usize) -> Vec<&'l BlockHeader> {
+    fn get_best_headers(&mut self, amount: usize) -> Vec<&BlockHeader> {
         let mut best_headers = vec![];
         let mut current_header = &self.tallest_header;
         for _ in 0..amount {
             best_headers.push(current_header);
             current_header = match self.headers.get(&current_header.prev_block_hash) {
                 Some(header) => header,
-                None => break
+                None => break,
             }
         }
         // reverse the chain
@@ -189,7 +189,7 @@ impl NetworkController {
         )?;
 
         // get data from block and update ui
-        let data = table_data_from_block(&block)?;
+        let data = table_data_from_block(block)?;
         self.update_ui_table(GtkTable::Blocks, data)?;
         self.update_ui_balance()?;
         Ok(())
@@ -251,12 +251,41 @@ impl NetworkController {
             if let Some(previous_header) =
                 self.headers.get(&first_downloadable_header.prev_block_hash)
             {
-                let genesis_block = Block::new(*previous_header, 0, vec![]);
+                let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
                 self.valid_blocks
-                    .insert(genesis_block.hash(), genesis_block);
+                    .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
             }
         }
         self.request_blocks_evenly(&mut headers, config)
+    }
+
+    fn read_backup_headers(&mut self, mut headers: Headers, config: &Config) -> io::Result<()> {
+        let prev_header_count = self.headers.len();
+        // save new headers to hashmap and backup file
+        for mut header in headers.clone().block_headers {
+            match self.headers.get(&header.prev_block_hash) {
+                Some(parent_header) => {
+                    header.height = parent_header.height + 1;
+                }
+                None => continue, // ignore header if prev_header is unknown
+            }
+            if let Vacant(entry) = self.headers.entry(header.hash()) {
+                entry.insert(header);
+                if header.height > self.tallest_header.height {
+                    self.tallest_header = header
+                }
+            }
+        }
+        if prev_header_count == self.headers.len() {
+            return Ok(());
+        }
+        config.get_logger().log(
+            &format!("Read headers. New header count: {:?}", self.headers.len()),
+            VERBOSE,
+        );
+        // request blocks mined after given date
+        headers.trim_timestamp(config.get_start_timestamp());
+        self.request_blocks(headers, config)
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
@@ -419,7 +448,7 @@ impl NetworkController {
                 &self.ui_sender,
                 "Reading headers from backup file...".to_string(),
             )?;
-            self.read_headers(headers, config)?;
+            self.read_backup_headers(headers, config)?;
             update_ui_status_bar(
                 &self.ui_sender,
                 "Read headers from backup file.".to_string(),
@@ -543,7 +572,9 @@ impl OuterNetworkController {
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
-                    config.get_logger().log(&format!("Received unhandled error: {:?}", result), QUIET);
+                    config
+                        .get_logger()
+                        .log(&format!("Received unhandled error: {:?}", result), QUIET);
                     return Err(result);
                 }
             }

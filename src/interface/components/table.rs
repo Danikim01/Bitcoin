@@ -61,7 +61,7 @@ pub fn table_data_from_headers(headers: Vec<&BlockHeader>) -> Vec<GtkTableData> 
         data.push(GtkTableData::Headers(
             header.height.to_string(),
             date_from_timestamp(header.timestamp),
-            header.hash().to_string()
+            header.hash().to_string(),
         ))
     }
 

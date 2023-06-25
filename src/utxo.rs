@@ -2,7 +2,7 @@ use crate::interface::GtkMessage;
 use crate::raw_transaction::TransactionOrigin;
 use crate::raw_transaction::{tx_output::TxOutput, RawTransaction};
 use crate::utility::to_io_err;
-use crate::utility::{encode_hex, double_hash};
+use crate::utility::{double_hash, encode_hex};
 use gtk::glib::Sender;
 use std::collections::HashMap;
 use std::io::Cursor;

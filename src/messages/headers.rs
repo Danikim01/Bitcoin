@@ -110,23 +110,19 @@ impl MessageHeader {
     }
 
     /// Validate the payload size of a message checking if it is less than the maximum payload size (MAX_PAYLOAD_SIZE defined in constants.rs).
-    fn validate_payload_size(&self) -> Result<(), io::Error> {
+    fn validate_payload_size(&self) -> io::Result<()> {
         if self.payload_size > MAX_PAYLOAD_SIZE {
             let err_str = format!(
                 "Payload size {} exceeds maximum payload size {} in command {}",
                 self.payload_size, MAX_PAYLOAD_SIZE, self.command_name
             );
-            println!("{}", err_str);
-            // return Err(io::Error::new(
-            //     io::ErrorKind::InvalidData,
-            //     err_str
-            // ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, err_str));
         }
         Ok(())
     }
 
     /// Read the payload of a message from a TcpStream and return it as a byte array.
-    pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
+    pub fn read_payload(&self, stream: &mut TcpStream) -> io::Result<Vec<u8>> {
         self.validate_payload_size()?;
         let mut payload_buffer = vec![0_u8; self.payload_size as usize];
         stream.read_exact(&mut payload_buffer)?;
