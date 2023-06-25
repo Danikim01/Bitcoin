@@ -235,7 +235,7 @@ impl NetworkController {
         if self.headers.len() == previous_header_count {
             return Ok(());
         }
-        
+
         // get data from headers and update ui
         let data = table_data_from_headers(&headers, self.headers.len() - previous_header_count);
         self.update_ui_table_with_vec(GtkTable::Headers, data)?;
@@ -374,7 +374,7 @@ impl NetworkController {
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
         // attempt to read blocks from backup file
-        if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
+        if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
             update_ui_status_bar(
                 &self.ui_sender,
                 "Found blocks backup file, reading blocks...".to_string(),
@@ -386,7 +386,7 @@ impl NetworkController {
         }
 
         // attempt to read headers from backup file
-        if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
+        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
             update_ui_status_bar(
                 &self.ui_sender,
                 "Reading headers from backup file...".to_string(),
@@ -396,14 +396,16 @@ impl NetworkController {
 
             // find headers for which we don't have the blocks and then request them
             let init_tp_timestamp: u32 = config.get_start_timestamp();
-            self.request_blocks_from(headers, init_tp_timestamp, config)?;
+            headers.trim_timestamp(init_tp_timestamp);
 
             update_ui_status_bar(
                 &self.ui_sender,
                 "Read headers from backup file.".to_string(),
             )?;
-        } // Finally, catch up to blockchain doing IBD
-        self.request_headers(self.tallest_header, config)?;
+        }
+
+        self.request_headers(self.tallest_header, config)?; // with ibd this goes on the else clause
+
         Ok(())
     }
 }
@@ -446,7 +448,11 @@ impl OuterNetworkController {
                 let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
                     ModelRequest::GenerateTransaction(transaction_info) => {
-                        Self::handle_ui_generate_transaction(t_inner, transaction_info, config.clone())
+                        Self::handle_ui_generate_transaction(
+                            t_inner,
+                            transaction_info,
+                            config.clone(),
+                        )
                     }
                 }?;
             }
