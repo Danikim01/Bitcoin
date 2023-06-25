@@ -2,18 +2,18 @@ use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
+mod block_header;
 mod block_message;
+pub(crate) mod constants;
 mod getdata_message;
 mod getheader_message;
+mod headers;
 mod headers_message;
+mod merkle_tree;
+mod ping_message;
+pub mod utility;
 mod verack_message;
 mod version_message;
-mod ping_message;
-mod block_header;
-mod headers;
-mod merkle_tree;
-pub mod utility;
-pub(crate) mod constants;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;
@@ -55,7 +55,8 @@ impl std::fmt::Display for HashId {
             f,
             "{}",
             self.hash
-                .iter().rev()
+                .iter()
+                .rev()
                 .map(|num| format!("{:02x}", num))
                 .collect::<Vec<String>>()
                 .join("")

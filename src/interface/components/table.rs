@@ -1,16 +1,17 @@
 use chrono::Local;
 
-use crate::messages::{Block, Headers};
+use crate::messages::{Block, BlockHeader, Hashable};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::{_encode_hex, double_hash};
+use crate::utility::encode_hex;
 
 use super::blocks_panel::add_data_to_blocks_table;
 use super::headers_panel::add_data_to_headers_table;
 use super::transactions_panel::add_data_to_transactions_table;
 
 use crate::messages::utility::date_from_timestamp;
-use bitcoin_hashes::Hash;
 use std::io;
+use std::iter::{Take, Rev};
+use std::slice::Iter;
 
 #[derive(Clone)]
 /// Enum with the different tables in the interface
@@ -35,7 +36,7 @@ pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
     // need date, hash and amount
     let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
     let hash_bytes = &tx.get_hash();
-    let hash = _encode_hex(hash_bytes);
+    let hash = encode_hex(hash_bytes);
     let amount = format!("{:.8}", tx.get_total_output_value() as f64 / 100000000.0);
 
     GtkTableData::Transaction(date, hash, amount)
@@ -47,22 +48,22 @@ pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
     let height = "1".to_string();
     let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
     let hash_bytes = &block.get_hash()?;
-    let hash = _encode_hex(hash_bytes);
+    let hash = encode_hex(hash_bytes);
     let tx_count = block.txn_count.to_string();
 
     Ok(GtkTableData::Blocks(height, date, hash, tx_count))
 }
 
 /// Receive a header and parse it's data to a RowData::HeadersData
-pub fn table_data_from_headers(headers: &Headers, count: usize) -> Vec<GtkTableData> {
+pub fn table_data_from_headers(headers: Take<Rev<Iter<'_, BlockHeader>>>) -> Vec<GtkTableData> {
     // need height, date and hash
     let mut data = Vec::new();
 
-    for header in headers.block_headers[headers.count - count..headers.count].iter() {
+    for header in headers {
         data.push(GtkTableData::Headers(
-            "1".to_string(),
+            header.height.to_string(),
             date_from_timestamp(header.timestamp),
-            _encode_hex(double_hash(header.serialize().as_slice()).as_byte_array()),
+            header.hash().to_string()
         ))
     }
 

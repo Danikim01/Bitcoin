@@ -10,7 +10,7 @@ use crate::messages::{
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{_encode_hex, double_hash, to_io_err};
+use crate::utility::{encode_hex, double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::Hash;
@@ -127,16 +127,8 @@ impl NetworkController {
         Ok((balance, pending_balance))
     }
 
-    fn read_backup_block(&mut self, block: Block) -> io::Result<()> {
-        if self
-            .valid_blocks
-            .contains_key(&block.header.prev_block_hash)
-        {
-            self.add_to_valid_blocks(block);
-        } else {
-            self.put_block_on_hold(block);
-        }
-        Ok(())
+    fn read_backup_block(&mut self, block: Block) {
+        self.add_to_valid_blocks(block)
     }
 
     fn read_incoming_block(&mut self, block: Block, config: &Config) -> io::Result<()> {
@@ -278,9 +270,9 @@ impl NetworkController {
             return Ok(());
         }
 
-        // get data from headers and update ui
-        // let data = table_data_from_headers(&headers, self.headers.len() - prev_header_count);
-        // self.update_ui_table_with_vec(GtkTable::Headers, data)?;
+        // update ui with last 100 headers
+        let data = table_data_from_headers(new_headers.iter().rev().take(100));
+        self.update_ui_table_with_vec(GtkTable::Headers, data)?;
         config.get_logger().log(
             &format!("Read headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
@@ -386,7 +378,7 @@ impl NetworkController {
                 self.notify_ui_message(
                     gtk::MessageType::Info,
                     "Transaction broadcasted",
-                    &format!("Transaction hash: {}", _encode_hex(&tx_hash)),
+                    &format!("Transaction hash: {}", encode_hex(&tx_hash)),
                 )
             }
             Err(e) => self.notify_ui_message(
@@ -407,7 +399,7 @@ impl NetworkController {
                 "Found blocks backup file, reading blocks...".to_string(),
             )?;
             for (_, block) in blocks.into_iter() {
-                self.read_backup_block(block)?;
+                self.read_backup_block(block);
             }
             update_ui_status_bar(&self.ui_sender, "Read blocks from backup file.".to_string())?;
         }

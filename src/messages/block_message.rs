@@ -114,13 +114,7 @@ impl Block {
                 ui_sender,
                 active_addr,
             )?;
-            Self::update_ui(
-                ui_sender,
-                active_addr,
-                txn,
-                self.header.timestamp,
-                utxo_set,
-            )?;
+            Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set)?;
         }
 
         self.header.validate_proof_of_work()?;

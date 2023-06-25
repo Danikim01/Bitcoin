@@ -1,7 +1,4 @@
-use crate::messages::{
-    constants::commands::GETHEADERS, utility::to_varint,
-    HashId, Serialize,
-};
+use crate::messages::{constants::commands::GETHEADERS, utility::to_varint, HashId, Serialize};
 
 /// Struct that represents the data GetHeader message
 #[derive(Debug, Clone)]

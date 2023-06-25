@@ -25,7 +25,7 @@ impl BlockHeader {
         timestamp: u32,
         nbits: u32,
         nonce: u32,
-        height: usize
+        height: usize,
     ) -> Self {
         // calculate blockHeader hash
         let mut bytes = vec![];
@@ -47,7 +47,7 @@ impl BlockHeader {
             nbits,
             nonce,
             hash: HashId::new(hash_bytes),
-            height
+            height,
         }
     }
 
@@ -81,7 +81,7 @@ impl BlockHeader {
             timestamp,
             nbits,
             nonce,
-            0 // block starts with height 0, changed later if prev_block_hash is found
+            0, // block starts with height 0, changed later if prev_block_hash is found
         );
 
         Ok(actual_header)

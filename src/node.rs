@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::messages::{
-    constants::{commands, config::VERBOSE}, Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, Serialize, VerAck,
-    Version,
+    constants::{commands, config::VERBOSE},
+    Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, Serialize, VerAck, Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
@@ -52,36 +52,41 @@ impl Listener {
         }
     }
 
-    fn process_message_payload(&mut self, command_name: &str, payload: Vec<u8>) -> io::Result<Message> {
+    fn process_message_payload(
+        &mut self,
+        command_name: &str,
+        payload: Vec<u8>,
+    ) -> io::Result<Message> {
         let dyn_message: Message = match command_name {
             commands::HEADERS => match Headers::deserialize(&payload) {
                 Ok(Message::Headers(headers)) if headers.is_paginated() => {
                     // request next headers
-                    let getheader_message = GetHeader::from_last_header(headers.last_header_hash_unchecked());
+                    let getheader_message =
+                        GetHeader::from_last_header(headers.last_header_hash_unchecked());
                     self.send(&getheader_message.serialize()?)?;
                     Message::Headers(headers)
-                },
+                }
                 Ok(m) => m,
-                Err(..) => Message::Ignore
+                Err(..) => Message::Ignore,
             },
             commands::BLOCK => match Block::deserialize(&payload) {
                 Ok(m) => m,
-                Err(..) => Message::Ignore
+                Err(..) => Message::Ignore,
             },
             commands::INV => match GetData::deserialize(&payload) {
                 Ok(m) => m,
-                Err(..) => Message::Ignore
+                Err(..) => Message::Ignore,
             },
             commands::TX => match RawTransaction::deserialize(&payload) {
                 Ok(m) => m,
-                Err(..) => Message::Ignore
+                Err(..) => Message::Ignore,
             },
             commands::PING => {
                 if let Ok(reply) = &Ping::pong(&payload) {
                     self.send(reply)?;
                 }
                 Message::Ignore
-            },
+            }
             _ => Message::Ignore,
         };
         Ok(dyn_message)
