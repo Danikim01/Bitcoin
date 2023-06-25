@@ -34,7 +34,7 @@ impl Headers {
     }
 
     pub fn is_paginated(&self) -> bool {
-        self.count % MAX_HEADER == 0
+        self.count == MAX_HEADER
     }
 
     /// Doesn't check headers size, only use if you know the headers' block_headers is not empty.
