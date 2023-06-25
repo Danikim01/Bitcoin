@@ -128,7 +128,10 @@ impl NetworkController {
     }
 
     fn read_backup_block(&mut self, block: Block) -> io::Result<()> {
-        if self.valid_blocks.contains_key(&block.header.prev_block_hash) {
+        if self
+            .valid_blocks
+            .contains_key(&block.header.prev_block_hash)
+        {
             self.add_to_valid_blocks(block);
         } else {
             self.put_block_on_hold(block);
@@ -253,7 +256,7 @@ impl NetworkController {
         let prev_header_count = self.headers.len();
         // save new headers to hashmap and backup file
         let mut new_headers: Vec<BlockHeader> = vec![];
-        for mut header in headers.clone().block_headers {
+        for mut header in headers.block_headers {
             match self.headers.get(&header.prev_block_hash) {
                 Some(parent_header) => {
                     header.height = parent_header.height + 1;
@@ -276,8 +279,8 @@ impl NetworkController {
         }
 
         // get data from headers and update ui
-        let data = table_data_from_headers(&headers, self.headers.len() - prev_header_count);
-        self.update_ui_table_with_vec(GtkTable::Headers, data)?;
+        // let data = table_data_from_headers(&headers, self.headers.len() - prev_header_count);
+        // self.update_ui_table_with_vec(GtkTable::Headers, data)?;
         config.get_logger().log(
             &format!("Read headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
