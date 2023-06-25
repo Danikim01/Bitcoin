@@ -49,8 +49,8 @@ mod tests {
     use crate::messages::constants::config::{QUIET, VERBOSE};
     use std::fs::File;
     use std::io::Read;
-    use std::sync::mpsc::channel;
-    use std::{fs, thread};
+    use std::{fs};
+    use std::thread::sleep;
 
     #[test]
     fn test_logger() {
@@ -60,8 +60,10 @@ mod tests {
         logger.log_sender.send(Log::Verbose("test".to_string())).unwrap();
         logger.log_sender.send(Log::Verbose("test".to_string())).unwrap();
 
-        let mut file = File::open("test.log").unwrap();
+        sleep(std::time::Duration::from_millis(100));
+
         let mut contents = String::new();
+        let mut file = File::open("test.log").unwrap();
         file.read_to_string(&mut contents).unwrap();
         fs::remove_file("test.log").unwrap();
         assert_eq!(contents, "test\ntest\n");
@@ -75,10 +77,12 @@ mod tests {
         let logger = Logger::new(log_file, log_level);
         logger.log_sender.send(Log::Verbose("test".to_string())).unwrap();
         logger.log_sender.send(Log::Quiet("test".to_string())).unwrap();
-        let mut file = File::open("test2.log").unwrap();
+
+        sleep(std::time::Duration::from_millis(100));
         let mut contents = String::new();
+        let mut file = File::open("test2.log").unwrap();
         file.read_to_string(&mut contents).unwrap();
-        fs::remove_file("test.log").unwrap();
+        fs::remove_file("test2.log").unwrap();
         assert_eq!(contents, "test\n");
     }
 }
