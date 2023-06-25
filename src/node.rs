@@ -37,7 +37,9 @@ impl Listener {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                config.get_logger().log(&format!("{:?}", e) as &str, VERBOSE);
+                config
+                    .get_logger()
+                    .log(&format!("{:?}", e) as &str, VERBOSE);
                 config.get_logger().log(
                     &format!("Listener for connection {:?} died.", self.stream) as &str,
                     VERBOSE,
@@ -227,5 +229,4 @@ impl Node {
         self.stream.flush()?;
         Ok(())
     }
-
 }

@@ -1,11 +1,11 @@
+use crate::logger::Logger;
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, TCP_TIMEOUT, START_TIMESTAMP
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
 };
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use crate::logger::Logger;
 
 #[derive(Clone)]
 pub struct Config {
@@ -24,7 +24,7 @@ impl Config {
         headers_file: String,
         blocks_file: String,
         tcp_timeout_seconds: u64,
-        logger: Logger
+        logger: Logger,
     ) -> Self {
         Self {
             seed,
@@ -32,7 +32,7 @@ impl Config {
             headers_file,
             blocks_file,
             tcp_timeout_seconds,
-            logger
+            logger,
         }
     }
 
@@ -43,7 +43,7 @@ impl Config {
             HEADERS_FILE.to_string(),
             BLOCKS_FILE.to_string(),
             TCP_TIMEOUT,
-            Logger::default()
+            Logger::default(),
         )
     }
 
@@ -83,12 +83,16 @@ impl Config {
             if let Some((key, value)) = line?.split_once('=') {
                 match key {
                     "seed" => config.seed = value.to_owned(),
-                    "start_timestamp" => config.start_timestamp = value.parse().unwrap_or(START_TIMESTAMP),
+                    "start_timestamp" => {
+                        config.start_timestamp = value.parse().unwrap_or(START_TIMESTAMP)
+                    }
                     "log_file" => log_file = value.to_owned(),
                     "log_level" => log_level = value.to_owned(),
                     "headers_file" => config.headers_file = value.to_owned(),
                     "blocks_file" => config.blocks_file = value.to_owned(),
-                    "tcp_timeout_seconds" => config.tcp_timeout_seconds = value.parse().unwrap_or(TCP_TIMEOUT),
+                    "tcp_timeout_seconds" => {
+                        config.tcp_timeout_seconds = value.parse().unwrap_or(TCP_TIMEOUT)
+                    }
                     _ => continue,
                 }
             }

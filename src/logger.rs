@@ -1,4 +1,4 @@
-use crate::messages::constants::config::{VERBOSE, QUIET, LOG_FILE};
+use crate::messages::constants::config::{LOG_FILE, QUIET, VERBOSE};
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -42,7 +42,7 @@ impl Logger {
     fn log_quiet(&self, message: &str) {
         let now = Local::now();
         let line = format!("{} - {}\n", now, message);
-        eprintln!("{}", message);        
+        eprintln!("{}", message);
         let mut file = self.log_file.lock().unwrap();
         file.write_all(line.as_bytes())
             .expect("Failed to write to log file")
