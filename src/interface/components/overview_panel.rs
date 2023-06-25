@@ -65,33 +65,33 @@ fn already_added(overview_transaction_container: &gtk::Box, tx_hash: &str) -> bo
 fn get_transaction_widget(
     transaction: TransactionDisplayInfo,
     origin: TransactionOrigin,
-) -> gtk::Widget {
+) -> Result<gtk::Widget, String> {
     let glade_src = include_str!("../res/ui.glade");
     let inner_builder = gtk::Builder::from_string(glade_src);
 
     let transaction_widget: gtk::Widget = inner_builder
         .object("overview_transaction_template")
-        .expect("could not find transaction template");
+        .ok_or("Could not find transaction template")?;
 
     let hash_label: gtk::Label = inner_builder
         .object("overview_transaction_template_hash")
-        .unwrap();
+        .ok_or("Could not find hash label")?;
     hash_label.set_text(&transaction.hash.to_string());
 
     let amount_label: gtk::Label = inner_builder
         .object("overview_transaction_template_amount")
-        .unwrap();
+        .ok_or("Could not find amount label")?;
     let amount: f64 = transaction.amount as f64 / 100000000.0;
     amount_label.set_text(format!("{:.8} tBTC", amount).as_str());
 
     let timestamp_label: gtk::Label = inner_builder
         .object("overview_transaction_template_timestamp")
-        .unwrap();
+        .ok_or("Could not find timestamp label")?;
     timestamp_label.set_text(&transaction.date);
 
     let origin_img: gtk::Image = inner_builder
         .object("overview_transaction_template_img")
-        .unwrap();
+        .ok_or("Could not find origin image")?;
 
     match origin {
         TransactionOrigin::Block => {
@@ -102,7 +102,7 @@ fn get_transaction_widget(
         }
     }
 
-    transaction_widget
+    Ok(transaction_widget)
 }
 
 /// Updates the overview component with recent transactions and the origin of the transaction.
@@ -110,9 +110,10 @@ pub fn update_overview_transactions(
     builder: gtk::Builder,
     transaction: TransactionDisplayInfo,
     origin: TransactionOrigin,
-) {
-    let overview_transaction_container: gtk::Box =
-        builder.object("overview_transactions_container").unwrap();
+) -> Result<(), String> {
+    let overview_transaction_container: gtk::Box = builder
+        .object("overview_transactions_container")
+        .ok_or("Could not find overview transaction container")?;
 
     if origin == TransactionOrigin::Block {
         try_remove_pending_transaction(
@@ -125,12 +126,14 @@ pub fn update_overview_transactions(
         &overview_transaction_container,
         &transaction.hash.to_string(),
     ) {
-        return;
+        return Ok(());
     }
 
-    let tx_widget = get_transaction_widget(transaction, origin);
+    let tx_widget = get_transaction_widget(transaction, origin)?;
 
     append_to_limited_container(&overview_transaction_container, &tx_widget, 10);
+
+    Ok(())
 }
 
 /// Initializes the overview component.
