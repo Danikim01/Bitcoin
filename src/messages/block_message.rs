@@ -2,7 +2,7 @@ use super::Message;
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::GtkMessage;
 use crate::io::{self, Cursor};
-use crate::merkle_tree::MerkleTree;
+use crate::messages::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::double_hash;

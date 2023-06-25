@@ -1,4 +1,0 @@
-seed.testnet.bitcoin.sprovoost.nl
-18333
-1681095600
-VERBOSE

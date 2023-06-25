@@ -1,4 +1,4 @@
-use crate::logger::log;
+use crate::config::Config;
 use crate::messages::utility::StreamRead;
 use crate::messages::GetData;
 use crate::messages::{
@@ -33,16 +33,15 @@ impl Listener {
         }
     }
 
-    fn log_listen(mut self) -> io::Result<()> {
+    fn log_listen(mut self, config: &Config) -> io::Result<()> {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                log(&format!("{:?}", e) as &str, VERBOSE);
-                log(
+                config.get_logger().log(&format!("{:?}", e) as &str, VERBOSE);
+                config.get_logger().log(
                     &format!("Listener for connection {:?} died.", self.stream) as &str,
                     VERBOSE,
                 );
-                // self.listen()
                 Err(e)
             }
         }
@@ -120,6 +119,7 @@ impl Listener {
 #[derive(Debug)]
 pub struct Node {
     pub stream: TcpStream,
+    pub address: SocketAddr,
     _listener: JoinHandle<io::Result<()>>,
 }
 
@@ -128,37 +128,42 @@ impl Node {
         stream: TcpStream,
         listener: JoinHandle<io::Result<()>>,
         ui_sender: Sender<GtkMessage>,
-    ) -> Self {
-        let message = &format!("MAIN: Established connection with node: {:?}", stream) as &str;
-        log(message, VERBOSE);
+        config: &Config,
+    ) -> io::Result<Self> {
+        let message = &format!("Established connection with node: {:?}", stream) as &str;
+        config.get_logger().log(message, VERBOSE);
 
         // update ui // handle error
         let _ = ui_sender.send(GtkMessage::UpdateLabel((
             "status_bar".to_string(),
             message.to_string(),
         )));
+        let address = stream.peer_addr()?;
 
-        Self {
+        Ok(Self {
             stream,
+            address,
             _listener: listener,
-        }
+        })
     }
 
     fn spawn(
         stream: TcpStream,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
+        config: Config,
     ) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
-        let handle = thread::spawn(move || listener.log_listen());
-        Ok(Self::new(stream, handle, ui_sender))
+        let config_clone = config.clone();
+        let handle = thread::spawn(move || listener.log_listen(&config));
+        Self::new(stream, handle, ui_sender, &config_clone)
     }
 
-    fn _is_alive(&mut self) -> bool {
+    fn _is_alive(&mut self, config: &Config) -> bool {
         let mut buf = [0u8; 1];
-        log("is_alive: peeking", VERBOSE);
+        config.get_logger().log("is_alive: peeking", VERBOSE);
         let bytes_read = self.stream.peek(&mut buf);
-        log("is_alive: done peeking", VERBOSE);
+        config.get_logger().log("is_alive: done peeking", VERBOSE);
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,
@@ -170,6 +175,7 @@ impl Node {
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
         ui_sender: Sender<GtkMessage>,
+        config: Config,
     ) -> io::Result<(SocketAddr, Node)> {
         if !node_addr.is_ipv4() {
             return Err(io::Error::new(
@@ -177,11 +183,11 @@ impl Node {
                 "Ipv6 is not supported",
             ));
         }
-        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(10, 0))?; // 10 seconds timeout
+        let tcp_timeout = config.get_tcp_timeout();
+        let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(tcp_timeout, 0))?;
         Node::handshake(&mut stream)?;
-        let peer_addr: SocketAddr = stream.peer_addr()?;
-        let node = Node::spawn(stream, writer_channel, ui_sender)?;
-        Ok((peer_addr, node))
+        let node = Node::spawn(stream, writer_channel, ui_sender, config)?;
+        Ok((node.address, node))
     }
 
     fn handshake(stream: &mut TcpStream) -> io::Result<()> {
@@ -222,8 +228,4 @@ impl Node {
         Ok(())
     }
 
-    /// Returns the address of the peer.
-    pub fn get_addr(&self) -> io::Result<SocketAddr> {
-        self.stream.peer_addr()
-    }
 }

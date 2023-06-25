@@ -9,6 +9,7 @@ mod getdata_message;
 mod getheader_message;
 mod headers;
 mod headers_message;
+mod merkle_tree;
 pub mod utility;
 mod verack_message;
 mod version_message;
@@ -20,6 +21,7 @@ pub use getdata_message::{GetData, InvType, Inventory};
 pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
+pub use merkle_tree::MerkleTree;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
