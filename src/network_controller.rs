@@ -155,21 +155,19 @@ impl NetworkController {
         }
     }
 
-    fn read_incoming_block(&mut self, block: Block, config: &Config) -> io::Result<()> {
-        println!(
-            "Valid block size: {}, OnHold: {}, Pending: {}",
-            self.valid_blocks.len(),
-            self.blocks_on_hold.len(),
-            self.pending_blocks.len()
-        );
+    fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
         if self.validate_block(&block).is_err() {
             return Ok(()); // ignore invalid or duplicate blocks
         }
         block.save_to_file(config.get_blocks_file())?;
-        if self
+        if let Some(previous_block) = self
             .valid_blocks
-            .contains_key(&block.header.prev_block_hash)
+            .get(&block.header.prev_block_hash)
         {
+            block.header.height = previous_block.header.height + 1;
+            if let Vacant(entry) =  self.headers.entry(block.hash()) {
+                entry.insert(block.header);
+            }
             self.add_to_valid_blocks(block);
         } else {
             self.put_block_on_hold(block);
@@ -309,7 +307,6 @@ impl NetworkController {
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
         let prev_header_count = self.headers.len();
-        println!("Headers size: {}", prev_header_count);
         // save new headers to hashmap and backup file
         let mut new_headers: Vec<BlockHeader> = vec![];
         for mut header in headers.block_headers {
@@ -436,10 +433,7 @@ impl NetworkController {
                 self.notify_ui_message(
                     gtk::MessageType::Info,
                     "Transaction broadcasted",
-                    &format!(
-                        "Transaction hash: {}",
-                        HashId::from_hash(tx_hash)
-                    ),
+                    &format!("Transaction hash: {}", HashId::from_hash(tx_hash)),
                 )
             }
             Err(e) => self.notify_ui_message(
