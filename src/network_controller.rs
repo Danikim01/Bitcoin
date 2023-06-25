@@ -242,9 +242,7 @@ impl NetworkController {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
             self.nodes.send_to_all(&get_data.serialize()?, config)?;
         }
-        config
-            .get_logger()
-            .log("Requesting blocks, sent GetData message.", VERBOSE);
+        config.log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
 
@@ -276,7 +274,7 @@ impl NetworkController {
             }
         }
 
-        config.get_logger().log(
+        config.log(
             &format!("Read backup headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
         );
@@ -319,7 +317,7 @@ impl NetworkController {
         if prev_header_count == self.headers.len() {
             return Ok(());
         }
-        config.get_logger().log(
+        config.log(
             &format!("Read headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
         );
@@ -588,9 +586,7 @@ impl OuterNetworkController {
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
-                    config
-                        .get_logger()
-                        .log(&format!("Received unhandled error: {:?}", result), QUIET);
+                    config.log(&format!("Received unhandled error: {:?}", result), QUIET);
                     return Err(result);
                 }
             }

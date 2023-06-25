@@ -40,10 +40,8 @@ impl Listener {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                config
-                    .get_logger()
-                    .log(&format!("{:?}", e) as &str, VERBOSE);
-                config.get_logger().log(
+                config.log(&format!("{:?}", e) as &str, VERBOSE);
+                config.log(
                     &format!("Listener for connection {:?} died.", self.stream) as &str,
                     VERBOSE,
                 );
@@ -133,7 +131,7 @@ impl Node {
         config: &Config,
     ) -> io::Result<Self> {
         let message = &format!("Established connection with node: {:?}", stream) as &str;
-        config.get_logger().log(message, VERBOSE);
+        config.log(message, VERBOSE);
 
         // update ui // handle error
         let _ = ui_sender.send(GtkMessage::UpdateLabel((
@@ -163,9 +161,9 @@ impl Node {
 
     fn _is_alive(&mut self, config: &Config) -> bool {
         let mut buf = [0u8; 1];
-        config.get_logger().log("is_alive: peeking", VERBOSE);
+        config.log("is_alive: peeking", VERBOSE);
         let bytes_read = self.stream.peek(&mut buf);
-        config.get_logger().log("is_alive: done peeking", VERBOSE);
+        config.log("is_alive: done peeking", VERBOSE);
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,

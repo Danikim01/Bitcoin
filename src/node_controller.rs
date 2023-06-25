@@ -78,7 +78,7 @@ impl NodeController {
         match &mut node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
-                config.get_logger().log(
+                config.log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
                 );
@@ -99,7 +99,7 @@ impl NodeController {
                 Ok(_) => {
                     alive_nodes.push(node.address);
                 }
-                Err(e) => config.get_logger().log(
+                Err(e) => config.log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
                 ),

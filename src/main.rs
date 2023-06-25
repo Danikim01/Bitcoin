@@ -29,9 +29,7 @@ fn main() -> io::Result<()> {
     thread::spawn(move || -> io::Result<()> {
         let outer_controller =
             network_controller::OuterNetworkController::new(ui_sender, writer_end, config.clone())?;
-        config
-            .get_logger()
-            .log("Connected to network, starting sync", VERBOSE);
+        config.log("Connected to network, starting sync", VERBOSE);
         outer_controller.start_sync(node_receiver, receiver_aux, config)
     });
 

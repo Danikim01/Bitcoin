@@ -1,6 +1,6 @@
-use crate::logger::Logger;
+use crate::logger::{Log, Logger};
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, PRIVATE_KEY_FILE
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, VERBOSE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, PRIVATE_KEY_FILE
 };
 use crate::messages::HashId;
 use std::collections::HashMap;
@@ -43,8 +43,11 @@ impl Config {
         &self.blocks_file
     }
 
-    pub fn get_logger(&self) -> &Logger {
-        &self.logger
+    pub fn log(&self, content: &str, level: &str) {
+        let _ = self.logger.log_sender.clone().send(match level {
+            VERBOSE => Log::Verbose(content.to_string()),
+            _ => Log::Quiet(content.to_string()),
+        });
     }
 
     pub fn get_genesis(&self) -> HashId {
