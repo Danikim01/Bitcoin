@@ -160,12 +160,9 @@ impl NetworkController {
             return Ok(()); // ignore invalid or duplicate blocks
         }
         block.save_to_file(config.get_blocks_file())?;
-        if let Some(previous_block) = self
-            .valid_blocks
-            .get(&block.header.prev_block_hash)
-        {
+        if let Some(previous_block) = self.valid_blocks.get(&block.header.prev_block_hash) {
             block.header.height = previous_block.header.height + 1;
-            if let Vacant(entry) =  self.headers.entry(block.hash()) {
+            if let Vacant(entry) = self.headers.entry(block.hash()) {
                 entry.insert(block.header);
             }
             self.add_to_valid_blocks(block);
@@ -185,47 +182,40 @@ impl NetworkController {
             ));
         }
 
+        block.validate(&mut self.utxo_set, None, None)?;
+        Ok(())
+    }
+
+    fn add_to_valid_blocks(&mut self, block: Block) {
+        // VILLEREADA, CORREJIR
+        // println!("adding valid block");
         let days_old = block.get_days_old();
         if days_old > 0 {
             update_ui_status_bar(
                 &self.ui_sender,
                 format!("Reading blocks, {:?} days behind", block.get_days_old()),
-            )?;
+            );
         } else {
-            update_ui_status_bar(&self.ui_sender, "Up to date".to_string())?;
+            update_ui_status_bar(&self.ui_sender, "Up to date".to_string());
         }
-
-        block.validate(
+        block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
             Some(&self.wallet.address),
-        )?;
-
+        );
         // get data from block and update ui
-        let data = table_data_from_block(block)?;
-        self.update_ui_table(GtkTable::Blocks, data)?;
-        self.update_ui_balance()?;
-        Ok(())
-    }
+        let data = table_data_from_block(&block).unwrap(); // HANDLEEEEEEEE THIS ERROR
+        self.update_ui_table(GtkTable::Blocks, data);
+        self.update_ui_balance();
+        // FIN VILLEREADA
 
-    fn add_to_valid_blocks(&mut self, block: Block) {
-        println!("add_to_valid_blocks");
-        let days_old = block.get_days_old();
-        if days_old > 0 {
-            let _ = update_ui_status_bar(
-                &self.ui_sender,
-                format!("Reading blocks, {:?} days behind", block.get_days_old()),
-            );
-        } else {
-            let _ = update_ui_status_bar(&self.ui_sender, "Up to date".to_string());
-        }
         let block_hash = block.hash();
         self.valid_blocks.insert(block_hash, block);
         // if there where blocks on hold waiting for this one, validate them
         if let Some(blocked_blocks) = self.pending_blocks.remove(&block_hash) {
             for block_hash in blocked_blocks {
-                if let Some(block) = self.blocks_on_hold.remove(&block_hash) {
-                    self.add_to_valid_blocks(block)
+                if let Some(holded_block) = self.blocks_on_hold.remove(&block_hash) {
+                    self.add_to_valid_blocks(holded_block)
                 }
             }
         }
@@ -259,16 +249,7 @@ impl NetworkController {
         if headers.count == 0 {
             return Ok(());
         }
-        // since every block needs to come after a valid block, create a "genesis" validated block
-        if self.valid_blocks.is_empty() {
-            let first_downloadable_header = headers.block_headers[0];
-            if let Some(previous_header) =
-                self.headers.get(&first_downloadable_header.prev_block_hash)
-            {
-                let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
-                self.add_to_valid_blocks(pseudo_genesis_block);
-            }
-        }
+
         self.request_blocks_evenly(&mut headers, config)
     }
 
@@ -302,7 +283,16 @@ impl NetworkController {
         // request blocks mined after given date
         headers = Headers::new(new_headers.len(), new_headers);
         headers.trim_timestamp(config.get_start_timestamp());
-        self.request_blocks(headers, config)
+
+        // since every block needs to come after a valid block, create a "genesis" validated block
+        let first_downloadable_header = headers.block_headers[0];
+        if let Some(previous_header) = self.headers.get(&first_downloadable_header.prev_block_hash)
+        {
+            let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
+            self.valid_blocks
+                .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
+        }
+        Ok(())
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
@@ -447,18 +437,6 @@ impl NetworkController {
     /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
-        // attempt to read blocks from backup file
-        if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
-            update_ui_status_bar(
-                &self.ui_sender,
-                "Found blocks backup file, reading blocks...".to_string(),
-            )?;
-            for (_, block) in blocks.into_iter() {
-                self.read_backup_block(block);
-            }
-            update_ui_status_bar(&self.ui_sender, "Read blocks from backup file.".to_string())?;
-        }
-
         // attempt to read headers from backup file
         if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
             update_ui_status_bar(
@@ -471,6 +449,20 @@ impl NetworkController {
                 "Read headers from backup file.".to_string(),
             )?;
         } // Finally, catch up to blockchain doing IBD
+
+        // attempt to read blocks from backup file
+        if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
+            update_ui_status_bar(
+                &self.ui_sender,
+                "Found blocks backup file, reading blocks...".to_string(),
+            )?;
+            for (_, block) in blocks.into_iter() {
+                self.read_backup_block(block);
+            }
+            update_ui_status_bar(&self.ui_sender, "Read blocks from backup file.".to_string())?;
+        }
+
+        // self.request_blocks(headers, config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
         Ok(())
     }
