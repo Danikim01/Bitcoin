@@ -56,7 +56,7 @@ impl NodeController {
         Ok(())
     }
 
-    pub fn send_to_any(&mut self, payload: &Vec<u8>, config: &Config) -> io::Result<()> {
+    pub fn _send_to_any(&mut self, payload: &Vec<u8>, config: &Config) -> io::Result<()> {
         let random_number: usize = random();
         let node_number = random_number % self.nodes.len();
         let random_node = self.nodes.values_mut().nth(node_number).unwrap();
@@ -72,7 +72,7 @@ impl NodeController {
                     QUIET,
                 );
                 self.kill_node(node_address)?;
-                self.send_to_any(payload, config)
+                self._send_to_any(payload, config)
             }
         }
     }

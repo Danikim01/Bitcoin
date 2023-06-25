@@ -1,6 +1,6 @@
-use crate::messages::constants::config::{
+use crate::messages::{HashId, constants::config::{
     BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, TCP_TIMEOUT, START_TIMESTAMP
-};
+}};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
@@ -15,6 +15,7 @@ pub struct Config {
     blocks_file: String,
     tcp_timeout_seconds: u64,
     logger: Logger,
+    genesis_hash: HashId
 }
 
 impl Config {
@@ -24,7 +25,8 @@ impl Config {
         headers_file: String,
         blocks_file: String,
         tcp_timeout_seconds: u64,
-        logger: Logger
+        logger: Logger,
+        genesis_hash: HashId
     ) -> Self {
         Self {
             seed,
@@ -32,7 +34,8 @@ impl Config {
             headers_file,
             blocks_file,
             tcp_timeout_seconds,
-            logger
+            logger,
+            genesis_hash
         }
     }
 
@@ -43,7 +46,8 @@ impl Config {
             HEADERS_FILE.to_string(),
             BLOCKS_FILE.to_string(),
             TCP_TIMEOUT,
-            Logger::default()
+            Logger::default(),
+            HashId::default()
         )
     }
 
@@ -71,7 +75,11 @@ impl Config {
         &self.logger
     }
 
-    pub fn from_file(path: PathBuf) -> Result<Config, io::Error> {
+    pub fn get_genesis(&self) -> HashId {
+        self.genesis_hash
+    }
+
+    pub fn from_file(path: PathBuf) -> io::Result<Config> {
         let file = File::open(path)?;
         let reader = BufReader::new(file);
 
@@ -88,11 +96,30 @@ impl Config {
                     "headers_file" => config.headers_file = value.to_owned(),
                     "blocks_file" => config.blocks_file = value.to_owned(),
                     "tcp_timeout_seconds" => config.tcp_timeout_seconds = value.parse().unwrap_or(TCP_TIMEOUT),
+                    "genesis_hash" => config.genesis_hash = Self::hash_from_string(value)?,
                     _ => continue,
                 }
             }
         }
         config.logger = Logger::new(log_file, log_level);
         Ok(config)
+    }
+
+    fn hash_from_string(string: &str) -> io::Result<HashId> {
+        if string.len() != 64 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Hash length is invalid, expecting 64 characters in hex"));
+        }
+        let mut bytes = [0u8; 64];
+        for (index, c) in string.chars().enumerate() {
+            match c.to_digit(16) { // hash should be hexadecimal
+                Some(byte_value) => bytes[index] = byte_value as u8,
+                None => {return Err(io::Error::new(io::ErrorKind::InvalidData, "Hash contains non hex characters"))}
+            };
+        }
+        let mut hash = [0u8; 32];
+        for i in 0..32 {
+            hash[31 - i] = bytes[i*2] << 4 | bytes[i*2 + 1];
+        }
+        Ok(HashId::new(hash))
     }
 }

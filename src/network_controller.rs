@@ -8,17 +8,16 @@ use gtk::glib::Sender;
 use crate::config::Config;
 use crate::interface::{GtkMessage, ModelRequest, TransactionDetails};
 use crate::messages::{
-    Block, BlockHeader, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers,
     InvType, Inventory, Message, MessageHeader, Serialize,
 };
 use crate::messages::constants::{
-    commands::{PONG, TX},
+    commands::TX,
     config::{MAGIC, VERBOSE},
-    messages::GENESIS_HASHID,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
+use crate::utility::{_encode_hex, double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 
@@ -26,10 +25,10 @@ pub type BlockSet = HashMap<HashId, Block>;
 
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
-    tallest_header: HashId,
+    tallest_header: BlockHeader,
     valid_blocks: BlockSet, // valid blocks downloaded so far
-    blocks_on_hold: BlockSet, // downloaded blocks for which we don't have the previous block, and can't be added to valid_blocks just yet
-    pending_blocks: HashMap<HashId, Vec<HashId>>, // Vec of downloaded blocks that have a common prev_block which hasn't been downloaded, for each prev_block_hash
+    blocks_on_hold: BlockSet, // downloaded blocks for which we don't have the previous block
+    pending_blocks: HashMap<HashId, Vec<HashId>>, // blocks which haven't arrived, and the blocks which come immediately after them
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
@@ -42,9 +41,10 @@ impl NetworkController {
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
+        let genesis_header = BlockHeader::genesis(config.get_genesis());
         Ok(Self {
-            headers: HashMap::new(),
-            tallest_header: GENESIS_HASHID,
+            headers: HashMap::from([(genesis_header.hash(), genesis_header),]),
+            tallest_header: genesis_header,
             valid_blocks: BlockSet::new(),
             blocks_on_hold: BlockSet::new(),
             pending_blocks: HashMap::new(),
@@ -150,31 +150,22 @@ impl NetworkController {
         self.blocks_on_hold.insert(block.hash(), block);
     }
 
-    fn request_blocks(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
+    fn request_blocks_evenly(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
         let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_any(&get_data.serialize()?, config)?;
+            self.nodes.send_to_all(&get_data.serialize()?, config)?;
         }
         config.get_logger().log("Requesting blocks, sent GetData message.", VERBOSE);
         Ok(())
     }
 
-    fn retain_missing_headers(&self, headers: &mut Headers) {
-        headers
-            .block_headers
-            .retain(|header| !self.valid_blocks.contains_key(&header.hash()));
-    }
-
     /// requests block for headers after given timestamp
-    fn request_blocks_from(
+    fn request_blocks(
         &mut self,
         mut headers: Headers,
-        timestamp: u32,
         config: &Config,
     ) -> io::Result<()> {
-        headers.trim_timestamp(timestamp);
-        self.retain_missing_headers(&mut headers);
         if headers.count == 0 {
             return Ok(());
         }
@@ -186,41 +177,46 @@ impl NetworkController {
                 self.valid_blocks.insert(genesis_block.hash(), genesis_block);
             }
         }
-        self.request_blocks(&mut headers, config)
+        self.request_blocks_evenly(&mut headers, config)
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
-        let previous_header_count = self.headers.len();
-        let init_tp_timestamp: u32 = config.get_start_timestamp();
-        self.request_blocks_from(headers.clone(), init_tp_timestamp, config)?;
-        // save values to variables before consuming headers
-        let last_header = headers.last_header_hash();
-        let is_paginated = headers.is_paginated();
-
-        // store headers in hashmap, consuming headers
-        let headers_hashmap = into_hashmap(headers.block_headers);
-        for (header_hash, header) in headers_hashmap {
-            if let Vacant(entry) = self.headers.entry(header_hash) {
+        let prev_header_count = self.headers.len();
+        // save new headers to hashmap and backup file
+        let mut new_headers: Vec<BlockHeader> = vec![];
+        for mut header in headers.block_headers {
+            match self.headers.get(&header.prev_block_hash) {
+                Some(parent_header) => {
+                    header.height = parent_header.height + 1;
+                },
+                None => continue // ignore header if prev_header is unknown
+            }
+            let hash = header.hash();
+            if let Vacant(entry) = self.headers.entry(hash) {
                 header.save_to_file(config.get_headers_file())?;
+                new_headers.push(header);
                 entry.insert(header);
+                if header.height > self.tallest_header.height {
+                    self.tallest_header = header
+                }
             }
         }
-        if self.headers.len() == previous_header_count {
+
+        if prev_header_count == self.headers.len() {
             return Ok(());
         }
         config.get_logger().log(
             &format!(
-                "Received header. New header count: {:?}",
+                "Read headers. New header count: {:?}",
                 self.headers.len()
             ),
             VERBOSE,
         );
-        // request next headers, and blocks for recieved headers
-        self.tallest_header = last_header;
-        if is_paginated {
-            self.request_headers(self.tallest_header, config)?;
-        }
-        Ok(())
+
+        // request blocks mined after given date
+        let mut headers = Headers::new(new_headers.len(), new_headers);
+        headers.trim_timestamp(config.get_start_timestamp());
+        self.request_blocks(headers, config)
     }
 
     fn request_headers(&mut self, header_hash: HashId, config: &Config) -> io::Result<()> {
@@ -249,8 +245,9 @@ impl NetworkController {
         }
 
         let getdata_message = GetData::new(txinv.len(), txinv);
-        self.nodes
-            .send_to_specific(&peer, &getdata_message.serialize()?, config)?;
+        // ignore inv and error if target node is not reachable
+        let _ = self.nodes
+            .send_to_specific(&peer, &getdata_message.serialize()?, config);
         Ok(())
     }
 
@@ -259,19 +256,6 @@ impl NetworkController {
             println!("Read a pending transaction involving this wallet!");
             transaction.generate_utxo(&mut self.utxo_set, TransactionOrigin::Pending)?;
         }
-        Ok(())
-    }
-
-    fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64, config: &Config) -> io::Result<()> {
-        let payload = nonce.to_le_bytes();
-        let hash = double_hash(&payload);
-        let checksum: [u8; 4] = [hash[0], hash[1], hash[2], hash[3]];
-        let message_header =
-            MessageHeader::new(MAGIC, PONG.to_string(), payload.len() as u32, checksum);
-        let mut to_send = Vec::new();
-        to_send.extend_from_slice(&message_header.serialize()?);
-        to_send.extend_from_slice(&payload);
-        self.nodes.send_to_specific(&peer_addr, &to_send, config)?;
         Ok(())
     }
 
@@ -321,16 +305,10 @@ impl NetworkController {
         // attempt to read headers from backup file
         if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
             self.update_status_bar("Reading headers from backup file...".to_string())?;
-            self.tallest_header = headers.last_header_hash();
-            self.headers = into_hashmap(headers.clone().block_headers);
-
-            // find headers for which we don't have the blocks and then request them
-            let init_tp_timestamp: u32 = config.get_start_timestamp();
-            self.request_blocks_from(headers, init_tp_timestamp, config)?;
-
+            self.read_headers(headers, config)?;
             self.update_status_bar("Read headers from backup file.".to_string())?;
         } // Finally, catch up to blockchain doing IBD
-        self.request_headers(self.tallest_header, config)?;
+        self.request_headers(self.tallest_header.hash(), config)?;
         Ok(())
     }
 }
@@ -428,30 +406,6 @@ impl OuterNetworkController {
         t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
-    fn handle_node_failure_message(
-        _t_inner: Arc<Mutex<NetworkController>>,
-        peer_addr: SocketAddr,
-        error: ErrorType,
-    ) -> io::Result<()> {
-        println!(
-            "Node {:?} is notifying me of a failure, should resend last request, the error is {:?}",
-            peer_addr, error
-        );
-        Ok(())
-    }
-
-    fn handle_node_ping_message(
-        t_inner: Arc<Mutex<NetworkController>>,
-        peer_addr: SocketAddr,
-        nonce: u64,
-        config: &Config,
-    ) -> io::Result<()> {
-        t_inner
-            .lock()
-            .map_err(to_io_err)?
-            .read_ping(peer_addr, nonce, config)
-    }
-
     fn recv_node_messages(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
@@ -472,12 +426,6 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories, &config)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_addr, Message::Failure(err)) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr, err)
-                    }
-                    (peer_addr, Message::Ping(nonce)) => {
-                        Self::handle_node_ping_message(t_inner, peer_addr, nonce, &config)
-                    }
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
                     println!("Received unhandled error: {:?}", result);
@@ -492,13 +440,13 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
-                println!("Requesting headers periodically...");
+                config.get_logger().log("Requesting headers periodically...", VERBOSE);
                 let t_inner = inner.clone();
                 let tallest_header = t_inner.lock().map_err(to_io_err)?.tallest_header;
                 t_inner
                     .lock()
                     .map_err(to_io_err)?
-                    .request_headers(tallest_header, &config)?;
+                    .request_headers(tallest_header.hash(), &config)?;
                 thread::sleep(std::time::Duration::from_secs(60));
             }
         });
@@ -522,8 +470,6 @@ impl OuterNetworkController {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
         self.sync(config.clone())?;
-        self.req_headers_periodically(config)?;
-
-        Ok(())
+        self.req_headers_periodically(config)
     }
 }

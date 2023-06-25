@@ -1,6 +1,4 @@
-use crate::messages::{HashId, Hashable};
 use bitcoin_hashes::{sha256, Hash};
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::io;
@@ -12,17 +10,6 @@ where
     E: Display,
 {
     io::Error::new(io::ErrorKind::Other, error.to_string())
-}
-
-pub fn into_hashmap<T>(elements: Vec<T>) -> HashMap<HashId, T>
-where
-    T: Hashable,
-{
-    let hashmap: HashMap<HashId, T> = elements
-        .into_iter()
-        .map(|element| (element.hash(), element))
-        .collect();
-    hashmap
 }
 
 pub fn actual_timestamp_or_default() -> i64 {

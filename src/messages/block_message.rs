@@ -55,21 +55,6 @@ impl Block {
         }
     }
 
-    pub fn _validate_using_snapshot(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
-        let mut utxo_set_snapshot = utxo_set.clone();
-
-        for txn in self.txns.iter() {
-            txn.generate_utxo(&mut utxo_set_snapshot, TransactionOrigin::Block)?;
-        }
-
-        self.header.validate_proof_of_work()?;
-        self.validate_merkle_root()?;
-
-        *utxo_set = utxo_set_snapshot;
-
-        Ok(())
-    }
-
     pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
         self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;

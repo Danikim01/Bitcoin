@@ -2,17 +2,18 @@ use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
-mod block_header;
 mod block_message;
-pub(crate) mod constants;
 mod getdata_message;
 mod getheader_message;
-mod headers;
 mod headers_message;
-mod merkle_tree;
-pub mod utility;
 mod verack_message;
 mod version_message;
+mod ping_message;
+mod block_header;
+mod headers;
+mod merkle_tree;
+pub mod utility;
+pub(crate) mod constants;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;
@@ -22,6 +23,7 @@ pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use merkle_tree::MerkleTree;
+pub use ping_message::Ping;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
@@ -31,11 +33,11 @@ pub struct HashId {
 }
 
 impl HashId {
-    fn new(hash: [u8; 32]) -> Self {
+    pub fn new(hash: [u8; 32]) -> Self {
         Self { hash }
     }
 
-    fn default() -> Self {
+    pub fn default() -> Self {
         Self { hash: [0u8; 32] }
     }
 
@@ -50,9 +52,9 @@ impl std::fmt::Display for HashId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "0x{}",
+            "{}",
             self.hash
-                .iter()
+                .iter().rev()
                 .map(|num| format!("{:02x}", num))
                 .collect::<Vec<String>>()
                 .join("")
@@ -129,12 +131,6 @@ impl From<Services> for [u8; 8] {
 type Inventories = Vec<Inventory>;
 
 #[derive(Debug, Clone)]
-pub enum ErrorType {
-    HeaderError,
-    BlockError,
-}
-
-#[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
     _GetData(GetData),
@@ -144,9 +140,8 @@ pub enum Message {
     Version(Version),
     Inv(Inventories),
     Transaction(RawTransaction),
-    Ping(u64),
-    Failure(ErrorType),
-    Ignore(),
+    Ping(Ping),
+    Ignore,
 }
 
 pub trait Hashable {
