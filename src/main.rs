@@ -18,7 +18,7 @@ mod wallet;
 use std::sync::mpsc;
 use std::thread;
 
-/// Main function that starts the program spawning the UI thread and the network thread and starting the sync 
+/// Main function that starts the program spawning the UI thread and the network thread and starting the sync
 fn main() -> Result<(), io::Error> {
     let (ui_sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     let (sender_aux, receiver_aux) = mpsc::channel();

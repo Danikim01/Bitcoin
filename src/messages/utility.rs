@@ -1,6 +1,6 @@
+use chrono::{DateTime, NaiveDateTime, Utc};
 use std::io;
 use std::io::{Cursor, Read};
-use chrono::{DateTime, NaiveDateTime, Utc};
 
 /// Convert a `u64` to a `Vec<u8>` with the varint format (https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers)
 //ver: https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
@@ -69,9 +69,7 @@ pub fn date_from_timestamp(timestamp: u32) -> String {
     };
     let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
     datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-
 }
-
 
 pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
     let first_byte = u8::from_le_stream(cursor)?;

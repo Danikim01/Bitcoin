@@ -165,7 +165,7 @@ impl Node {
         }
     }
 
-    /// This function is used to establish a connection with a node. 
+    /// This function is used to establish a connection with a node.
     pub fn try_from_addr(
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,

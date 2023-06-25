@@ -81,7 +81,7 @@ fn get_transaction_widget(
     let amount_label: gtk::Label = inner_builder
         .object("overview_transaction_template_amount")
         .unwrap();
-    let amount: f64 = (transaction.amount as f64 / 100000000.0) as f64;
+    let amount: f64 = transaction.amount as f64 / 100000000.0;
     amount_label.set_text(format!("{:.8} tBTC", amount).as_str());
 
     let timestamp_label: gtk::Label = inner_builder

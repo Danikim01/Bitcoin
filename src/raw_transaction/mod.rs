@@ -1,11 +1,12 @@
 use crate::io::{self, Cursor};
-use crate::messages::utility::{read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead, date_from_timestamp};
+use crate::messages::utility::{
+    date_from_timestamp, read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
+};
 use crate::messages::{HashId, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
-use crate::utxo::{Index, Utxo, UtxoId, UtxoSet, UtxoTransaction, WalletUtxo};
+use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use std::{
     io::{Error, Read},
     str::FromStr,
@@ -185,9 +186,9 @@ impl RawTransaction {
 
         let tx_previous = &txin.previous_output;
         if let Some(wallet) = utxoset.set.get(address) {
-            if let Some(UtxoTransaction) = wallet.utxos.get(&(tx_previous.hash, tx_previous.index))
+            if let Some(utxo_transaction) = wallet.utxos.get(&(tx_previous.hash, tx_previous.index))
             {
-                value += UtxoTransaction.value;
+                value += utxo_transaction.value;
             }
         }
         value
@@ -221,7 +222,7 @@ impl RawTransaction {
         let mut total_value = 0_u64;
         for output in &self.tx_out {
             if output.destined_to(address) {
-                total_value = total_value + output.value;
+                total_value += output.value;
             }
         }
         total_value
@@ -243,7 +244,6 @@ impl RawTransaction {
     ) -> TransactionDisplayInfo {
         let mut role = TransactionRole::Sender;
         let mut spent_value = 0;
-        let mut change_value = 0;
 
         if self.is_from_address(address) {
             spent_value = self.get_total_input_value(address, utxo_set);
@@ -251,8 +251,8 @@ impl RawTransaction {
             role = TransactionRole::Receiver;
         }
 
-        change_value = self.get_change_value_for(address);
-        
+        let change_value = self.get_change_value_for(address);
+
         TransactionDisplayInfo {
             role,
             date: date_from_timestamp(timestamp),
@@ -312,6 +312,13 @@ impl RawTransaction {
         Ok(())
     }
 
+    fn get_utxo_addr(utxo_tx: &UtxoTransaction) -> String {
+        match utxo_tx.get_address() {
+            Ok(a) => a,
+            _ => "no_address".to_string(),
+        }
+    }
+
     fn generate_utxo_out(
         &self,
         utxo_set: &mut UtxoSet,
@@ -321,18 +328,14 @@ impl RawTransaction {
     ) -> io::Result<()> {
         let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
         let new_utxo = Utxo::from_raw_transaction(self)?;
-        let mut index = 0;
-        for utxo_transaction in &new_utxo.transactions {
-            let address = match utxo_transaction.get_address() {
-                Ok(a) => a,
-                _ => "no_address".to_string(),
-            };
+        for (index, utxo_transaction) in new_utxo.transactions.iter().enumerate() {
+            let address = Self::get_utxo_addr(utxo_transaction);
             match utxo_set.set.get_mut(&address) {
                 Some(wallet) => wallet.add_utxo(
                     new_utxo_id,
                     utxo_transaction.clone(),
                     origin.clone(),
-                    index,
+                    index as u32,
                     ui_sender,
                     active_addr,
                 )?,
@@ -342,14 +345,13 @@ impl RawTransaction {
                         new_utxo_id,
                         utxo_transaction.clone(),
                         origin.clone(),
-                        index,
+                        index as u32,
                         None,
                         None,
                     )?;
                     utxo_set.set.insert(address, wallet);
                 }
             }
-            index += 1;
         }
 
         Ok(())
@@ -461,7 +463,7 @@ mod tests {
     use crate::utility::_decode_hex;
 
     use super::*;
-    use crate::wallet::Wallet;
+    use crate::utxo::UtxoTransaction;
     use std::fs;
 
     #[test]

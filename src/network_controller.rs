@@ -31,7 +31,6 @@ use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
-use gtk::prelude::FileExt;
 
 /// Structs of the network controller (main controller of the program)
 pub struct NetworkController {
@@ -64,20 +63,22 @@ impl NetworkController {
     }
 
     fn update_ui_table(&self, table: GtkTable, data: GtkTableData) -> io::Result<()> {
-
         self.ui_sender
-            .send(GtkMessage::UpdateTable((table.clone(), data)))
+            .send(GtkMessage::UpdateTable((table, data)))
             .map_err(to_io_err)?;
 
         Ok(())
     }
 
-
-    fn update_ui_table_with_vec(&self, gtk_table: GtkTable, vec_data: Vec<GtkTableData>) -> io::Result<()> {
-          for data in vec_data {
-                self.update_ui_table(gtk_table.clone(), data)?;
-            }
-            Ok(())
+    fn update_ui_table_with_vec(
+        &self,
+        gtk_table: GtkTable,
+        vec_data: Vec<GtkTableData>,
+    ) -> io::Result<()> {
+        for data in vec_data {
+            self.update_ui_table(gtk_table.clone(), data)?;
+        }
+        Ok(())
     }
 
     fn update_ui_balance(&self) -> io::Result<()> {
@@ -97,6 +98,16 @@ impl NetworkController {
             .send(GtkMessage::UpdateOverviewTransactions((
                 transaction_info,
                 TransactionOrigin::Pending,
+            )))
+            .map_err(to_io_err)
+    }
+
+    fn notify_ui_message(&self, t: gtk::MessageType, title: &str, msg: &str) -> io::Result<()> {
+        self.ui_sender
+            .send(GtkMessage::CreateNotification((
+                t,
+                title.to_string(),
+                msg.to_string(),
             )))
             .map_err(to_io_err)
     }
@@ -313,7 +324,7 @@ impl NetworkController {
     pub fn generate_transaction(&mut self, details: TransactionInfo) -> io::Result<()> {
         let tx = self
             .wallet
-            .generate_transaction(&mut self.utxo_set, details.clone());
+            .generate_transaction(&mut self.utxo_set, details);
 
         match tx {
             Ok(tx) => {
@@ -333,23 +344,17 @@ impl NetworkController {
                 // send bytes to all
                 self.nodes.send_to_all(&bytes)?;
 
-                // notify ui
-                self.ui_sender
-                    .send(GtkMessage::CreateNotification((
-                        gtk::MessageType::Info,
-                        "Transaction broadcasted".to_string(),
-                        format!("Transaction hash: {}", _encode_hex(&tx_hash)),
-                    )))
-                    .map_err(to_io_err)
+                self.notify_ui_message(
+                    gtk::MessageType::Info,
+                    "Transaction broadcasted",
+                    &format!("Transaction hash: {}", _encode_hex(&tx_hash)),
+                )
             }
-            Err(e) => self
-                .ui_sender
-                .send(GtkMessage::CreateNotification((
-                    gtk::MessageType::Error,
-                    "Failed broadcasting transaction".to_string(),
-                    format!("{}", e),
-                )))
-                .map_err(to_io_err),
+            Err(e) => self.notify_ui_message(
+                gtk::MessageType::Error,
+                "Failed broadcasting transaction",
+                &format!("{}", e),
+            ),
         }
     }
 

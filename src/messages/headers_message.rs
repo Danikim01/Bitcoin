@@ -14,7 +14,6 @@ pub struct Headers {
 }
 
 impl Headers {
-
     /// Creates a new Headers struct
     pub fn new(count: usize, block_headers: Vec<BlockHeader>) -> Self {
         Self {
@@ -42,7 +41,6 @@ impl Headers {
     pub fn is_paginated(&self) -> bool {
         self.count % MAX_HEADER == 0
     }
-
 
     fn last_header(&self) -> Option<&BlockHeader> {
         if !self.block_headers.is_empty() {

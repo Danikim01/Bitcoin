@@ -21,7 +21,6 @@ pub enum InvType {
 }
 
 impl InvType {
-
     /// Convert the inventory type to a u3 (e.g used for serialization)
     pub fn to_u32(&self) -> u32 {
         match self {
@@ -55,7 +54,6 @@ impl InvType {
     }
 }
 
-
 /// Struct that represents the data from a Inventory Vector (https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors)
 //ver https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
 #[derive(Debug, Clone)]
@@ -65,7 +63,6 @@ pub struct Inventory {
 }
 
 impl Inventory {
-    
     /// Create a new inventory data
     pub fn new(inv_type: InvType, hash: HashId) -> Self {
         Self { inv_type, hash }

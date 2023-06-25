@@ -55,7 +55,7 @@ impl TxOutput {
             Err(_) => false,
         }
     }
-    
+
     /// Deserialize a `TxOutput` from a byte array.
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let value = u64::from_le_stream(cursor)?; // this is actually a float?
@@ -72,7 +72,7 @@ impl TxOutput {
 
         Ok(tx_output)
     }
-    
+
     /// Deserialize a vector of `TxOutput` from a byte array.
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<Self>, Error> {
         let mut tx_outputs = vec![];
@@ -104,7 +104,7 @@ impl TxOutput {
         }
         bytes
     }
-    
+
     pub fn _get_pk_script_data(&self) -> Result<PkScriptData, Error> {
         PkScriptData::from_pk_script_bytes(&self.pk_script)
     }

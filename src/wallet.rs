@@ -27,12 +27,9 @@ fn hash_address(address: &str) -> io::Result<Vec<u8>> {
 
 fn build_p2pkh_script(hashed_pk: Vec<u8>) -> io::Result<Vec<u8>> {
     if hashed_pk.len() < 21 {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Invalid address",
-        ));
+        return Err(io::Error::new(io::ErrorKind::Other, "Invalid address"));
     }
-    
+
     let hpk = hashed_pk[1..21].to_vec();
     let mut pk_script = Vec::new();
     pk_script.push(0x76); // OP_DUP

@@ -52,7 +52,7 @@ impl GetHeader {
         payload.extend(self.stop_hash.iter());
         Ok(payload)
     }
-    
+
     /// Create a new getheaders from a last header hash
     pub fn from_last_header(last_header: HashId) -> Self {
         Self {

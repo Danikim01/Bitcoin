@@ -1,6 +1,6 @@
 use chrono::Local;
 
-use crate::messages::{Block, Headers, Serialize};
+use crate::messages::{Block, Headers};
 use crate::raw_transaction::RawTransaction;
 use crate::utility::{_encode_hex, double_hash};
 
@@ -8,9 +8,9 @@ use super::blocks_panel::add_data_to_blocks_table;
 use super::headers_panel::add_data_to_headers_table;
 use super::transactions_panel::add_data_to_transactions_table;
 
-use std::{hash, io};
-use bitcoin_hashes::Hash;
 use crate::messages::utility::date_from_timestamp;
+use bitcoin_hashes::Hash;
+use std::io;
 
 #[derive(Clone)]
 /// Enum with the different tables in the interface
@@ -23,11 +23,11 @@ pub enum GtkTable {
 /// Enum with the different types of data that can be added to a table
 pub enum GtkTableData {
     /// height, date, hash, tx count (all as String)
-    BlocksData(String, String, String, String),
+    Blocks(String, String, String, String),
     /// height, date, hash (all as String)
-    HeadersData(String, String, String),
+    Headers(String, String, String),
     /// date, hash, amount (all as String)
-    TransactionData(String, String, String),
+    Transaction(String, String, String),
 }
 
 /// Receive a raw transaction and parse it's data to a RowData::TransactionData
@@ -38,7 +38,7 @@ pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
     let hash = _encode_hex(hash_bytes);
     let amount = format!("{:.8}", tx.get_total_output_value() as f64 / 100000000.0);
 
-    GtkTableData::TransactionData(date, hash, amount.to_string())
+    GtkTableData::Transaction(date, hash, amount)
 }
 
 /// Receive a block and parse it's data to a RowData::BlocksData
@@ -50,11 +50,8 @@ pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
     let hash = _encode_hex(hash_bytes);
     let tx_count = block.txn_count.to_string();
 
-    Ok(GtkTableData::BlocksData(height, date, hash, tx_count))
+    Ok(GtkTableData::Blocks(height, date, hash, tx_count))
 }
-
-
-
 
 /// Receive a header and parse it's data to a RowData::HeadersData
 pub fn table_data_from_headers(headers: &Headers, count: usize) -> Vec<GtkTableData> {
@@ -63,7 +60,11 @@ pub fn table_data_from_headers(headers: &Headers, count: usize) -> Vec<GtkTableD
     let mut data = Vec::new();
 
     for header in headers.block_headers[headers.count - count..headers.count].iter() {
-        data.push(GtkTableData::HeadersData("1".to_string(), date_from_timestamp(header.timestamp), _encode_hex(double_hash(header.serialize().as_slice()).as_byte_array()))      )
+        data.push(GtkTableData::Headers(
+            "1".to_string(),
+            date_from_timestamp(header.timestamp),
+            _encode_hex(double_hash(header.serialize().as_slice()).as_byte_array()),
+        ))
     }
 
     data

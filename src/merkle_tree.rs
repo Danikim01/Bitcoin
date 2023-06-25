@@ -34,7 +34,7 @@ impl MerkleProof {
             }
         }
     }
-    
+
     pub fn _generate_merkle_root(&self) -> sha256::Hash {
         if self.proof.is_empty() {
             return double_hash(b"foo");
@@ -80,7 +80,7 @@ impl MerkleTree {
         }
         hashes
     }
-    
+
     /// Returns the root of the merkle tree
     pub fn get_root(&self) -> sha256::Hash {
         if self.tree.is_empty() {
@@ -88,7 +88,7 @@ impl MerkleTree {
         }
         self.tree[self.tree.len() - 1][0]
     }
-    
+
     pub fn _merkle_root_from_hashes(hashes: Vec<sha256::Hash>) -> Result<sha256::Hash, Error> {
         if hashes.is_empty() {
             return Err(Error::new(

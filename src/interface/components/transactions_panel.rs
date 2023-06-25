@@ -7,7 +7,7 @@ use std::io;
 
 fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
     let (date, hash, amount) = match data {
-        GtkTableData::TransactionData(date, hash, amount) => (date, hash, amount),
+        GtkTableData::Transaction(date, hash, amount) => (date, hash, amount),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "wrong GtkTableData",

@@ -1,14 +1,11 @@
 use std::io;
 
-use super::{
-    table::{GtkTable, GtkTableData},
-    utils::append_to_limited_container,
-};
+use super::{table::GtkTableData, utils::append_to_limited_container};
 use gtk::prelude::{BuilderExtManual, Cast, ContainerExt, LabelExt};
 
 fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
     let (height, date, hash) = match data {
-        GtkTableData::HeadersData(height, date, hash) => (height, date, hash),
+        GtkTableData::Headers(height, date, hash) => (height, date, hash),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "wrong GtkTableData",

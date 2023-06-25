@@ -15,7 +15,6 @@ pub struct BlockHeader {
     pub nonce: u32,
 }
 
-
 impl BlockHeader {
     pub fn new(
         version: i32,
@@ -34,7 +33,7 @@ impl BlockHeader {
             nonce,
         }
     }
-    
+
     /// Create a block header from a byte array (little endian).
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<BlockHeader, std::io::Error> {
         let version = i32::from_le_stream(cursor)?;
@@ -64,7 +63,7 @@ impl BlockHeader {
     fn compare_target_threshold_and_hash(target: &HashId, hash: &HashId) -> std::cmp::Ordering {
         target.cmp(hash)
     }
-    
+
     pub fn validate_proof_of_work(&self) -> Result<(), std::io::Error> {
         let target_threshold: HashId = Self::nbits_to_target(self.nbits);
         let block_header_hash: HashId = self.hash();

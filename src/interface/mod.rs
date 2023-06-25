@@ -92,7 +92,7 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 create_notification_window(t, &title, &msg);
             }
             GtkMessage::UpdateTable((table, data)) => {
-                table_append_data(builder_aux, table, data);
+                let _res = table_append_data(builder_aux, table, data);
             }
         }
 

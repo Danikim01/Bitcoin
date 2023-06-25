@@ -331,8 +331,13 @@ mod tests {
         );
 
         // read txC that generated utxoC
-        tx_c.generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, Some("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"))
-            .unwrap();
+        tx_c.generate_utxo(
+            &mut utxo_set,
+            TransactionOrigin::Block,
+            None,
+            Some("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+        )
+        .unwrap();
 
         // pending balance should now be 0
         assert_eq!(

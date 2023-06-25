@@ -7,7 +7,6 @@ use bitcoin_hashes::{hash160, Hash};
 use std::io;
 use std::io::{Cursor, Error, ErrorKind, Read};
 
-
 /// Store a tx input (previous output, script sig, sequence)
 #[derive(Debug, Clone)]
 pub struct TxInput {
@@ -142,7 +141,7 @@ impl TxInputType {
     }
 }
 
-/// Represent a coinbase input 
+/// Represent a coinbase input
 #[derive(Debug, Clone)]
 pub struct CoinBaseInput {
     pub _hash: [u8; 32],
