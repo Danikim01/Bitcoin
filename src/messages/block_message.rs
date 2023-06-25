@@ -91,53 +91,26 @@ impl Block {
         Ok(())
     }
 
-    /// Validates the block by checking the proof of work, merkle root, and generates utxos from the transactions outputs.
-    /// Adds to the utxo set only if the block is valid.
+    /// Validates the block by checking the proof of work, merkle root.
     pub fn validate(
         &self,
-        utxo_set: &mut UtxoSet,
-        ui_sender: Option<&Sender<GtkMessage>>,
-        active_addr: Option<&str>,
     ) -> io::Result<()> {
         self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
-        
-        for txn in self.txns.iter() {
-            txn.generate_utxo(
-                utxo_set,
-                TransactionOrigin::Block,
-                ui_sender,
-                active_addr,
-            )?;
-            // Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set)?;
-        }
-
-        self.header.validate_proof_of_work()?;
-        self.validate_merkle_root()?;
-
-        // *utxo_set = utxo_set_snapshot;
-
         Ok(())
     }
 
+    /// Adds to the utxo set
     pub fn expand_utxo(
         &self,
         utxo_set: &mut UtxoSet,
         ui_sender: Option<&Sender<GtkMessage>>,
         active_addr: Option<&str>,
-    ) -> io::Result<()> {
-        // let mut utxo_set_snapshot = utxo_set.clone();
-
+    ) -> io::Result<()>  {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
-            Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set)?;
+            let _ = Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set);
         }
-
-        // self.header.validate_proof_of_work()?;
-        // self.validate_merkle_root()?;
-
-        // *utxo_set = utxo_set_snapshot;
-
         Ok(())
     }
 
@@ -254,9 +227,8 @@ mod tests {
 
         if !bytes.is_empty() {
             let message = Block::deserialize(&bytes).unwrap();
-            let mut utxo_set: UtxoSet = UtxoSet::new();
             if let Message::Block(block) = message {
-                block.validate(&mut utxo_set, None, None)?;
+                block.validate()?;
                 assert_eq!(block.txn_count, block.txns.len());
             };
         }
