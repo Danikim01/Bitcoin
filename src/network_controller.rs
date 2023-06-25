@@ -31,6 +31,7 @@ use gtk::glib::Sender;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
+use gtk::prelude::FileExt;
 
 /// Structs of the network controller (main controller of the program)
 pub struct NetworkController {
@@ -63,9 +64,20 @@ impl NetworkController {
     }
 
     fn update_ui_table(&self, table: GtkTable, data: GtkTableData) -> io::Result<()> {
+
         self.ui_sender
-            .send(GtkMessage::UpdateTable((table, data)))
-            .map_err(to_io_err)
+            .send(GtkMessage::UpdateTable((table.clone(), data)))
+            .map_err(to_io_err)?;
+
+        Ok(())
+    }
+
+
+    fn update_ui_table_with_vec(&self, gtk_table: GtkTable, vec_data: Vec<GtkTableData>) -> io::Result<()> {
+          for data in vec_data {
+                self.update_ui_table(gtk_table.clone(), data)?;
+            }
+            Ok(())
     }
 
     fn update_ui_balance(&self) -> io::Result<()> {
@@ -207,8 +219,8 @@ impl NetworkController {
         }
 
         // get data from headers and update ui
-        let data = table_data_from_headers(&headers);
-        self.update_ui_table(GtkTable::Headers, data)?;
+        let data = table_data_from_headers(&headers, self.headers.len() - previous_header_count);
+        self.update_ui_table_with_vec(GtkTable::Headers, data)?;
 
         log(
             &format!(
@@ -345,6 +357,7 @@ impl NetworkController {
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self) -> io::Result<()> {
         // attempt to read blocks from backup file
+
         if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
             update_ui_status_bar(
                 &self.ui_sender,

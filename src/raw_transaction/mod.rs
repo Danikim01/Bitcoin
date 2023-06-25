@@ -1,7 +1,5 @@
 use crate::io::{self, Cursor};
-use crate::messages::utility::{
-    read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
-};
+use crate::messages::utility::{read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead, date_from_timestamp};
 use crate::messages::{HashId, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
@@ -254,17 +252,10 @@ impl RawTransaction {
         }
 
         change_value = self.get_change_value_for(address);
-
-        let naive: NaiveDateTime = match NaiveDateTime::from_timestamp_opt(timestamp as i64, 0) {
-            Some(naive) => naive,
-            None => Utc::now().naive_utc(),
-        };
-        let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
-        let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
-
+        
         TransactionDisplayInfo {
             role,
-            date: newdate.to_string(),
+            date: date_from_timestamp(timestamp),
             amount: change_value as i64 - spent_value as i64,
             hash: HashId::new(self.get_hash()),
         }

@@ -2,14 +2,17 @@ use chrono::Local;
 
 use crate::messages::{Block, Headers, Serialize};
 use crate::raw_transaction::RawTransaction;
-use crate::utility::_encode_hex;
+use crate::utility::{_encode_hex, double_hash};
 
 use super::blocks_panel::add_data_to_blocks_table;
 use super::headers_panel::add_data_to_headers_table;
 use super::transactions_panel::add_data_to_transactions_table;
 
 use std::{hash, io};
+use bitcoin_hashes::Hash;
+use crate::messages::utility::date_from_timestamp;
 
+#[derive(Clone)]
 /// Enum with the different tables in the interface
 pub enum GtkTable {
     Transactions,
@@ -50,11 +53,20 @@ pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
     Ok(GtkTableData::BlocksData(height, date, hash, tx_count))
 }
 
+
+
+
 /// Receive a header and parse it's data to a RowData::HeadersData
-pub fn table_data_from_headers(headers: &Headers) -> GtkTableData {
+pub fn table_data_from_headers(headers: &Headers, count: usize) -> Vec<GtkTableData> {
     // need height, date and hash
 
-    GtkTableData::HeadersData("foo".to_string(), "foo".to_string(), "foo".to_string())
+    let mut data = Vec::new();
+
+    for header in headers.block_headers[headers.count - count..headers.count].iter() {
+        data.push(GtkTableData::HeadersData("1".to_string(), date_from_timestamp(header.timestamp), _encode_hex(double_hash(header.serialize().as_slice()).as_byte_array()))      )
+    }
+
+    data
 }
 
 pub fn table_append_data(
