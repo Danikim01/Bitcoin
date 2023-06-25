@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::interface::{GtkMessage, ModelRequest};
+use crate::messages::constants::config::QUIET;
 use crate::messages::constants::{
     commands::TX,
     config::{MAGIC, VERBOSE},
@@ -125,6 +126,20 @@ impl NetworkController {
             .get_pending_wallet_balance(&self.wallet.address);
 
         Ok((balance, pending_balance))
+    }
+    fn get_best_headers<'l>(&'l mut self, amount: usize) -> Vec<&'l BlockHeader> {
+        let mut best_headers = vec![];
+        let mut current_header = &self.tallest_header;
+        for _ in 0..amount {
+            best_headers.push(current_header);
+            current_header = match self.headers.get(&current_header.prev_block_hash) {
+                Some(header) => header,
+                None => break
+            }
+        }
+        // reverse the chain
+        best_headers.reverse();
+        best_headers
     }
 
     fn read_backup_block(&mut self, block: Block) {
@@ -265,19 +280,13 @@ impl NetworkController {
                 }
             }
         }
-
         if prev_header_count == self.headers.len() {
             return Ok(());
         }
-
-        // update ui with last 100 headers
-        let data = table_data_from_headers(new_headers.iter().rev().take(100));
-        self.update_ui_table_with_vec(GtkTable::Headers, data)?;
         config.get_logger().log(
             &format!("Read headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
         );
-
         // request blocks mined after given date
         let mut headers = Headers::new(new_headers.len(), new_headers);
         headers.trim_timestamp(config.get_start_timestamp());
@@ -393,7 +402,7 @@ impl NetworkController {
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
         // attempt to read blocks from backup file
-        if let Ok(blocks) = Block::all_from_file("tmp/blocks_backup.dat") {
+        if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
             update_ui_status_bar(
                 &self.ui_sender,
                 "Found blocks backup file, reading blocks...".to_string(),
@@ -534,7 +543,7 @@ impl OuterNetworkController {
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
-                    println!("Received unhandled error: {:?}", result);
+                    config.get_logger().log(&format!("Received unhandled error: {:?}", result), QUIET);
                     return Err(result);
                 }
             }
@@ -542,20 +551,22 @@ impl OuterNetworkController {
         Ok(handle)
     }
 
-    fn req_headers_periodically(&self, config: Config) -> io::Result<()> {
+    fn update_ui_headers_periodically(&self) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
+            let mut tallest_header_hash = HashId::default();
             loop {
-                config
-                    .get_logger()
-                    .log("Requesting headers periodically...", VERBOSE);
-                let t_inner = inner.clone();
-                let tallest_header = t_inner.lock().map_err(to_io_err)?.tallest_header;
-                t_inner
-                    .lock()
-                    .map_err(to_io_err)?
-                    .request_headers(tallest_header.hash(), &config)?;
-                thread::sleep(std::time::Duration::from_secs(60));
+                {
+                    let mut controller = inner.lock().map_err(to_io_err)?;
+                    if controller.tallest_header.hash() != tallest_header_hash {
+                        tallest_header_hash = controller.tallest_header.hash();
+                        // update ui with last 100 headers
+                        let headers = controller.get_best_headers(100);
+                        let data = table_data_from_headers(headers);
+                        controller.update_ui_table_with_vec(GtkTable::Headers, data)?;
+                    }
+                }
+                thread::sleep(std::time::Duration::from_secs(3));
             }
         });
         Ok(())
@@ -578,7 +589,7 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
-        self.sync(config.clone())?;
-        self.req_headers_periodically(config)
+        self.sync(config)?;
+        self.update_ui_headers_periodically()
     }
 }

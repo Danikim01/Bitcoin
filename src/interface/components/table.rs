@@ -10,8 +10,6 @@ use super::transactions_panel::add_data_to_transactions_table;
 
 use crate::messages::utility::date_from_timestamp;
 use std::io;
-use std::iter::{Take, Rev};
-use std::slice::Iter;
 
 #[derive(Clone)]
 /// Enum with the different tables in the interface
@@ -55,7 +53,7 @@ pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
 }
 
 /// Receive a header and parse it's data to a RowData::HeadersData
-pub fn table_data_from_headers(headers: Take<Rev<Iter<'_, BlockHeader>>>) -> Vec<GtkTableData> {
+pub fn table_data_from_headers(headers: Vec<&BlockHeader>) -> Vec<GtkTableData> {
     // need height, date and hash
     let mut data = Vec::new();
 
