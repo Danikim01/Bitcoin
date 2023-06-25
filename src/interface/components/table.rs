@@ -9,6 +9,8 @@ use super::transactions_panel::add_data_to_transactions_table;
 
 use crate::messages::utility::date_from_timestamp;
 use std::io;
+use std::iter::{Take, Rev};
+use std::slice::Iter;
 
 #[derive(Clone)]
 /// Enum with the different tables in the interface

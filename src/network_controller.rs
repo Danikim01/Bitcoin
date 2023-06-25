@@ -135,16 +135,11 @@ impl NetworkController {
                 Some(header) => header,
                 None => break,
             }
-        }
-        // reverse the chain
-        best_headers.reverse();
+        };
         best_headers
     }
 
     fn read_backup_block(&mut self, block: Block) {
-        if self.validate_block(&block).is_err() {
-            return; // ignore invalid or duplicate blocks
-        }
         if self
             .valid_blocks
             .contains_key(&block.header.prev_block_hash)
@@ -154,7 +149,7 @@ impl NetworkController {
             self.put_block_on_hold(block);
         }
     }
-
+    
     fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
         if self.validate_block(&block).is_err() {
             return Ok(()); // ignore invalid or duplicate blocks
