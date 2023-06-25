@@ -297,7 +297,7 @@ impl NetworkController {
                 &mut self.utxo_set,
                 TransactionOrigin::Pending,
                 Some(&self.ui_sender),
-                None,
+                Some(&self.wallet.address),
             )?;
 
             // get wallet balance and update UI
