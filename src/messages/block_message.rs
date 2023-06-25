@@ -71,13 +71,12 @@ impl Block {
     }
 
     pub fn validate(&self, utxo_set: &mut UtxoSet) -> io::Result<()> {
-        for txn in self.txns.iter() {
-            txn.generate_utxo(utxo_set, TransactionOrigin::Block)?;
-        }
-
         self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
 
+        for txn in self.txns.iter() {
+            txn.generate_utxo(utxo_set, TransactionOrigin::Block)?;
+        }
         Ok(())
     }
 
