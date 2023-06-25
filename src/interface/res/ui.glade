@@ -16,6 +16,7 @@
       <object class="GtkBox" id="blocks_filters">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="margin-top">8</property>
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <child>
@@ -26,6 +27,7 @@
             <property name="label" translatable="yes">Height</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -42,6 +44,7 @@
             <property name="label" translatable="yes">Date</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -58,6 +61,7 @@
             <property name="label" translatable="yes">Hash</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -75,6 +79,7 @@
             <property name="xalign">0.89999997615814209</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -195,6 +200,7 @@
       <object class="GtkBox" id="headers_filters">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="margin-top">8</property>
         <property name="hexpand">True</property>
         <property name="vexpand">True</property>
         <child>
@@ -205,6 +211,7 @@
             <property name="label" translatable="yes">Height</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -221,6 +228,7 @@
             <property name="label" translatable="yes">Date</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -238,6 +246,7 @@
             <property name="xalign">0.89999997615814209</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -559,6 +568,9 @@
                         <property name="can-focus">False</property>
                         <property name="halign">end</property>
                         <property name="label" translatable="yes">Wallet:</property>
+                        <attributes>
+                          <attribute name="weight" value="semibold"/>
+                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -567,16 +579,13 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkMenuButton" id="wallet_picker_id">
-                        <property name="width-request">200</property>
+                      <object class="GtkLabel" id="active_address_label">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="focus-on-click">False</property>
-                        <property name="receives-default">True</property>
-                        <property name="margin-end">4</property>
-                        <child>
-                          <placeholder/>
-                        </child>
+                        <property name="can-focus">False</property>
+                        <property name="margin-end">8</property>
+                        <attributes>
+                          <attribute name="font-desc" value="Monospace 10"/>
+                        </attributes>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -729,7 +738,9 @@
                 <property name="max-width-chars">0</property>
                 <property name="xalign">0.99000000953674316</property>
                 <attributes>
+                  <attribute name="font-desc" value="Monospace 10"/>
                   <attribute name="weight" value="bold"/>
+                  <attribute name="scale" value="1.1000000000000001"/>
                 </attributes>
               </object>
               <packing>
@@ -790,7 +801,9 @@
                 <property name="max-width-chars">0</property>
                 <property name="xalign">0.99000000953674316</property>
                 <attributes>
+                  <attribute name="font-desc" value="Monospace 10"/>
                   <attribute name="weight" value="bold"/>
+                  <attribute name="scale" value="1.1000000000000001"/>
                 </attributes>
               </object>
               <packing>
@@ -854,7 +867,9 @@
                 <property name="max-width-chars">0</property>
                 <property name="xalign">0.99000000953674316</property>
                 <attributes>
+                  <attribute name="font-desc" value="Monospace 10"/>
                   <attribute name="weight" value="bold"/>
+                  <attribute name="scale" value="1.1000000000000001"/>
                 </attributes>
               </object>
               <packing>
@@ -1565,7 +1580,7 @@
     <property name="can-focus">False</property>
     <property name="halign">center</property>
     <property name="valign">start</property>
-    <property name="margin-top">2</property>
+    <property name="margin-top">8</property>
     <child>
       <object class="GtkBox" id="transactions_filters">
         <property name="visible">True</property>
@@ -1580,6 +1595,7 @@
             <property name="label" translatable="yes">Date</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -1596,6 +1612,7 @@
             <property name="label" translatable="yes">Hash</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -1613,6 +1630,7 @@
             <property name="xalign">0.8000000119209289</property>
             <attributes>
               <attribute name="weight" value="bold"/>
+              <attribute name="scale" value="1.1000000000000001"/>
             </attributes>
           </object>
           <packing>
@@ -1696,6 +1714,10 @@
         <property name="can-focus">False</property>
         <property name="label" translatable="yes">Amount (BTC)</property>
         <property name="xalign">0.89999997615814209</property>
+        <attributes>
+          <attribute name="font-desc" value="Monospace 10"/>
+          <attribute name="scale" value="1.1000000000000001"/>
+        </attributes>
       </object>
       <packing>
         <property name="expand">True</property>

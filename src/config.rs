@@ -1,6 +1,6 @@
 use crate::logger::Logger;
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, PRIVATE_KEY_FILE
 };
 use crate::messages::HashId;
 use std::collections::HashMap;
@@ -18,6 +18,7 @@ pub struct Config {
     tcp_timeout_seconds: u64,
     logger: Logger,
     genesis_hash: HashId,
+    private_key_file: String,
 }
 
 impl Config {
@@ -50,6 +51,10 @@ impl Config {
         self.genesis_hash
     }
 
+    pub fn get_private_key_file(&self) -> &str {
+        &self.private_key_file
+    }
+
     fn remove_or(hashmap: &mut HashMap<String, String>, key: &str, default: &str) -> String {
         hashmap.remove(key).unwrap_or(default.to_string())
     }
@@ -74,6 +79,7 @@ impl Config {
                 "genesis_hash",
                 "",
             ))?,
+            private_key_file: Config::remove_or(&mut values, "private_key_file", PRIVATE_KEY_FILE),
         })
     }
 

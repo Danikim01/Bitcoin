@@ -16,6 +16,7 @@ pub mod components;
 
 /// Enum with messages from the model to the interface
 pub enum GtkMessage {
+    /// label, text
     UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
     UpdateOverviewTransactions((TransactionDisplayInfo, TransactionOrigin)),

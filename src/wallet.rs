@@ -1,5 +1,7 @@
 use crate::interface::components::send_panel::TransactionInfo;
+use crate::interface::GtkMessage;
 use crate::messages::HashId;
+// use crate::mpsc::Sender;
 use crate::raw_transaction::{
     tx_input::{Outpoint, TxInput, TxInputType},
     tx_output::TxOutput,
@@ -8,6 +10,7 @@ use crate::raw_transaction::{
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Lock, UtxoSet, UtxoTransaction};
 use bitcoin_hashes::{hash160, Hash};
+use gtk::glib::Sender;
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
 use std::io;
@@ -43,17 +46,7 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    /// Login to the wallet with a secret key.
-    pub fn login() -> io::Result<Self> {
-        // primary
-        let secret_key =
-            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string();
-
-        // secondary
-        // let secret_key =
-        //     "8DA6A9C5075623AAA6A857CE1AD0AEC523F51F2E4BC3E94451F5811B964028BF".to_string();
-
-        // eval move this to a separate function
+    fn get_address_from_secret_key(secret_key: String) -> io::Result<String> {
         let secp = Secp256k1::new();
         let key = SecretKey::from_str(&secret_key).map_err(to_io_err)?;
         let pubkey = key.public_key(&secp).serialize();
@@ -62,7 +55,22 @@ impl Wallet {
         let hash = double_hash(&[&version_prefix[..], &h160[..]].concat());
         let checksum = &hash[..4];
         let input = [&version_prefix[..], &h160[..], checksum].concat();
-        let address = bs58::encode(input).into_string();
+        Ok(bs58::encode(input).into_string())
+    }
+
+    /// Login to the wallet with a secret key.
+    pub fn login(secret_key: String, ui_sender: Option<&Sender<GtkMessage>>) -> io::Result<Self> {
+        // eval move this to a separate function
+        let address = Self::get_address_from_secret_key(secret_key.clone())?;
+
+        if let Some(sender) = ui_sender {
+            sender
+                .send(GtkMessage::UpdateLabel((
+                    "active_address_label".to_string(),
+                    address.clone(),
+                )))
+                .map_err(to_io_err)?;
+        }
 
         Ok(Self {
             secret_key,
@@ -218,7 +226,10 @@ mod tests {
 
     #[test]
     fn test_login() {
-        let res = Wallet::login();
+        let res = Wallet::login(
+            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string(),
+            None,
+        );
         println!("{:?}", res);
     }
 
@@ -240,7 +251,11 @@ mod tests {
     #[test]
     fn test_read_wallet_balance() {
         let mut utxo_set: UtxoSet = UtxoSet::new();
-        let my_wallet = Wallet::login().unwrap();
+        let my_wallet = Wallet::login(
+            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string(),
+            None,
+        )
+        .unwrap();
 
         let transaction_bytes = _decode_hex(
             "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
@@ -257,7 +272,11 @@ mod tests {
     #[test]
     fn test_read_wallet_balance_with_spent() {
         let mut utxo_set: UtxoSet = UtxoSet::new();
-        let my_wallet = Wallet::login().unwrap();
+        let my_wallet = Wallet::login(
+            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string(),
+            None,
+        )
+        .unwrap();
 
         let transaction_1_bytes = _decode_hex(
             "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
@@ -292,7 +311,11 @@ mod tests {
 
     #[test]
     fn test_generate_raw_transaction() {
-        let wallet: Wallet = Wallet::login().unwrap();
+        let wallet: Wallet = Wallet::login(
+            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string(),
+            None,
+        )
+        .unwrap();
         let mut utxo_set: UtxoSet = UtxoSet::new();
 
         // this transactions should give enough balance to send 1 tBTC
@@ -327,7 +350,11 @@ mod tests {
 
     #[test]
     fn test_send_to_self() {
-        let wallet: Wallet = Wallet::login().unwrap();
+        let wallet: Wallet = Wallet::login(
+            "E7C33EA70CF2DBB24AA71F0604D7956CCBC5FE8F8F20C51328A14AC8725BE0F5".to_string(),
+            None,
+        )
+        .unwrap();
         let mut utxo_set: UtxoSet = UtxoSet::new();
 
         let transaction_bytes = _decode_hex(

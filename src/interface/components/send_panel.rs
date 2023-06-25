@@ -2,7 +2,6 @@ use std::io;
 
 use crate::interface::ModelRequest;
 use crate::interface::RecipientDetails;
-use bitcoin_hashes::Error;
 use gtk::prelude::BuilderExtManual;
 use gtk::prelude::ButtonExt;
 use gtk::traits::BoxExt;
