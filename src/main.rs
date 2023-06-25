@@ -14,11 +14,13 @@ mod raw_transaction;
 mod utility;
 mod utxo;
 mod wallet;
+use std::fs;
 use std::sync::mpsc;
 use std::thread;
 
 /// Main function that starts the program spawning the UI thread and the network thread and starting the sync
 fn main() -> io::Result<()> {
+    fs::create_dir_all("./tmp")?;
     let (ui_sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     let (sender_aux, receiver_aux) = mpsc::channel();
     let (writer_end, node_receiver) = mpsc::channel();
