@@ -165,7 +165,9 @@ impl NetworkController {
             .valid_blocks
             .contains_key(&block.header.prev_block_hash)
         {
-            self.add_to_valid_blocks(block);
+            let hash = block.hash();
+            self.blocks_on_hold.insert(hash, block);
+            self.add_to_valid_blocks(hash);
         } else {
             self.put_block_on_hold(block);
         }
@@ -182,7 +184,9 @@ impl NetworkController {
             if let Vacant(entry) = self.headers.entry(block.hash()) {
                 entry.insert(block.header);
             }
-            self.add_to_valid_blocks(block);
+            let hash = block.hash();
+            self.blocks_on_hold.insert(hash, block);
+            self.add_to_valid_blocks(hash);
         } else {
             self.put_block_on_hold(block);
         }
@@ -202,8 +206,7 @@ impl NetworkController {
         Ok(())
     }
 
-    fn add_to_valid_blocks(&mut self, mut block: Block) {
-        println!("add_to_valid_blocks");
+    fn _add_to_valid_blocks(&mut self, block: Block) {
         let _ = block.expand_utxo(
             &mut self.utxo_set,
             None, // Some(&self.ui_sender),
@@ -212,14 +215,17 @@ impl NetworkController {
         
         let _ = self.update_ui_balance();
         // self.update_ui_with_block(&mut block);
+        self.valid_blocks.insert(block.hash(), block);
+    }
 
-        let block_hash = block.hash();
-        self.valid_blocks.insert(block_hash, block);
+    fn add_to_valid_blocks(&mut self, block_id: HashId) {
         // if there where blocks on hold waiting for this one, validate them
-        if let Some(blocked_blocks) = self.pending_blocks.remove(&block_hash) {
-            for block_hash in blocked_blocks {
-                if let Some(holded_block) = self.blocks_on_hold.remove(&block_hash) {
-                    self.add_to_valid_blocks(holded_block)
+        let mut blocks_not_on_hold: Vec<HashId> = vec![block_id];
+        while let Some(block_id) = blocks_not_on_hold.pop() {
+            if let Some(block) = self.blocks_on_hold.remove(&block_id) {
+                self._add_to_valid_blocks(block);
+                if let Some(mut unblocked_blocks) = self.pending_blocks.remove(&block_id) {
+                    blocks_not_on_hold.append(&mut unblocked_blocks);
                 }
             }
         }
