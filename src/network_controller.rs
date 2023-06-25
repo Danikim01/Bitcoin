@@ -128,14 +128,7 @@ impl NetworkController {
     }
 
     fn read_backup_block(&mut self, block: Block) -> io::Result<()> {
-        // if we have a clean backup, validating isn't necessary
-        if self.validate_block(&block).is_err() {
-            return Ok(()); // ignore invalid or duplicate blocks
-        }
-        if self
-            .valid_blocks
-            .contains_key(&block.header.prev_block_hash)
-        {
+        if self.valid_blocks.contains_key(&block.header.prev_block_hash) {
             self.add_to_valid_blocks(block);
         } else {
             self.put_block_on_hold(block);

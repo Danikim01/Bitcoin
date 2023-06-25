@@ -39,7 +39,7 @@ impl Headers {
 
     /// Returns true if the number of block headers is a multiple of MAX_HEADER (what means that there are more headers to download)
     pub fn is_paginated(&self) -> bool {
-        self.count % MAX_HEADER == 0
+        self.count == MAX_HEADER
     }
 
     /// Doesn't check headers size, only use if you know the headers' block_headers is not empty.
