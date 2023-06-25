@@ -209,6 +209,7 @@ impl NetworkController {
     }
 
     fn add_to_valid_blocks(&mut self, block: Block) {
+        println!("add_to_valid_blocks");
         let days_old = block.get_days_old();
         if days_old > 0 {
             let _ = update_ui_status_bar(
@@ -265,8 +266,7 @@ impl NetworkController {
                 self.headers.get(&first_downloadable_header.prev_block_hash)
             {
                 let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
-                self.valid_blocks
-                    .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
+                self.add_to_valid_blocks(pseudo_genesis_block);
             }
         }
         self.request_blocks_evenly(&mut headers, config)
@@ -604,17 +604,15 @@ impl OuterNetworkController {
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
             loop {
-                {
-                    let mut controller = inner.lock().map_err(to_io_err)?;
-                    if controller.tallest_header.hash() != tallest_header_hash {
-                        tallest_header_hash = controller.tallest_header.hash();
-                        // update ui with last 100 headers
-                        let headers = controller.get_best_headers(100);
-                        let data = table_data_from_headers(headers);
-                        controller.update_ui_table_with_vec(GtkTable::Headers, data)?;
-                    }
-                }
                 thread::sleep(std::time::Duration::from_secs(3));
+                let mut controller = inner.lock().map_err(to_io_err)?;
+                if controller.tallest_header.hash() != tallest_header_hash {
+                    tallest_header_hash = controller.tallest_header.hash();
+                    // update ui with last 100 headers
+                    let headers = controller.get_best_headers(100);
+                    let data = table_data_from_headers(headers);
+                    controller.update_ui_table_with_vec(GtkTable::Headers, data)?;
+                }
             }
         });
         Ok(())

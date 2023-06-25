@@ -99,23 +99,18 @@ impl Block {
         ui_sender: Option<&Sender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
-        let mut utxo_set_snapshot = utxo_set.clone();
-
+        self.header.validate_proof_of_work()?;
+        self.validate_merkle_root()?;
+        
         for txn in self.txns.iter() {
             txn.generate_utxo(
-                &mut utxo_set_snapshot,
+                utxo_set,
                 TransactionOrigin::Block,
                 ui_sender,
                 active_addr,
             )?;
             Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set)?;
         }
-
-        self.header.validate_proof_of_work()?;
-        self.validate_merkle_root()?;
-
-        *utxo_set = utxo_set_snapshot;
-
         Ok(())
     }
 
