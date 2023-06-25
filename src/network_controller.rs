@@ -235,6 +235,10 @@ impl NetworkController {
         if self.headers.len() == previous_header_count {
             return Ok(());
         }
+        
+        // get data from headers and update ui
+        let data = table_data_from_headers(&headers, self.headers.len() - previous_header_count);
+        self.update_ui_table_with_vec(GtkTable::Headers, data)?;
         config.get_logger().log(
             &format!(
                 "Received header. New header count: {:?}",
