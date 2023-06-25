@@ -1,4 +1,4 @@
-use crate::messages::constants::{header_constants::MAX_HEADER, messages::GENESIS_HASHID};
+use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, to_varint};
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use std::fs;
@@ -42,16 +42,9 @@ impl Headers {
         self.count % MAX_HEADER == 0
     }
 
-    fn last_header(&self) -> Option<&BlockHeader> {
-        if !self.block_headers.is_empty() {
-            return Some(&self.block_headers[self.block_headers.len() - 1]);
-        }
-        None
-    }
-
-    /// Returns the hash of the last block header in the block_headers vector or the genesis hash if the vector is empty
-    pub fn last_header_hash(&self) -> HashId {
-        return self.last_header().map_or(GENESIS_HASHID, |h| h.hash());
+    /// Doesn't check headers size, only use if you know the headers' block_headers is not empty.
+    pub fn last_header_hash_unchecked(&self) -> HashId {
+        return self.block_headers[self.block_headers.len() - 1].hash();
     }
 
     /// Returns a Headers struct with all the headers contained in the file

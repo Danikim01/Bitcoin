@@ -17,7 +17,7 @@ pub struct MessageHeader {
 impl Default for MessageHeader {
     fn default() -> Self {
         let start_string = [0, 0, 0, 0];
-        let command_name = UNKNOWN.to_string();
+        let command_name = NO_COMMAND.to_string();
         let payload_size = 0;
         let checksum = [0, 0, 0, 0];
 
@@ -92,7 +92,7 @@ impl MessageHeader {
             VERSION,
             VERACK,
             HEADERS,
-            UNKNOWN,
+            NO_COMMAND,
             SENDCMPCT,
             SENDHEADERS,
             PING,

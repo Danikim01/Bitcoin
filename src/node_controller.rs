@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::messages::constants::config::QUIET;
 use crate::messages::Message;
 use crate::node::Node;
-use rand::random;
 use std::collections::HashMap;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -57,28 +56,6 @@ impl NodeController {
             ));
         }
         Ok(())
-    }
-
-    /// Sends a message to a random node.
-    pub fn send_to_any(&mut self, payload: &Vec<u8>, config: &Config) -> io::Result<()> {
-        let random_number: usize = random();
-        let node_number = random_number % self.nodes.len();
-        let random_node = self.nodes.values_mut().nth(node_number).unwrap();
-        let node_address = random_node.address;
-        match &mut random_node.send(payload) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                config.get_logger().log(
-                    &format!(
-                        "Error writing to ANY TCPStream: {:?}, Killing connection and retrying.",
-                        e
-                    ) as &str,
-                    QUIET,
-                );
-                self.kill_node(node_address)?;
-                self.send_to_any(payload, config)
-            }
-        }
     }
 
     /// Sends a message to a specific node given its peer address.

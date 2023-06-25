@@ -1,8 +1,6 @@
 use crate::config::Config;
-use crate::messages::utility::StreamRead;
-use crate::messages::GetData;
 use crate::messages::{
-    constants::commands, Block, ErrorType, Headers, Message, MessageHeader, Serialize, VerAck,
+    constants::{commands, config::VERBOSE}, Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, Serialize, VerAck,
     Version,
 };
 use crate::raw_transaction::RawTransaction;
@@ -14,7 +12,6 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 // gtk imports
 use crate::interface::GtkMessage;
-use crate::messages::constants::config::VERBOSE;
 use gtk::glib::Sender;
 
 /// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
@@ -33,6 +30,12 @@ impl Listener {
         }
     }
 
+    fn send(&mut self, payload: &[u8]) -> io::Result<()> {
+        self.stream.write_all(payload)?;
+        self.stream.flush()?;
+        Ok(())
+    }
+
     fn log_listen(mut self, config: &Config) -> io::Result<()> {
         match self.listen() {
             Ok(..) => Ok(()),
@@ -49,45 +52,37 @@ impl Listener {
         }
     }
 
-    fn ping_deserialize(payload: &[u8]) -> io::Result<Message> {
-        let mut cursor = io::Cursor::new(payload);
-        //println!("Received ping message with payload: {:?}", payload);
-        let nonce = u64::from_le_stream(&mut cursor)?;
-        //println!("Received ping with nonce: {}", nonce);
-        Ok(Message::Ping(nonce))
-    }
-
-    fn process_message_payload(command_name: &str, payload: Vec<u8>) -> io::Result<Message> {
+    fn process_message_payload(&mut self, command_name: &str, payload: Vec<u8>) -> io::Result<Message> {
         let dyn_message: Message = match command_name {
             commands::HEADERS => match Headers::deserialize(&payload) {
+                Ok(Message::Headers(headers)) if headers.is_paginated() => {
+                    // request next headers
+                    let getheader_message = GetHeader::from_last_header(headers.last_header_hash_unchecked());
+                    self.send(&getheader_message.serialize()?)?;
+                    Message::Headers(headers)
+                },
                 Ok(m) => m,
-                Err(e) => {
-                    println!("Invalid headers payload: {:?}, ignoring message", e);
-                    // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
-                    Message::Failure(ErrorType::HeaderError)
-                }
+                Err(..) => Message::Ignore
             },
             commands::BLOCK => match Block::deserialize(&payload) {
                 Ok(m) => m,
-                Err(e) => {
-                    println!("Invalid block payload: {:?}, ignoring message", e);
-                    // HERE WE MUST REQUEST THE BLOCK AGAIN!
-                    Message::Failure(ErrorType::BlockError)
-                }
+                Err(..) => Message::Ignore
             },
             commands::INV => match GetData::deserialize(&payload) {
                 Ok(m) => m,
-                _ => Message::Ignore(), // bad luck if it fails, we can't request inv to another node
+                Err(..) => Message::Ignore
             },
             commands::TX => match RawTransaction::deserialize(&payload) {
                 Ok(m) => m,
-                _ => Message::Ignore(), // bad luck if it fails, we can't request tx to another node
+                Err(..) => Message::Ignore
             },
-            commands::PING => match Self::ping_deserialize(&payload) {
-                Ok(m) => m,
-                _ => Message::Ignore(),
+            commands::PING => {
+                if let Ok(reply) = &Ping::pong(&payload) {
+                    self.send(reply)?;
+                }
+                Message::Ignore
             },
-            _ => Message::Ignore(),
+            _ => Message::Ignore,
         };
         Ok(dyn_message)
     }
@@ -104,8 +99,8 @@ impl Listener {
             }
 
             let payload = message_header.read_payload(&mut self.stream)?;
-            match Self::process_message_payload(&message_header.command_name, payload) {
-                Ok(Message::Ignore()) => continue,
+            match self.process_message_payload(&message_header.command_name, payload) {
+                Ok(Message::Ignore) => continue,
                 Ok(m) => {
                     self.writer_channel
                         .send((self.socket_addr, m))

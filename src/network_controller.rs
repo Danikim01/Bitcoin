@@ -1,41 +1,44 @@
 use crate::config::Config;
+use crate::interface::{GtkMessage, ModelRequest};
 use crate::messages::constants::{
-    commands::{PONG, TX},
+    commands::TX,
     config::{MAGIC, VERBOSE},
-    messages::GENESIS_HASHID,
 };
 use crate::messages::{
-    Block, BlockHeader, BlockSet, ErrorType, GetData, GetHeader, HashId, Hashable, Headers,
-    InvType, Inventory, Message, MessageHeader, Serialize,
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
+    MessageHeader, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{_encode_hex, double_hash, into_hashmap, to_io_err};
+use crate::utility::{_encode_hex, double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::Hash;
 use chrono::Utc;
-use std::collections::{hash_map::Entry::Vacant, HashMap};
+use gtk::glib::Sender;
+use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
+use std::net::SocketAddr;
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::components::table::{
     table_data_from_block, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
 };
-use crate::interface::{update_ui_status_bar, GtkMessage, ModelRequest};
-use gtk::glib::Sender;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::thread::{self, JoinHandle};
+use crate::interface::update_ui_status_bar;
+
+pub type BlockSet = HashMap<HashId, Block>;
 
 /// Structs of the network controller (main controller of the program)
 pub struct NetworkController {
     headers: HashMap<HashId, BlockHeader>,
-    tallest_header: HashId,
-    blocks: BlockSet,
+    tallest_header: BlockHeader,
+    valid_blocks: BlockSet,   // valid blocks downloaded so far
+    blocks_on_hold: BlockSet, // downloaded blocks for which we don't have the previous block
+    pending_blocks: HashMap<HashId, Vec<HashId>>, // blocks which haven't arrived, and the blocks which come immediately after them
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: Sender<GtkMessage>,
@@ -50,10 +53,13 @@ impl NetworkController {
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
+        let genesis_header = BlockHeader::genesis(config.get_genesis());
         Ok(Self {
-            headers: HashMap::new(),
-            tallest_header: GENESIS_HASHID,
-            blocks: HashMap::new(),
+            headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
+            tallest_header: genesis_header,
+            valid_blocks: BlockSet::new(),
+            blocks_on_hold: BlockSet::new(),
+            pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config)?,
             ui_sender,
@@ -121,8 +127,42 @@ impl NetworkController {
         Ok((balance, pending_balance))
     }
 
-    fn read_block(&mut self, block: Block) -> io::Result<()> {
-        if self.blocks.contains_key(&block.hash()) {
+    fn read_backup_block(&mut self, block: Block) -> io::Result<()> {
+        // if we have a clean backup, validating isn't necessary
+        if self.validate_block(&block).is_err() {
+            return Ok(()); // ignore invalid or duplicate blocks
+        }
+        if self
+            .valid_blocks
+            .contains_key(&block.header.prev_block_hash)
+        {
+            self.add_to_valid_blocks(block);
+        } else {
+            self.put_block_on_hold(block);
+        }
+        Ok(())
+    }
+
+    fn read_incoming_block(&mut self, block: Block, config: &Config) -> io::Result<()> {
+        if self.validate_block(&block).is_err() {
+            return Ok(()); // ignore invalid or duplicate blocks
+        }
+        block.save_to_file(config.get_blocks_file())?;
+        if self
+            .valid_blocks
+            .contains_key(&block.header.prev_block_hash)
+        {
+            self.add_to_valid_blocks(block);
+        } else {
+            self.put_block_on_hold(block);
+        }
+        Ok(())
+    }
+
+    fn validate_block(&mut self, block: &Block) -> io::Result<()> {
+        if self.valid_blocks.contains_key(&block.hash())
+            || self.blocks_on_hold.contains_key(&block.hash())
+        {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
                 "This block has already been received before",
@@ -152,44 +192,44 @@ impl NetworkController {
         Ok(())
     }
 
-    fn read_block_from_backup(&mut self, block: Block) -> io::Result<()> {
-        if self.blocks.contains_key(&block.hash()) {
-            return Ok(());
+    fn add_to_valid_blocks(&mut self, block: Block) {
+        let days_old = block.get_days_old();
+        if days_old > 0 {
+            let _ = update_ui_status_bar(
+                &self.ui_sender,
+                format!("Reading blocks, {:?} days behind", block.get_days_old()),
+            );
+        } else {
+            let _ = update_ui_status_bar(&self.ui_sender, "Up to date".to_string());
         }
-
-        update_ui_status_bar(&self.ui_sender, "Reading backup blocks...".to_string())?;
-
-        block.validate_from_backup(
-            &mut self.utxo_set,
-            Some(&self.ui_sender),
-            Some(&self.wallet.address),
-        )?;
-
-        self.update_ui_balance()?;
-
-        self.blocks.insert(block.hash(), block);
-        Ok(())
+        let block_hash = block.hash();
+        self.valid_blocks.insert(block_hash, block);
+        // if there where blocks on hold waiting for this one, validate them
+        if let Some(blocked_blocks) = self.pending_blocks.remove(&block_hash) {
+            for block_hash in blocked_blocks {
+                if let Some(block) = self.blocks_on_hold.remove(&block_hash) {
+                    self.add_to_valid_blocks(block)
+                }
+            }
+        }
     }
 
-    fn read_block_from_node(&mut self, block: Block, config: &Config) -> io::Result<()> {
-        if self.read_block(block.clone()).is_err() {
-            return Ok(()); // ignore invalid blocks
+    fn put_block_on_hold(&mut self, block: Block) {
+        // add to pending blocks the previous block, mark this block as blocked by the previous one
+        match self.pending_blocks.entry(block.header.prev_block_hash) {
+            Vacant(entry) => {
+                entry.insert(vec![block.hash()]);
+            }
+            Occupied(mut entry) => entry.get_mut().push(block.hash()),
         }
-
-        block.save_to_file(config.get_blocks_file())?;
-        self.blocks.insert(block.hash(), block);
-        Ok(())
+        self.blocks_on_hold.insert(block.hash(), block);
     }
 
-    fn request_blocks(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
-        if headers.count == 0 {
-            return Ok(());
-        }
-
+    fn request_blocks_evenly(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
         let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
         for chunk in chunks {
             let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
-            self.nodes.send_to_any(&get_data.serialize()?, config)?;
+            self.nodes.send_to_all(&get_data.serialize()?, config)?;
         }
         config
             .get_logger()
@@ -197,61 +237,63 @@ impl NetworkController {
         Ok(())
     }
 
-    fn retain_missing_headers(&self, headers: &mut Headers) {
-        headers
-            .block_headers
-            .retain(|header| !self.blocks.contains_key(&header.hash()));
-    }
-
     /// requests block for headers after given timestamp
-    fn request_blocks_from(
-        &mut self,
-        mut headers: Headers,
-        timestamp: u32,
-        config: &Config,
-    ) -> io::Result<()> {
-        headers.trim_timestamp(timestamp);
-        self.retain_missing_headers(&mut headers);
-        self.request_blocks(&mut headers, config)?;
-        Ok(())
+    fn request_blocks(&mut self, mut headers: Headers, config: &Config) -> io::Result<()> {
+        if headers.count == 0 {
+            return Ok(());
+        }
+        // since every block needs to come after a valid block, create a "genesis" validated block
+        if self.valid_blocks.is_empty() {
+            let first_downloadable_header = headers.block_headers[0];
+            if let Some(previous_header) =
+                self.headers.get(&first_downloadable_header.prev_block_hash)
+            {
+                let genesis_block = Block::new(*previous_header, 0, vec![]);
+                self.valid_blocks
+                    .insert(genesis_block.hash(), genesis_block);
+            }
+        }
+        self.request_blocks_evenly(&mut headers, config)
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
-        let previous_header_count = self.headers.len();
-        let init_tp_timestamp: u32 = config.get_start_timestamp();
-        self.request_blocks_from(headers.clone(), init_tp_timestamp, config)?;
-        // save values to variables before consuming headers
-        let last_header = headers.last_header_hash();
-        let is_paginated = headers.is_paginated();
-
-        // store headers in hashmap, consuming headers
-        let headers_hashmap = into_hashmap(headers.clone().block_headers);
-        for (header_hash, header) in headers_hashmap {
-            if let Vacant(entry) = self.headers.entry(header_hash) {
+        let prev_header_count = self.headers.len();
+        // save new headers to hashmap and backup file
+        let mut new_headers: Vec<BlockHeader> = vec![];
+        for mut header in headers.clone().block_headers {
+            match self.headers.get(&header.prev_block_hash) {
+                Some(parent_header) => {
+                    header.height = parent_header.height + 1;
+                }
+                None => continue, // ignore header if prev_header is unknown
+            }
+            let hash = header.hash();
+            if let Vacant(entry) = self.headers.entry(hash) {
                 header.save_to_file(config.get_headers_file())?;
+                new_headers.push(header);
                 entry.insert(header);
+                if header.height > self.tallest_header.height {
+                    self.tallest_header = header
+                }
             }
         }
-        if self.headers.len() == previous_header_count {
+
+        if prev_header_count == self.headers.len() {
             return Ok(());
         }
 
         // get data from headers and update ui
-        let data = table_data_from_headers(&headers, self.headers.len() - previous_header_count);
+        let data = table_data_from_headers(&headers, self.headers.len() - prev_header_count);
         self.update_ui_table_with_vec(GtkTable::Headers, data)?;
         config.get_logger().log(
-            &format!(
-                "Received header. New header count: {:?}",
-                self.headers.len()
-            ),
+            &format!("Read headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
         );
-        // request next headers, and blocks for recieved headers
-        self.tallest_header = last_header;
-        if is_paginated {
-            self.request_headers(self.tallest_header, config)?;
-        }
-        Ok(())
+
+        // request blocks mined after given date
+        let mut headers = Headers::new(new_headers.len(), new_headers);
+        headers.trim_timestamp(config.get_start_timestamp());
+        self.request_blocks(headers, config)
     }
 
     fn request_headers(&mut self, header_hash: HashId, config: &Config) -> io::Result<()> {
@@ -280,8 +322,10 @@ impl NetworkController {
         }
 
         let getdata_message = GetData::new(txinv.len(), txinv);
-        self.nodes
-            .send_to_specific(&peer, &getdata_message.serialize()?, config)?;
+        // ignore inv and error if target node is not reachable
+        let _ = self
+            .nodes
+            .send_to_specific(&peer, &getdata_message.serialize()?, config);
         Ok(())
     }
 
@@ -312,19 +356,6 @@ impl NetworkController {
         self.update_ui_table(GtkTable::Transactions, data)?;
 
         self.tx_read.insert(tx_hash, ());
-        Ok(())
-    }
-
-    fn read_ping(&mut self, peer_addr: SocketAddr, nonce: u64, config: &Config) -> io::Result<()> {
-        let payload = nonce.to_le_bytes();
-        let hash = double_hash(&payload);
-        let checksum: [u8; 4] = [hash[0], hash[1], hash[2], hash[3]];
-        let message_header =
-            MessageHeader::new(MAGIC, PONG.to_string(), payload.len() as u32, checksum);
-        let mut to_send = Vec::new();
-        to_send.extend_from_slice(&message_header.serialize()?);
-        to_send.extend_from_slice(&payload);
-        self.nodes.send_to_specific(&peer_addr, &to_send, config)?;
         Ok(())
     }
 
@@ -380,32 +411,24 @@ impl NetworkController {
                 "Found blocks backup file, reading blocks...".to_string(),
             )?;
             for (_, block) in blocks.into_iter() {
-                self.read_block_from_backup(block)?;
+                self.read_backup_block(block)?;
             }
             update_ui_status_bar(&self.ui_sender, "Read blocks from backup file.".to_string())?;
         }
 
         // attempt to read headers from backup file
-        if let Ok(mut headers) = Headers::from_file("tmp/headers_backup.dat") {
+        if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
             update_ui_status_bar(
                 &self.ui_sender,
                 "Reading headers from backup file...".to_string(),
             )?;
-            self.tallest_header = headers.last_header_hash();
-            self.headers = into_hashmap(headers.clone().block_headers);
-
-            // find headers for which we don't have the blocks and then request them
-            let init_tp_timestamp: u32 = config.get_start_timestamp();
-            headers.trim_timestamp(init_tp_timestamp);
-
+            self.read_headers(headers, config)?;
             update_ui_status_bar(
                 &self.ui_sender,
                 "Read headers from backup file.".to_string(),
             )?;
-        }
-
-        self.request_headers(self.tallest_header, config)?; // with ibd this goes on the else clause
-
+        } // Finally, catch up to blockchain doing IBD
+        self.request_headers(self.tallest_header.hash(), config)?;
         Ok(())
     }
 }
@@ -468,7 +491,7 @@ impl OuterNetworkController {
         t_inner
             .lock()
             .map_err(to_io_err)?
-            .read_block_from_node(block, config)
+            .read_incoming_block(block, config)
     }
 
     fn handle_node_headers_message(
@@ -501,30 +524,6 @@ impl OuterNetworkController {
         t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
-    fn handle_node_failure_message(
-        _t_inner: Arc<Mutex<NetworkController>>,
-        peer_addr: SocketAddr,
-        error: ErrorType,
-    ) -> io::Result<()> {
-        println!(
-            "Node {:?} is notifying me of a failure, should resend last request, the error is {:?}",
-            peer_addr, error
-        );
-        Ok(())
-    }
-
-    fn handle_node_ping_message(
-        t_inner: Arc<Mutex<NetworkController>>,
-        peer_addr: SocketAddr,
-        nonce: u64,
-        config: &Config,
-    ) -> io::Result<()> {
-        t_inner
-            .lock()
-            .map_err(to_io_err)?
-            .read_ping(peer_addr, nonce, config)
-    }
-
     fn recv_node_messages(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
@@ -545,12 +544,6 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories, &config)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_addr, Message::Failure(err)) => {
-                        Self::handle_node_failure_message(t_inner, peer_addr, err)
-                    }
-                    (peer_addr, Message::Ping(nonce)) => {
-                        Self::handle_node_ping_message(t_inner, peer_addr, nonce, &config)
-                    }
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
                     println!("Received unhandled error: {:?}", result);
@@ -565,12 +558,15 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
+                config
+                    .get_logger()
+                    .log("Requesting headers periodically...", VERBOSE);
                 let t_inner = inner.clone();
                 let tallest_header = t_inner.lock().map_err(to_io_err)?.tallest_header;
                 t_inner
                     .lock()
                     .map_err(to_io_err)?
-                    .request_headers(tallest_header, &config)?;
+                    .request_headers(tallest_header.hash(), &config)?;
                 thread::sleep(std::time::Duration::from_secs(60));
             }
         });
@@ -595,8 +591,6 @@ impl OuterNetworkController {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
         self.sync(config.clone())?;
-        self.req_headers_periodically(config)?;
-
-        Ok(())
+        self.req_headers_periodically(config)
     }
 }

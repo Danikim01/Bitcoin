@@ -7,12 +7,14 @@ use std::io::{self, ErrorKind::InvalidData, Write};
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct BlockHeader {
-    pub version: i32,
+    version: i32,
     pub prev_block_hash: HashId,
     pub merkle_root_hash: HashId,
     pub timestamp: u32,
-    pub nbits: u32,
-    pub nonce: u32,
+    nbits: u32,
+    nonce: u32,
+    hash: HashId,
+    pub height: usize,
 }
 
 impl BlockHeader {
@@ -23,7 +25,20 @@ impl BlockHeader {
         timestamp: u32,
         nbits: u32,
         nonce: u32,
+        height: usize
     ) -> Self {
+        // calculate blockHeader hash
+        let mut bytes = vec![];
+        bytes.extend(version.to_le_bytes());
+        bytes.extend(prev_block_hash.iter());
+        bytes.extend(merkle_root_hash.iter());
+        bytes.extend(timestamp.to_le_bytes());
+        bytes.extend(nbits.to_le_bytes());
+        bytes.extend(nonce.to_le_bytes());
+        let hash = double_hash(&bytes);
+        let mut hash_bytes = [0u8; 32];
+        hash_bytes.copy_from_slice(&hash[..]);
+        // initialize BlockHeader with its HashId
         Self {
             version,
             prev_block_hash,
@@ -31,6 +46,22 @@ impl BlockHeader {
             timestamp,
             nbits,
             nonce,
+            hash: HashId::new(hash_bytes),
+            height
+        }
+    }
+
+    pub fn genesis(hash: HashId) -> Self {
+        // return Genesis block header
+        Self {
+            version: 0_i32,
+            prev_block_hash: HashId::default(),
+            merkle_root_hash: HashId::default(),
+            timestamp: 0_u32,
+            nbits: 0_u32,
+            nonce: 0_u32,
+            hash: hash,
+            height: 0,
         }
     }
 
@@ -50,6 +81,7 @@ impl BlockHeader {
             timestamp,
             nbits,
             nonce,
+            0 // block starts with height 0, changed later if prev_block_hash is found
         );
 
         Ok(actual_header)
@@ -130,50 +162,15 @@ impl BlockHeader {
 
     /// Create a block header from a byte array (little endian).
     pub fn deserialize(cursor: &mut Cursor<&[u8]>) -> io::Result<BlockHeader> {
-        let version = i32::from_le_stream(cursor)?;
-        let prev_block_hash = HashId::new(read_hash(cursor)?);
-        let merkle_root_hash = HashId::new(read_hash(cursor)?);
-        let timestamp = u32::from_le_stream(cursor)?;
-        let nbits = u32::from_le_stream(cursor)?;
-        let nonce = u32::from_le_stream(cursor)?;
+        let header = BlockHeader::from_bytes(cursor)?;
         let _empty_tx = u8::from_le_stream(cursor)?;
-        let header = BlockHeader::new(
-            version,
-            prev_block_hash,
-            merkle_root_hash,
-            timestamp,
-            nbits,
-            nonce,
-        );
         Ok(header)
     }
 }
 
 impl Hashable for BlockHeader {
     fn hash(&self) -> HashId {
-        let hash = double_hash(&self.serialize());
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(&hash[..]);
-        HashId::new(bytes)
-    }
-}
-
-impl Default for BlockHeader {
-    fn default() -> Self {
-        let version = 0_i32;
-        let prev_block_hash = HashId::default();
-        let merkle_root_hash = HashId::default();
-        let timestamp = 0_u32;
-        let nbits = 0_u32;
-        let nonce = 0_u32;
-        BlockHeader::new(
-            version,
-            prev_block_hash,
-            merkle_root_hash,
-            timestamp,
-            nbits,
-            nonce,
-        )
+        self.hash
     }
 }
 

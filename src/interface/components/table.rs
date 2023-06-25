@@ -56,7 +56,6 @@ pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
 /// Receive a header and parse it's data to a RowData::HeadersData
 pub fn table_data_from_headers(headers: &Headers, count: usize) -> Vec<GtkTableData> {
     // need height, date and hash
-
     let mut data = Vec::new();
 
     for header in headers.block_headers[headers.count - count..headers.count].iter() {

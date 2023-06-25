@@ -20,60 +20,20 @@ pub type BlockSet = HashMap<HashId, Block>;
 /// A struct that represents a block with a header and  a list of transactions.
 #[derive(Debug, Clone)]
 pub struct Block {
-    pub block_header: BlockHeader,
+    pub header: BlockHeader,
     pub txn_count: usize,
     pub txns: Vec<RawTransaction>,
 }
 
-// https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
-impl Serialize for Block {
-    fn serialize(&self) -> io::Result<Vec<u8>> {
-        let mut bytes: Vec<u8> = vec![];
-
-        let header_bytes = self.block_header.serialize();
-        bytes.extend(header_bytes);
-        let txn_count_bytes = to_compact_size_bytes(self.txn_count as u64);
-        bytes.extend(txn_count_bytes);
-
-        for txn in self.txns.iter() {
-            let txn_bytes = txn.serialize();
-            bytes.extend(txn_bytes);
-        }
-
-        Ok(bytes)
-    }
-
-    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
-        let mut cursor = Cursor::new(bytes);
-
-        let block_header = BlockHeader::from_bytes(&mut cursor)?;
-        let txn_count = read_from_varint(&mut cursor)?;
-
-        let mut txns = vec![];
-
-        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
-        txns.push(coinbase_transaction);
-
-        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
-        txns.extend(other_txns);
-
-        let block = Block {
-            block_header,
-            txn_count: txn_count as usize,
-            txns,
-        };
-
-        Ok(Message::Block(block))
-    }
-}
-
-impl Hashable for Block {
-    fn hash(&self) -> HashId {
-        self.block_header.hash()
-    }
-}
-
 impl Block {
+    pub fn new(header: BlockHeader, txn_count: usize, txns: Vec<RawTransaction>) -> Self {
+        Self {
+            header,
+            txn_count,
+            txns,
+        }
+    }
+
     fn hash_transactions(&self) -> Vec<sha256::Hash> {
         let mut txn_hashes: Vec<sha256::Hash> = vec![];
         self.txns.iter().for_each(|txn| {
@@ -98,7 +58,7 @@ impl Block {
         let merkle_tree = MerkleTree::generate_from_hashes(txn_hashes); // clone txn_hashes if merkle proofing
         let root_hash = merkle_tree.get_root();
 
-        match self.block_header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
+        match self.header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
             true => {
                 // println!("Merkle root is valid!");
                 Ok(())
@@ -158,39 +118,15 @@ impl Block {
                 ui_sender,
                 active_addr,
                 txn,
-                self.block_header.timestamp,
+                self.header.timestamp,
                 utxo_set,
             )?;
         }
 
-        self.block_header.validate_proof_of_work()?;
+        self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
 
         *utxo_set = utxo_set_snapshot;
-
-        Ok(())
-    }
-
-    /// Validates the block by checking the proof of work, merkle root, and generates utxos from the transactions outputs.
-    pub fn validate_from_backup(
-        &self,
-        utxo_set: &mut UtxoSet,
-        ui_sender: Option<&Sender<GtkMessage>>,
-        active_addr: Option<&str>,
-    ) -> io::Result<()> {
-        for txn in self.txns.iter() {
-            txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
-            Self::update_ui(
-                ui_sender,
-                active_addr,
-                txn,
-                self.block_header.timestamp,
-                utxo_set,
-            )?;
-        }
-
-        self.block_header.validate_proof_of_work()?;
-        self.validate_merkle_root()?;
 
         Ok(())
     }
@@ -208,13 +144,9 @@ impl Block {
                 while cursor.position() < file_size {
                     // read block size
                     let block_size = read_from_varint(&mut cursor)?;
-                    // create buffer of block size
+                    // read buffer of block size
                     let mut block_bytes = vec![0; block_size as usize];
-
-                    // read block bytes
                     cursor.read_exact(&mut block_bytes)?;
-
-                    // deserialize block
                     let block_msg = Block::deserialize(&block_bytes)?;
 
                     if let Message::Block(block) = block_msg {
@@ -248,9 +180,48 @@ impl Block {
     /// Returns the age of the block in days.
     pub fn get_days_old(&self) -> u64 {
         let current_time = Utc::now().timestamp();
-        let block_time = self.block_header.timestamp as i64;
+        let block_time = self.header.timestamp as i64;
         let age = (current_time - block_time) / 86400;
         age as u64
+    }
+}
+
+// https://developer.bitcoin.org/reference/block_chain.html#serialized-blocks
+impl Serialize for Block {
+    fn serialize(&self) -> io::Result<Vec<u8>> {
+        let mut bytes: Vec<u8> = vec![];
+        let header_bytes = self.header.serialize();
+        bytes.extend(header_bytes);
+        let txn_count_bytes = to_compact_size_bytes(self.txn_count as u64);
+        bytes.extend(txn_count_bytes);
+        for txn in self.txns.iter() {
+            let txn_bytes = txn.serialize();
+            bytes.extend(txn_bytes);
+        }
+        Ok(bytes)
+    }
+
+    fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
+        let mut cursor = Cursor::new(bytes);
+        let header = BlockHeader::from_bytes(&mut cursor)?;
+        let txn_count = read_from_varint(&mut cursor)?;
+        let mut txns = vec![];
+        let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
+        txns.push(coinbase_transaction);
+        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
+        txns.extend(other_txns);
+        let block = Block {
+            header,
+            txn_count: txn_count as usize,
+            txns,
+        };
+        Ok(Message::Block(block))
+    }
+}
+
+impl Hashable for Block {
+    fn hash(&self) -> HashId {
+        self.header.hash()
     }
 }
 
