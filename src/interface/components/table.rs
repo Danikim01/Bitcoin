@@ -1,4 +1,4 @@
-use chrono::Local;
+use chrono::Utc;
 
 use crate::messages::{Block, BlockHeader, Hashable};
 use crate::raw_transaction::RawTransaction;
@@ -31,7 +31,7 @@ pub enum GtkTableData {
 /// Receive a raw transaction and parse it's data to a RowData::TransactionData
 pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
     // need date, hash and amount
-    let date = Local::now().format("%d-%m-%Y %H:%M").to_string();
+    let date = Utc::now().format("%d-%m-%Y %H:%M").to_string();
     let hash = tx.get_hash();
     let amount = format!("{:.8}", tx.get_total_output_value() as f64 / 100000000.0);
 
