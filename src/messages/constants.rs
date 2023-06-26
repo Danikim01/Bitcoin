@@ -48,7 +48,6 @@ pub mod config {
     pub const LOG_FILE: &str = "tmp/node.log";
     pub const HEADERS_FILE: &str = "tmp/headers_backup.dat";
     pub const BLOCKS_FILE: &str = "tmp/blocks_backup.dat";
-    pub const PRIVATE_KEY_FILE: &str = "private_key.pem";
     pub const TCP_TIMEOUT: u64 = 30;
     pub const START_TIMESTAMP: u32 = 1681095600;
     pub const PORT: u16 = 8333;

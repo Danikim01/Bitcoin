@@ -16,13 +16,13 @@ use crate::wallet::Wallet;
 use chrono::Utc;
 use gtk::glib::Sender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
+use std::io;
 use std::net::SocketAddr;
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, Mutex,
 };
 use std::thread::{self, JoinHandle};
-use std::{fs, io};
 
 use crate::interface::components::table::{
     table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
@@ -55,16 +55,16 @@ impl NetworkController {
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
-
-        let secret_key_file = config.get_private_key_file();
-        let secret_key = match fs::read_to_string(secret_key_file) {
-            Ok(s) => s,
-            Err(_) => {
-                let err_msg = format!("Could not read secret key file {}", secret_key_file);
-                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
+        let wallet = match config.get_wallet() {
+            Some(w) => w,
+            None => {
+                let new_wallet = Wallet::new();
+                //utils::create_notification_window(gtk::MessageType::Info, title, message);
+                eprintln!("Since a secret key was not provided through the configuration file, a new wallet has been created. {{Secret key: {}, Address: {}}}", new_wallet.secret_key.display_secret(), new_wallet.address);
+                new_wallet
             }
         };
-
+        Wallet::display_in_ui(&wallet, Some(&ui_sender));
         Ok(Self {
             headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
             tallest_header: genesis_header,
@@ -72,8 +72,8 @@ impl NetworkController {
             blocks_on_hold: BlockSet::new(),
             pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
-            nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config.clone())?,
-            wallet: Wallet::login(secret_key, Some(&ui_sender))?,
+            nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config)?,
+            wallet,
             ui_sender,
             tx_read: HashMap::new(),
         })
