@@ -404,18 +404,18 @@ impl NetworkController {
         inventories: Vec<Inventory>,
         config: &Config,
     ) -> io::Result<()> {
-        let mut txinv: Vec<Inventory> = Vec::new();
+        let mut filtered_inv: Vec<Inventory> = Vec::new();
         for inventory in inventories {
-            if inventory.inv_type == InvType::MSGTx {
-                txinv.push(inventory);
+            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
+                filtered_inv.push(inventory);
             }
         }
 
-        if txinv.is_empty() {
+        if filtered_inv.is_empty() {
             return Ok(());
         }
 
-        let getdata_message = GetData::new(txinv.len(), txinv);
+        let getdata_message = GetData::new(filtered_inv.len(), filtered_inv);
         // ignore inv and error if target node is not reachable
         let _ = self
             .nodes
