@@ -34,26 +34,36 @@ pub fn redraw_container(box_container: &gtk::Box, widgets: Vec<gtk::Widget>) {
 }
 
 /// creates a notification window of the specified type with a title and a message
-pub fn create_notification_window(notification_type: gtk::MessageType, title: &str, message: &str) {
+pub fn create_notification_window(
+    notification_type: gtk::MessageType,
+    title: &str,
+    message: &str,
+) -> std::io::Result<()> {
     let glade_src = include_str!("../res/ui.glade");
     let builder = gtk::Builder::from_string(glade_src);
-    let parent: gtk::Window = builder
-        .object("main_window")
-        .expect("could not find main window");
+    //let parent: gtk::Window = builder.object("main_window");
 
-    let dialog = gtk::MessageDialog::new(
-        Some(&parent),
-        gtk::DialogFlags::empty(),
-        notification_type,
-        gtk::ButtonsType::Ok,
-        "",
-    );
-    // centering on parent doesn't work for some reason
-    dialog.set_transient_for(Some(&parent));
-    dialog.set_position(gtk::WindowPosition::CenterOnParent);
-    dialog.set_text(Some(title));
-    dialog.set_secondary_text(Some(message));
+    if let Some(parent) = builder.object::<gtk::Window>("main_window") {
+        let dialog = gtk::MessageDialog::new(
+            Some(&parent),
+            gtk::DialogFlags::empty(),
+            notification_type,
+            gtk::ButtonsType::Ok,
+            "",
+        );
+        // centering on parent doesn't work for some reason
+        dialog.set_transient_for(Some(&parent));
+        dialog.set_position(gtk::WindowPosition::CenterOnParent);
+        dialog.set_text(Some(title));
+        dialog.set_secondary_text(Some(message));
 
-    dialog.connect_response(|dialog, _| dialog.close());
-    dialog.run();
+        dialog.connect_response(|dialog, _| dialog.close());
+        dialog.run();
+        return Ok(());
+    }
+
+    return Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Unable to build notification window",
+    ));
 }

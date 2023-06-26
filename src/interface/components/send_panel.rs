@@ -68,7 +68,6 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
                 "could not find transaction send btn",
             )
         })?;
-
     transaction_send_btn.connect_clicked(move |_| match get_recipients(builder.clone()) {
         Ok(recipients) => {
             let fee: u64 = match builder.object::<gtk::Entry>("transaction_fee_entry") {
