@@ -1,11 +1,12 @@
 use std::io;
 
-use super::{table::GtkTableData, utils::append_to_limited_container};
+use super::table::GtkTableData;
 use gtk::prelude::{BuilderExtManual, Cast, ContainerExt, LabelExt};
+use crate::interface::components::utils::redraw_container;
 
 fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
     let (height, date, hash, tx_count) = match data {
-        GtkTableData::Blocks(height, date, hash, tx_count) => (height, date, hash, tx_count),
+        GtkTableData::Block(height, date, hash, tx_count) => (height, date, hash, tx_count),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "wrong GtkTableData",
@@ -37,8 +38,19 @@ fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
 pub fn add_data_to_blocks_table(builder: gtk::Builder, data: GtkTableData) -> io::Result<()> {
     // println!("add data to blocks table");
     let table_box: gtk::Box = builder.object("blocks_table").unwrap();
+    let mut widgets = vec![];
 
-    let widget: gtk::Widget = widget_from_data(data)?;
-    append_to_limited_container(&table_box, &widget, 100);
+    match data {
+        GtkTableData::Blocks(vector) => {
+            for (height, date, hash, tx_count) in vector{
+                let widget: gtk::Widget = widget_from_data(GtkTableData::Block(height, date, hash, tx_count))?;
+                widgets.push(widget);
+            }
+        },
+        _ => println!("wrong GtkTableData"),
+    }
+
+    redraw_container(&table_box, widgets);
+    //append_to_limited_container(&table_box, &widget, 100);
     Ok(())
 }
