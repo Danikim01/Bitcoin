@@ -55,6 +55,8 @@ impl NetworkController {
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
+        let wallet = config.get_wallet().clone();
+        Wallet::login_ui(&wallet, Some(&ui_sender));
         Ok(Self {
             headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
             tallest_header: genesis_header,
@@ -63,7 +65,7 @@ impl NetworkController {
             pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config.clone())?,
-            wallet: Wallet::login(config.get_secret_key().to_owned(), Some(&ui_sender))?,
+            wallet,
             ui_sender,
             tx_read: HashMap::new(),
         })

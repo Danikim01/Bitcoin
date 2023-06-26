@@ -9,7 +9,6 @@ use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
 use std::{
     io::{Error, Read},
-    str::FromStr,
 };
 
 use gtk::glib::Sender;
@@ -22,7 +21,7 @@ use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
 
-use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+use secp256k1::{Message, PublicKey, Secp256k1, SecretKey, All};
 
 const SIGHASH_ALL: u32 = 1;
 
@@ -32,24 +31,16 @@ fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<
     Ok(array)
 }
 
-fn der_sign_with_priv_key(z: &[u8], private_key: &str) -> io::Result<Vec<u8>> {
+fn der_sign_with_priv_key(z: &[u8], private_key: &SecretKey) -> io::Result<Vec<u8>> {
     let message = &z;
 
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
     let message_slice: &[u8] = message;
     let message_slice = Message::from_slice(message_slice).map_err(to_io_err)?;
-    let private_key = SecretKey::from_str(private_key).map_err(to_io_err)?;
     let signature = secp.sign_ecdsa(&message_slice, &private_key);
 
     // Convert the DER-encoded signature to bytes
     Ok(signature.serialize_der().to_vec())
-}
-
-fn pub_key_from_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
-    let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
-    let private_key = SecretKey::from_str(private_key).map_err(to_io_err)?;
-    let public_key = PublicKey::from_secret_key(&secp, &private_key);
-    Ok(public_key.serialize().to_vec())
 }
 
 /// A struct that represents a raw transaction (includes version, inputs, outputs, and locktime)
@@ -124,17 +115,18 @@ impl RawTransaction {
     /// Signs the input at the given index with the given private key
     pub fn sign_input(
         &mut self,
-        secret_key: &str,
+        secp: &Secp256k1<All>,
+        secret_key: &SecretKey,
         prev_pk_script: Vec<u8>,
         index: usize,
     ) -> io::Result<()> {
         let z = self.sig_hash(prev_pk_script, index)?;
         let der = der_sign_with_priv_key(&z, secret_key)?;
-        let pub_key = pub_key_from_priv_key(secret_key)?;
+        let pub_key = PublicKey::from_secret_key(secp, secret_key).to_string();
 
         let der_len = (der.len() + 1) as u8;
         let pub_key_len = pub_key.len() as u8;
-        let script_sig = [&[der_len], &der[..], &[0x01], &[pub_key_len], &pub_key[..]].concat();
+        let script_sig = [&[der_len], &der[..], &[0x01], &[pub_key_len], &pub_key.into_bytes()].concat();
 
         // change script sig of index
         match self.tx_in {
