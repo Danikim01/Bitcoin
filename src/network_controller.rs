@@ -59,9 +59,8 @@ impl NetworkController {
             Some(w) => w,
             None => {
                 let new_wallet = Wallet::new();
-                let message = &format!("Since a secret key was not provided through the configuration file, a new wallet has been created. {{Secret key: {}, Address: {}}}", new_wallet.secret_key.display_secret(), new_wallet.address);
                 //utils::create_notification_window(gtk::MessageType::Info, title, message);
-                config.log(message, QUIET);
+                eprintln!("Since a secret key was not provided through the configuration file, a new wallet has been created. {{Secret key: {}, Address: {}}}", new_wallet.secret_key.display_secret(), new_wallet.address);
                 new_wallet
             }
         };

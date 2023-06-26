@@ -63,9 +63,6 @@ impl Config {
     }
 
     fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
-        if secret_key_file.is_empty() {
-            return Ok(None);
-        }
         match fs::read_to_string(&secret_key_file) {
             Ok(file_content) => Ok(Some(file_content.as_str().try_into()?)),
             Err(_) => {
