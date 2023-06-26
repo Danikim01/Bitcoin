@@ -1,13 +1,12 @@
 use crate::logger::{Log, Logger};
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PRIVATE_KEY_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
-    VERBOSE,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, VERBOSE,
 };
 use crate::messages::HashId;
+use crate::wallet::Wallet;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io;
-use std::io::{BufRead, BufReader};
+use std::fs::{self, File};
+use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -19,7 +18,7 @@ pub struct Config {
     tcp_timeout_seconds: u64,
     logger: Logger,
     genesis_hash: HashId,
-    private_key_file: String,
+    wallet: Option<Wallet>,
 }
 
 impl Config {
@@ -55,12 +54,22 @@ impl Config {
         self.genesis_hash
     }
 
-    pub fn get_private_key_file(&self) -> &str {
-        &self.private_key_file
+    pub fn get_wallet(&self) -> Option<Wallet> {
+        self.wallet.clone()
     }
 
     fn remove_or(hashmap: &mut HashMap<String, String>, key: &str, default: &str) -> String {
         hashmap.remove(key).unwrap_or(default.to_string())
+    }
+
+    fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
+        match fs::read_to_string(&secret_key_file) {
+            Ok(file_content) => Ok(Some(file_content.as_str().try_into()?)),
+            Err(_) => {
+                let err_msg = format!("Could not read secret key file {}", secret_key_file);
+                Err(io::Error::new(io::ErrorKind::Other, err_msg))
+            }
+        }
     }
 
     fn from_hashmap(mut values: HashMap<String, String>) -> io::Result<Config> {
@@ -83,7 +92,11 @@ impl Config {
                 "genesis_hash",
                 "",
             ))?,
-            private_key_file: Config::remove_or(&mut values, "private_key_file", PRIVATE_KEY_FILE),
+            wallet: Config::wallet_from_file(Config::remove_or(
+                &mut values,
+                "private_key_file",
+                "",
+            ))?,
         })
     }
 
