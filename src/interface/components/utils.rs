@@ -21,15 +21,15 @@ pub fn append_to_limited_container(box_container: &gtk::Box, widget: &gtk::Widge
 /// redraws a gtk box_container, deleting all previous elements and
 /// adding the new ones
 /// (adds to the beginning of the box expand and fill, padding 0)
-pub fn _redraw_container(box_container: &gtk::Box, widgets: Vec<&gtk::Widget>) {
+pub fn _redraw_container(box_container: &gtk::Box, widgets: Vec<gtk::Widget>) {
     let children = box_container.children();
     for child in children {
         box_container.remove(&child);
     }
 
     for widget in widgets {
-        box_container.pack_start(widget, false, false, 0);
-        box_container.reorder_child(widget, 0);
+        box_container.pack_start(&widget, false, false, 0);
+        box_container.reorder_child(&widget, 0);
     }
 }
 

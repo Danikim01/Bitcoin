@@ -662,12 +662,12 @@ impl OuterNetworkController {
                     // update ui with last 100 headers
                     let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
                     let data = table_data_from_headers(headers.clone());
-                    controller.update_ui_table_with_vec(GtkTable::Headers, data)?;
+                    controller.update_ui_table(GtkTable::Headers, data)?;
 
                     // update ui with last 100 blocks
                     let blocks = controller.get_best_blocks(headers);
                     let data = table_data_from_blocks(blocks);
-                    controller.update_ui_table_with_vec(GtkTable::Blocks, data)?;
+                    controller.update_ui_table(GtkTable::Blocks, data)?;
                 }
             }
         });
