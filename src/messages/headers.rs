@@ -5,6 +5,7 @@ use crate::messages::constants::messages::MAX_PAYLOAD_SIZE;
 use std::io::{self, Cursor, Read};
 use std::net::TcpStream;
 
+/// Struct that contains a message header of a generic message
 #[derive(Debug, Clone)]
 pub struct MessageHeader {
     pub start_string: [u8; START_STRING_SIZE],
@@ -16,7 +17,7 @@ pub struct MessageHeader {
 impl Default for MessageHeader {
     fn default() -> Self {
         let start_string = [0, 0, 0, 0];
-        let command_name = UNKNOWN.to_string();
+        let command_name = NO_COMMAND.to_string();
         let payload_size = 0;
         let checksum = [0, 0, 0, 0];
 
@@ -25,6 +26,7 @@ impl Default for MessageHeader {
 }
 
 impl MessageHeader {
+    /// Returns a `MessageHeader` with the provided values.  
     pub fn new(
         start_string: [u8; START_STRING_SIZE],
         command_name: String,
@@ -39,6 +41,7 @@ impl MessageHeader {
         }
     }
 
+    /// Read a `MessageHeader` from a byte array.
     pub fn from_bytes(bytes: &[u8]) -> Result<MessageHeader, io::Error> {
         let mut cursor = Cursor::new(bytes);
 
@@ -67,6 +70,7 @@ impl MessageHeader {
         ))
     }
 
+    /// Read a `MessageHeader` from a TcpStream.
     pub fn from_stream(stream: &mut TcpStream) -> Result<MessageHeader, io::Error> {
         let mut magic_buffer = [0_u8; START_STRING_SIZE];
         stream.read_exact(&mut magic_buffer)?;
@@ -79,6 +83,7 @@ impl MessageHeader {
         MessageHeader::from_bytes(&header_buffer)
     }
 
+    /// Validate the header of a message checking if the command name is valid.
     pub fn validate_header(&self) -> io::Result<()> {
         let commands = vec![
             GETHEADERS,
@@ -87,7 +92,7 @@ impl MessageHeader {
             VERSION,
             VERACK,
             HEADERS,
-            UNKNOWN,
+            NO_COMMAND,
             SENDCMPCT,
             SENDHEADERS,
             PING,
@@ -104,28 +109,27 @@ impl MessageHeader {
         Err(io::Error::new(io::ErrorKind::InvalidData, err_str)) // wrong error type
     }
 
-    fn validate_payload_size(&self) -> Result<(), io::Error> {
+    /// Validate the payload size of a message checking if it is less than the maximum payload size (MAX_PAYLOAD_SIZE defined in constants.rs).
+    fn validate_payload_size(&self) -> io::Result<()> {
         if self.payload_size > MAX_PAYLOAD_SIZE {
             let err_str = format!(
                 "Payload size {} exceeds maximum payload size {} in command {}",
                 self.payload_size, MAX_PAYLOAD_SIZE, self.command_name
             );
-            println!("{}", err_str);
-            // return Err(io::Error::new(
-            //     io::ErrorKind::InvalidData,
-            //     err_str
-            // ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, err_str));
         }
         Ok(())
     }
 
-    pub fn read_payload(&self, stream: &mut TcpStream) -> Result<Vec<u8>, io::Error> {
+    /// Read the payload of a message from a TcpStream and return it as a byte array.
+    pub fn read_payload(&self, stream: &mut TcpStream) -> io::Result<Vec<u8>> {
         self.validate_payload_size()?;
         let mut payload_buffer = vec![0_u8; self.payload_size as usize];
         stream.read_exact(&mut payload_buffer)?;
         Ok(payload_buffer)
     }
 
+    /// Serialize a `MessageHeader` into a byte array.
     pub fn serialize(&self) -> io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
 

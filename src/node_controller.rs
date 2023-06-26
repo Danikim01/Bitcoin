@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::messages::constants::config::QUIET;
 use crate::messages::Message;
 use crate::node::Node;
-use rand::random;
 use std::collections::HashMap;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -11,6 +10,7 @@ use std::sync::mpsc;
 use crate::interface::GtkMessage;
 use gtk::glib::Sender;
 
+/// The NodeController struct is responsible for managing all the nodes and sending messages to them.
 pub struct NodeController {
     nodes: HashMap<SocketAddr, Node>,
 }
@@ -21,6 +21,7 @@ fn find_nodes(config: &Config) -> Result<std::vec::IntoIter<SocketAddr>, io::Err
 }
 
 impl NodeController {
+    /// Creates a new NodeController and connects to the peers.
     pub fn connect_to_peers(
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
         sender: Sender<GtkMessage>,
@@ -45,6 +46,7 @@ impl NodeController {
         Ok(Self { nodes })
     }
 
+    /// Kills a node and removes it from the list of nodes given its peer address.
     pub fn kill_node(&mut self, socket_addr: SocketAddr) -> io::Result<()> {
         self.nodes.remove(&socket_addr);
         if self.nodes.is_empty() {
@@ -56,27 +58,7 @@ impl NodeController {
         Ok(())
     }
 
-    pub fn send_to_any(&mut self, payload: &Vec<u8>, config: &Config) -> io::Result<()> {
-        let random_number: usize = random();
-        let node_number = random_number % self.nodes.len();
-        let random_node = self.nodes.values_mut().nth(node_number).unwrap();
-        let node_address = random_node.address;
-        match &mut random_node.send(payload) {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                config.get_logger().log(
-                    &format!(
-                        "Error writing to ANY TCPStream: {:?}, Killing connection and retrying.",
-                        e
-                    ) as &str,
-                    QUIET,
-                );
-                self.kill_node(node_address)?;
-                self.send_to_any(payload, config)
-            }
-        }
-    }
-
+    /// Sends a message to a specific node given its peer address.
     pub fn send_to_specific(
         &mut self,
         peer: &SocketAddr,
@@ -96,7 +78,7 @@ impl NodeController {
         match &mut node.send(payload) {
             Ok(_) => Ok(()),
             Err(e) => {
-                config.get_logger().log(
+                config.log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
                 );
@@ -109,6 +91,7 @@ impl NodeController {
         }
     }
 
+    /// Broadcasts a message to all the nodes.
     pub fn send_to_all(&mut self, payload: &[u8], config: &Config) -> io::Result<()> {
         let mut alive_nodes: Vec<SocketAddr> = vec![];
         for node in self.nodes.values_mut() {
@@ -116,7 +99,7 @@ impl NodeController {
                 Ok(_) => {
                     alive_nodes.push(node.address);
                 }
-                Err(e) => config.get_logger().log(
+                Err(e) => config.log(
                     &format!("Error writing to TCPStream: {:?}, Killing connection.", e) as &str,
                     QUIET,
                 ),

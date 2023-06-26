@@ -7,6 +7,7 @@ use super::utility::read_hash;
 use super::Inventories;
 use super::{constants, utility::read_from_varint, Message};
 
+/// All possible inventory types for the `Inv` message.
 #[derive(Debug, Clone, PartialEq)]
 pub enum InvType {
     _MSGError = 0,
@@ -20,6 +21,7 @@ pub enum InvType {
 }
 
 impl InvType {
+    /// Convert the inventory type to a u3 (e.g used for serialization)
     pub fn to_u32(&self) -> u32 {
         match self {
             InvType::_MSGError => 0,
@@ -33,6 +35,7 @@ impl InvType {
         }
     }
 
+    /// Convert a u32 to an inventory type (e.g used for deserialization)
     pub fn from_u32(value: u32) -> io::Result<Self> {
         match value {
             0 => Ok(InvType::_MSGError),
@@ -51,6 +54,7 @@ impl InvType {
     }
 }
 
+/// Struct that represents the data from a Inventory Vector (https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors)
 //ver https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
 #[derive(Debug, Clone)]
 pub struct Inventory {
@@ -59,6 +63,7 @@ pub struct Inventory {
 }
 
 impl Inventory {
+    /// Create a new inventory data
     pub fn new(inv_type: InvType, hash: HashId) -> Self {
         Self { inv_type, hash }
     }
@@ -74,6 +79,7 @@ impl Inventory {
     }
 }
 
+/// Struct that represents the getdata fields (https://en.bitcoin.it/wiki/Protocol_documentation#getdata)
 // https://developer.bitcoin.org/reference/p2p_networking.html#getdata
 #[derive(Debug, Clone)]
 pub struct GetData {
@@ -104,6 +110,7 @@ fn to_varint(value: u64) -> Vec<u8> {
 }
 
 impl GetData {
+    /// Create a new getdata message
     pub fn new(count: usize, inventory: Vec<Inventory>) -> Self {
         Self { count, inventory }
     }
@@ -126,6 +133,7 @@ impl GetData {
         Ok(payload)
     }
 
+    /// Create a new getdata message from a list of BlockHeaders using its hashes
     pub fn from_inv(count: usize, block_headers: Vec<BlockHeader>) -> Self {
         let mut inventory_vector: Vec<Inventory> = Vec::new();
         for block_header in block_headers {
@@ -142,14 +150,14 @@ impl Serialize for GetData {
         Ok(message)
     }
 
-    fn deserialize(bytes: &[u8]) -> Result<Message, std::io::Error> {
+    fn deserialize(bytes: &[u8]) -> io::Result<Message> {
         let mut cursor = Cursor::new(bytes);
 
         let count = read_from_varint(&mut cursor)? as usize;
         let mut inventories: Inventories = Vec::new();
         for _ in 0..count {
             let inv_type = i32::from_le_stream(&mut cursor)?;
-            let hash = HashId::new(read_hash(&mut cursor)?);
+            let hash = read_hash(&mut cursor)?;
 
             inventories.push(Inventory {
                 inv_type: InvType::from_u32(inv_type as u32)?,

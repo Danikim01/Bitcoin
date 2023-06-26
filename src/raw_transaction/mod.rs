@@ -1,25 +1,29 @@
 use crate::io::{self, Cursor};
 use crate::messages::utility::{
-    read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
+    date_from_timestamp, read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
 };
-use crate::messages::Serialize;
+use crate::messages::{HashId, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
-use crate::utxo::{Utxo, UtxoSet, WalletUtxo};
+use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
 use std::{
     io::{Error, Read},
     str::FromStr,
 };
 
+use gtk::glib::Sender;
 pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
+use crate::interface::components::overview_panel::{TransactionDisplayInfo, TransactionRole};
+use crate::interface::GtkMessage;
 use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
 
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
+
 const SIGHASH_ALL: u32 = 1;
 
 fn read_coinbase_script(cursor: &mut Cursor<&[u8]>, count: usize) -> io::Result<Vec<u8>> {
@@ -48,6 +52,7 @@ fn pub_key_from_priv_key(private_key: &str) -> io::Result<Vec<u8>> {
     Ok(public_key.serialize().to_vec())
 }
 
+/// A struct that represents a raw transaction (includes version, inputs, outputs, and locktime)
 #[derive(Debug, Clone)]
 pub struct RawTransaction {
     pub version: u32,
@@ -58,6 +63,7 @@ pub struct RawTransaction {
     pub lock_time: u32,
 }
 
+/// Enum that represents the state of a transaction (pending or in a block)
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransactionOrigin {
     Block,
@@ -115,6 +121,7 @@ impl RawTransaction {
         Ok(bytes)
     }
 
+    /// Signs the input at the given index with the given private key
     pub fn sign_input(
         &mut self,
         secret_key: &str,
@@ -141,8 +148,8 @@ impl RawTransaction {
         Ok(())
     }
 
-    pub fn address_is_involved(&self, address: &str) -> bool {
-        // check if any of txin contains address
+    /// Checks if any of the inputs is from the given address
+    pub fn is_from_address(&self, address: &str) -> bool {
         match &self.tx_in {
             TxInputType::CoinBaseInput(_) => {}
             TxInputType::TxInput(tx_ins) => {
@@ -153,17 +160,107 @@ impl RawTransaction {
                 }
             }
         }
+        false
+    }
 
-        // check if any of txout contains address
+    /// Checks if any of the outputs is destined to the given address
+    pub fn is_destined_to_address(&self, address: &str) -> bool {
         for txout in &self.tx_out {
             if txout.destined_to(address) {
                 return true;
             }
         }
-
         false
     }
 
+    /// Checks if the given address is involved in the transaction (either as input or output)
+    pub fn address_is_involved(&self, address: &str) -> bool {
+        self.is_from_address(address) || self.is_destined_to_address(address)
+    }
+
+    fn get_input_value(&self, address: &str, utxoset: &UtxoSet, txin: &TxInput) -> u64 {
+        let mut value = 0_u64;
+        if !txin.destined_from(address) {
+            return value;
+        }
+
+        let tx_previous = &txin.previous_output;
+        if let Some(wallet) = utxoset.set.get(address) {
+            if let Some(utxo_transaction) = wallet.utxos.get(&(tx_previous.hash, tx_previous.index))
+            {
+                value += utxo_transaction.value;
+            }
+        }
+        value
+    }
+
+    fn get_total_input_value(&self, address: &str, utxoset: &UtxoSet) -> u64 {
+        let mut total_value = 0_u64;
+        match &self.tx_in {
+            TxInputType::CoinBaseInput(_) => {}
+            TxInputType::TxInput(tx_ins) => {
+                for txin in tx_ins {
+                    total_value += self.get_input_value(address, utxoset, txin);
+                }
+            }
+        }
+        total_value
+    }
+
+    /// Returns the total output value of the transaction (sum of all output values)
+    pub fn get_total_output_value(&self) -> u64 {
+        let mut total_value = 0_u64;
+        for output in &self.tx_out {
+            total_value += output.value;
+        }
+
+        total_value
+    }
+
+    /// Returns the change value for the given address (sum of all output values destined to the address)
+    fn get_change_value_for(&self, address: &str) -> u64 {
+        let mut total_value = 0_u64;
+        for output in &self.tx_out {
+            if output.destined_to(address) {
+                total_value += output.value;
+            }
+        }
+        total_value
+    }
+
+    /// Returns the hash of the transaction
+    pub fn get_hash(&self) -> HashId {
+        let hash = double_hash(&self.serialize());
+        HashId::from_hash(hash)
+    }
+
+    /// Returns the transaction info for the given address
+    pub fn transaction_info_for(
+        &self,
+        address: &str,
+        timestamp: u32,
+        utxo_set: &mut UtxoSet,
+    ) -> TransactionDisplayInfo {
+        let mut role = TransactionRole::Sender;
+        let mut spent_value = 0;
+
+        if self.is_from_address(address) {
+            spent_value = self.get_total_input_value(address, utxo_set);
+        } else {
+            role = TransactionRole::Receiver;
+        }
+
+        let change_value = self.get_change_value_for(address);
+
+        TransactionDisplayInfo {
+            role,
+            date: date_from_timestamp(timestamp),
+            amount: change_value as i64 - spent_value as i64,
+            hash: self.get_hash(),
+        }
+    }
+
+    /// Read the coinbase transaction from the given bytes and returns a RawTransaction with only the coinbase input and the outputs
     pub fn coinbase_from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
         let tx_in_count = read_from_varint(cursor)?;
@@ -214,26 +311,43 @@ impl RawTransaction {
         Ok(())
     }
 
+    fn get_utxo_addr(utxo_tx: &UtxoTransaction) -> String {
+        match utxo_tx.get_address() {
+            Ok(a) => a,
+            _ => "no_address".to_string(),
+        }
+    }
+
     fn generate_utxo_out(
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
     ) -> io::Result<()> {
-        let new_utxo_id = double_hash(&self.serialize()).to_byte_array();
+        let new_utxo_id = HashId::from_hash(double_hash(&self.serialize()));
         let new_utxo = Utxo::from_raw_transaction(self)?;
-        for utxo_transaction in &new_utxo.transactions {
-            let address = match utxo_transaction.get_address() {
-                Ok(a) => a,
-                _ => "no_address".to_string(),
-            };
-
+        for (index, utxo_transaction) in new_utxo.transactions.iter().enumerate() {
+            let address = Self::get_utxo_addr(utxo_transaction);
             match utxo_set.set.get_mut(&address) {
-                Some(wallet) => {
-                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone())
-                }
+                Some(wallet) => wallet.add_utxo(
+                    new_utxo_id,
+                    utxo_transaction.clone(),
+                    origin.clone(),
+                    index as u32,
+                    ui_sender,
+                    active_addr,
+                )?,
                 None => {
                     let mut wallet = WalletUtxo::new();
-                    wallet.add_utxo(new_utxo_id, utxo_transaction.clone(), origin.clone());
+                    wallet.add_utxo(
+                        new_utxo_id,
+                        utxo_transaction.clone(),
+                        origin.clone(),
+                        index as u32,
+                        None,
+                        None,
+                    )?;
                     utxo_set.set.insert(address, wallet);
                 }
             }
@@ -242,13 +356,16 @@ impl RawTransaction {
         Ok(())
     }
 
+    /// Generates the UTXO for the given transaction and adds it to the given UTXO set
     pub fn generate_utxo(
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
+        ui_sender: Option<&Sender<GtkMessage>>,
+        active_addr: Option<&str>,
     ) -> io::Result<()> {
         self.generate_utxo_in(utxo_set, origin.clone())?;
-        self.generate_utxo_out(utxo_set, origin)?;
+        self.generate_utxo_out(utxo_set, origin, ui_sender, active_addr)?;
 
         Ok(())
     }
@@ -267,6 +384,7 @@ impl RawTransaction {
         Ok(())
     }
 
+    /// Reads the transaction from the given bytes and returns a RawTransaction (supports segwit transactions BIP 144)
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let version = u32::from_le_stream(cursor)?;
 
@@ -302,6 +420,7 @@ impl RawTransaction {
         Ok(raw_transaction)
     }
 
+    /// Reads the given number of transactions from the given bytes and returns a vector of RawTransactions
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<Self>, Error> {
         let mut raw_transactions = vec![];
 
@@ -313,6 +432,7 @@ impl RawTransaction {
         Ok(raw_transactions)
     }
 
+    /// Serializes the transaction into bytes
     pub fn serialize(&self) -> Vec<u8> {
         let mut transaction_bytes = vec![];
         transaction_bytes.extend(self.version.to_le_bytes());
@@ -342,6 +462,7 @@ mod tests {
     use crate::utility::_decode_hex;
 
     use super::*;
+    use crate::utxo::UtxoTransaction;
     use std::fs;
 
     #[test]
@@ -507,5 +628,37 @@ mod tests {
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         assert!(transaction.address_is_involved(address));
         assert!(!transaction.address_is_involved("foo"));
+    }
+
+    #[test]
+    fn test_raw_transaction_has_value_negative() {
+        let transaction_bytes = _decode_hex("01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
+        let transaction =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes.unwrap())).unwrap();
+        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+
+        let txin = match transaction.tx_in.clone() {
+            TxInputType::TxInput(txin) => txin[0].clone(),
+            _ => panic!("not a TxInputType::TxInput"),
+        };
+
+        let previous_output = (txin.previous_output.hash, txin.previous_output.index);
+        let utxo_tx = UtxoTransaction {
+            index: txin.previous_output.index,
+            value: 1925236,
+            lock: vec![],
+        };
+
+        let mut wallet = WalletUtxo::new();
+        wallet.utxos.insert(previous_output, utxo_tx);
+
+        let mut utxo_set = UtxoSet::new();
+        utxo_set
+            .set
+            .insert("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string(), wallet);
+
+        let transaction_info = transaction.transaction_info_for(address, 0, &mut utxo_set);
+
+        assert_eq!(transaction_info.amount, -10000);
     }
 }

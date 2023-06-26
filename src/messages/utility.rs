@@ -1,6 +1,9 @@
+use super::HashId;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use std::io;
 use std::io::{Cursor, Read};
 
+/// Convert a `u64` to a `Vec<u8>` with the varint format (https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers)
 //ver: https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 pub fn to_varint(value: u64) -> Vec<u8> {
     let mut buf = Vec::new();
@@ -33,6 +36,7 @@ pub trait StreamRead {
         Self: Sized;
 }
 
+/// Implement StreamRead for all the integer types in order to read them from a stream
 // source: https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_trait_for_from_le_bytes_from_be_bytes/
 macro_rules! impl_StreamRead_for_ints (( $($int:ident),* ) => {
     $(
@@ -53,13 +57,22 @@ macro_rules! impl_StreamRead_for_ints (( $($int:ident),* ) => {
 
 impl_StreamRead_for_ints!(u8, u16, u32, u64, i32, i64, u128);
 
-pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> Result<[u8; 32], io::Error> {
+pub fn read_hash(cursor: &mut Cursor<&[u8]>) -> io::Result<HashId> {
     let mut hash = [0u8; 32];
     cursor.read_exact(&mut hash)?;
-    Ok(hash)
+    Ok(HashId::new(hash))
 }
 
-pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> Result<u64, io::Error> {
+pub fn date_from_timestamp(timestamp: u32) -> String {
+    let naive: NaiveDateTime = match NaiveDateTime::from_timestamp_opt(timestamp as i64, 0) {
+        Some(naive) => naive,
+        None => Utc::now().naive_utc(),
+    };
+    let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> io::Result<u64> {
     let first_byte = u8::from_le_stream(cursor)?;
 
     match first_byte {
@@ -139,6 +152,6 @@ mod tests {
         let result = read_hash(&mut cursor);
 
         assert_eq!(result.is_ok(), true);
-        assert_eq!(result.unwrap(), data);
+        assert_eq!(result.unwrap(), HashId::new(data));
     }
 }

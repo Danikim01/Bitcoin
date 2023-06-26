@@ -10,6 +10,7 @@ mod getheader_message;
 mod headers;
 mod headers_message;
 mod merkle_tree;
+mod ping_message;
 pub mod utility;
 mod verack_message;
 mod version_message;
@@ -22,24 +23,30 @@ pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use merkle_tree::MerkleTree;
+pub use ping_message::Ping;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
+/// A struct that represents a hash with 32 bytes to display in hexadecimal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HashId {
     hash: [u8; 32],
 }
 
 impl HashId {
-    fn new(hash: [u8; 32]) -> Self {
+    pub fn new(hash: [u8; 32]) -> Self {
         Self { hash }
     }
 
-    fn default() -> Self {
+    pub fn from_hash(hash: sha256::Hash) -> Self {
+        Self::new(hash.to_byte_array())
+    }
+
+    pub fn default() -> Self {
         Self { hash: [0u8; 32] }
     }
 
-    fn iter(&self) -> HashIdIter {
+    pub fn iter(&self) -> HashIdIter {
         HashIdIter {
             inner: self.hash.iter(),
         }
@@ -50,9 +57,10 @@ impl std::fmt::Display for HashId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "0x{}",
+            "{}",
             self.hash
                 .iter()
+                .rev()
                 .map(|num| format!("{:02x}", num))
                 .collect::<Vec<String>>()
                 .join("")
@@ -60,7 +68,7 @@ impl std::fmt::Display for HashId {
     }
 }
 
-struct HashIdIter<'a> {
+pub struct HashIdIter<'a> {
     inner: std::slice::Iter<'a, u8>,
 }
 
@@ -129,12 +137,6 @@ impl From<Services> for [u8; 8] {
 type Inventories = Vec<Inventory>;
 
 #[derive(Debug, Clone)]
-pub enum ErrorType {
-    HeaderError,
-    BlockError,
-}
-
-#[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
     _GetData(GetData),
@@ -144,9 +146,8 @@ pub enum Message {
     Version(Version),
     Inv(Inventories),
     Transaction(RawTransaction),
-    Ping(u64),
-    Failure(ErrorType),
-    Ignore(),
+    Ping(Ping),
+    Ignore,
 }
 
 pub trait Hashable {

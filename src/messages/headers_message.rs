@@ -1,9 +1,10 @@
-use crate::messages::constants::{header_constants::MAX_HEADER, messages::GENESIS_HASHID};
+use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, to_varint};
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use std::fs;
 use std::io::{self, Cursor};
 
+/// Struct that contains a list of block headers and the number of headers
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
 #[derive(Debug, Clone)]
@@ -13,6 +14,7 @@ pub struct Headers {
 }
 
 impl Headers {
+    /// Creates a new Headers struct
     pub fn new(count: usize, block_headers: Vec<BlockHeader>) -> Self {
         Self {
             count,
@@ -20,6 +22,7 @@ impl Headers {
         }
     }
 
+    /// Creates a default Headers struct with an empty block_headers vector
     pub fn default() -> Self {
         Self {
             count: 0,
@@ -27,27 +30,24 @@ impl Headers {
         }
     }
 
+    /// Retains only the block headers that have a timestamp greater than the given timestamp
     pub fn trim_timestamp(&mut self, timestamp: u32) {
         self.block_headers
             .retain(|header| header.timestamp > timestamp);
         self.count = self.block_headers.len();
     }
 
+    /// Returns true if the number of block headers is a multiple of MAX_HEADER (what means that there are more headers to download)
     pub fn is_paginated(&self) -> bool {
-        self.count % MAX_HEADER == 0
+        self.count == MAX_HEADER
     }
 
-    fn last_header(&self) -> Option<&BlockHeader> {
-        if !self.block_headers.is_empty() {
-            return Some(&self.block_headers[self.block_headers.len() - 1]);
-        }
-        None
+    /// Doesn't check headers size, only use if you know the headers' block_headers is not empty.
+    pub fn last_header_hash_unchecked(&self) -> HashId {
+        self.block_headers[self.block_headers.len() - 1].hash()
     }
 
-    pub fn last_header_hash(&self) -> HashId {
-        return self.last_header().map_or(GENESIS_HASHID, |h| h.hash());
-    }
-
+    /// Returns a Headers struct with all the headers contained in the file
     pub fn from_file(file_name: &str) -> io::Result<Headers> {
         let bytes = fs::read(file_name)?;
         let file_size = bytes.len() as u64;

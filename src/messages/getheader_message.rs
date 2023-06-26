@@ -1,8 +1,6 @@
-use crate::messages::{
-    constants::commands::GETHEADERS, constants::messages::GENESIS_HASHID, utility::to_varint,
-    HashId, Serialize,
-};
+use crate::messages::{constants::commands::GETHEADERS, utility::to_varint, HashId, Serialize};
 
+/// Struct that represents the data GetHeader message
 #[derive(Debug, Clone)]
 pub struct GetHeader {
     version: i32,
@@ -11,33 +9,7 @@ pub struct GetHeader {
     stop_hash: HashId,
 }
 
-//default for genesis block
-impl Default for GetHeader {
-    fn default() -> Self {
-        Self::new(
-            70015,
-            1,
-            vec![GENESIS_HASHID],
-            HashId::default(), //til max block hashes (500 is MAX for response)
-        )
-    }
-}
-
 impl GetHeader {
-    fn new(
-        version: i32,
-        hash_count: u8,
-        block_header_hashes: Vec<HashId>,
-        stop_hash: HashId,
-    ) -> Self {
-        Self {
-            version,
-            hash_count,
-            block_header_hashes,
-            stop_hash,
-        }
-    }
-
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
@@ -51,6 +23,7 @@ impl GetHeader {
         Ok(payload)
     }
 
+    /// Create a new getheaders from a last header hash
     pub fn from_last_header(last_header: HashId) -> Self {
         Self {
             version: 70015,

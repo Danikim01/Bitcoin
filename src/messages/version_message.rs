@@ -7,6 +7,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 
 use super::constants;
 
+/// Struct that contains a version message
 #[derive(Debug, Clone)]
 pub struct Version {
     // message_header: MessageHeader,
@@ -93,6 +94,7 @@ impl Version {
         }
     }
 
+    /// Returns a new version message with the given address, other values will set to default
     pub fn default_for_trans_addr(address: SocketAddr) -> Self {
         Version {
             addr_trans_ip: match address.ip() {
@@ -120,6 +122,7 @@ impl Version {
         Ok(payload)
     }
 
+    /// Returns true if the version is accepted by the other version (the other version is newer)
     pub fn accepts(&self, another_version: Version) -> bool {
         self.version <= another_version.version
     }

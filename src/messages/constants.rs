@@ -1,3 +1,4 @@
+/// Constants used in the headers messages module (e.g. message sizes, magic_bytes, etc.)
 pub mod header_constants {
     pub const HEADER_SIZE: usize = 24;
     pub const _START_STRING: [u8; 4] = [0xf9, 0xbe, 0xb4, 0xd9];
@@ -8,49 +9,46 @@ pub mod header_constants {
     pub const MAX_HEADER: usize = 2000;
 }
 
+/// Constants used in messages module (e.g. getheaders message, gedata message, etc.)
 pub mod messages {
-    use super::super::HashId;
     pub const _MAX_INV_SIZE: usize = 50000;
     pub const MAX_PAYLOAD_SIZE: u32 = 500 * 1024 * 1024; // 500 MB
-    pub const GENESIS_HASHID: HashId = HashId {
-        hash: [
-            0x6f, 0xe2, 0x8c, 0x0a, 0xb6, 0xf1, 0xb3, 0x72, 0xc1, 0xa6, 0xa2, 0x46, 0xae, 0x63,
-            0xf7, 0x4f, 0x93, 0x1e, 0x83, 0x65, 0xe1, 0x5a, 0x08, 0x9c, 0x68, 0xd6, 0x19, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-        ],
-    };
 }
 
+/// Constants with all valid commands in the bitcoin protocol in str format
 pub mod commands {
-    pub const GETHEADERS: &str = "getheaders\0\0";
-    pub const GETDATA: &str = "getdata\0\0\0\0\0";
+    pub const ADDR: &str = "addr\0\0\0\0\0\0\0\0";
     pub const BLOCK: &str = "block\0\0\0\0\0\0\0";
-    pub const VERSION: &str = "version\0\0\0\0\0";
-    pub const VERACK: &str = "verack\0\0\0\0\0\0";
+    pub const FEEFILTER: &str = "feefilter\0\0\0";
+    pub const GETDATA: &str = "getdata\0\0\0\0\0";
+    pub const GETHEADERS: &str = "getheaders\0\0";
     pub const HEADERS: &str = "headers\0\0\0\0\0";
-    pub const UNKNOWN: &str = "no_command\0\0";
-    pub const SENDCMPCT: &str = "sendcmpct\0\0\0";
-    pub const SENDHEADERS: &str = "sendheaders\0";
+    pub const INV: &str = "inv\0\0\0\0\0\0\0\0\0";
+    pub const NO_COMMAND: &str = "no_command\0\0";
     pub const PING: &str = "ping\0\0\0\0\0\0\0\0";
     pub const PONG: &str = "pong\0\0\0\0\0\0\0\0";
-    pub const FEEFILTER: &str = "feefilter\0\0\0";
-    pub const ADDR: &str = "addr\0\0\0\0\0\0\0\0";
-    pub const INV: &str = "inv\0\0\0\0\0\0\0\0\0";
+    pub const SENDCMPCT: &str = "sendcmpct\0\0\0";
+    pub const SENDHEADERS: &str = "sendheaders\0";
     pub const TX: &str = "tx\0\0\0\0\0\0\0\0\0\0";
+    pub const VERACK: &str = "verack\0\0\0\0\0\0";
+    pub const VERSION: &str = "version\0\0\0\0\0";
 }
 
+/// Constants with accepted version which is latest version
 pub mod version_constants {
     pub const LATEST_VERSION: i32 = 70015;
 }
 
+/// Constants with all config parameters
 pub mod config {
     // set possible values for log verbosity level
     pub const QUIET: &str = "QUIET";
     pub const VERBOSE: &str = "VERBOSE";
     // set default values for config, overriden by config files
     pub const LOG_FILE: &str = "tmp/node.log";
-    pub const HEADERS_FILE: &str = "tmp/headers.bkp";
-    pub const BLOCKS_FILE: &str = "tmp/blocks.bkp";
+    pub const HEADERS_FILE: &str = "tmp/headers_backup.dat";
+    pub const BLOCKS_FILE: &str = "tmp/blocks_backup.dat";
+    pub const PRIVATE_KEY_FILE: &str = "private_key.pem";
     pub const TCP_TIMEOUT: u64 = 30;
     pub const START_TIMESTAMP: u32 = 1681095600;
     pub const PORT: u16 = 8333;

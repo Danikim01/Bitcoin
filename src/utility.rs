@@ -1,12 +1,11 @@
-use crate::messages::{HashId, Hashable};
 use bitcoin_hashes::{sha256, Hash};
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::io;
 use std::num::ParseIntError;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+/// Displays a error
 pub fn to_io_err<E>(error: E) -> io::Error
 where
     E: Display,
@@ -14,17 +13,7 @@ where
     io::Error::new(io::ErrorKind::Other, error.to_string())
 }
 
-pub fn into_hashmap<T>(elements: Vec<T>) -> HashMap<HashId, T>
-where
-    T: Hashable,
-{
-    let hashmap: HashMap<HashId, T> = elements
-        .into_iter()
-        .map(|element| (element.hash(), element))
-        .collect();
-    hashmap
-}
-
+/// Get the actual timestamp or default
 pub fn actual_timestamp_or_default() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => duration,
@@ -33,6 +22,7 @@ pub fn actual_timestamp_or_default() -> i64 {
     .as_secs() as i64
 }
 
+/// Aplies two times the sha256 hash function to a byte array
 pub fn double_hash(bytes: &[u8]) -> sha256::Hash {
     let hash = sha256::Hash::hash(bytes);
     sha256::Hash::hash(&hash[..])

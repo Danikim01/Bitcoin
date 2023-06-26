@@ -1,9 +1,7 @@
 use crate::config::Config;
-use crate::messages::utility::StreamRead;
-use crate::messages::GetData;
 use crate::messages::{
-    constants::commands, Block, ErrorType, Headers, Message, MessageHeader, Serialize, VerAck,
-    Version,
+    constants::{commands, config::VERBOSE},
+    Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, Serialize, VerAck, Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
@@ -14,9 +12,9 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 // gtk imports
 use crate::interface::GtkMessage;
-use crate::messages::constants::config::VERBOSE;
 use gtk::glib::Sender;
 
+/// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
 pub struct Listener {
     socket_addr: SocketAddr,
     stream: TcpStream,
@@ -32,12 +30,18 @@ impl Listener {
         }
     }
 
+    fn send(&mut self, payload: &[u8]) -> io::Result<()> {
+        self.stream.write_all(payload)?;
+        self.stream.flush()?;
+        Ok(())
+    }
+
     fn log_listen(mut self, config: &Config) -> io::Result<()> {
         match self.listen() {
             Ok(..) => Ok(()),
             Err(e) => {
-                config.get_logger().log(&format!("{:?}", e) as &str, VERBOSE);
-                config.get_logger().log(
+                config.log(&format!("{:?}", e) as &str, VERBOSE);
+                config.log(
                     &format!("Listener for connection {:?} died.", self.stream) as &str,
                     VERBOSE,
                 );
@@ -46,45 +50,47 @@ impl Listener {
         }
     }
 
-    fn ping_deserialize(payload: &[u8]) -> io::Result<Message> {
-        let mut cursor = io::Cursor::new(payload);
-        //println!("Received ping message with payload: {:?}", payload);
-        let nonce = u64::from_le_stream(&mut cursor)?;
-        //println!("Received ping with nonce: {}", nonce);
-        Ok(Message::Ping(nonce))
+    fn handle_headers_msg(&mut self, headers: Headers) -> io::Result<()> {
+        // request next headers
+        let getheader_message = GetHeader::from_last_header(headers.last_header_hash_unchecked());
+        self.send(&getheader_message.serialize()?)?;
+        Ok(())
     }
 
-    fn process_message_payload(command_name: &str, payload: Vec<u8>) -> io::Result<Message> {
+    fn process_message_payload(
+        &mut self,
+        command_name: &str,
+        payload: Vec<u8>,
+    ) -> io::Result<Message> {
         let dyn_message: Message = match command_name {
             commands::HEADERS => match Headers::deserialize(&payload) {
-                Ok(m) => m,
-                Err(e) => {
-                    println!("Invalid headers payload: {:?}, ignoring message", e);
-                    // HERE WE MUST REQUEST THE BLOCK HEADERS AGAIN!
-                    Message::Failure(ErrorType::HeaderError)
+                Ok(Message::Headers(headers)) if headers.is_paginated() => {
+                    // request next headers
+                    self.handle_headers_msg(headers.clone())?;
+                    Message::Headers(headers)
                 }
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
             },
             commands::BLOCK => match Block::deserialize(&payload) {
                 Ok(m) => m,
-                Err(e) => {
-                    println!("Invalid block payload: {:?}, ignoring message", e);
-                    // HERE WE MUST REQUEST THE BLOCK AGAIN!
-                    Message::Failure(ErrorType::BlockError)
-                }
+                Err(..) => Message::Ignore,
             },
             commands::INV => match GetData::deserialize(&payload) {
                 Ok(m) => m,
-                _ => Message::Ignore(), // bad luck if it fails, we can't request inv to another node
+                Err(..) => Message::Ignore,
             },
             commands::TX => match RawTransaction::deserialize(&payload) {
                 Ok(m) => m,
-                _ => Message::Ignore(), // bad luck if it fails, we can't request tx to another node
+                Err(..) => Message::Ignore,
             },
-            commands::PING => match Self::ping_deserialize(&payload) {
-                Ok(m) => m,
-                _ => Message::Ignore(),
-            },
-            _ => Message::Ignore(),
+            commands::PING => {
+                if let Ok(reply) = &Ping::pong(&payload) {
+                    self.send(reply)?;
+                }
+                Message::Ignore
+            }
+            _ => Message::Ignore,
         };
         Ok(dyn_message)
     }
@@ -93,7 +99,7 @@ impl Listener {
         loop {
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             if message_header.validate_header().is_err() {
-                println!(
+                eprintln!(
                     "Invalid or unimplemented header: {:?}, ignoring message",
                     message_header
                 );
@@ -101,8 +107,8 @@ impl Listener {
             }
 
             let payload = message_header.read_payload(&mut self.stream)?;
-            match Self::process_message_payload(&message_header.command_name, payload) {
-                Ok(Message::Ignore()) => continue,
+            match self.process_message_payload(&message_header.command_name, payload) {
+                Ok(Message::Ignore) => continue,
                 Ok(m) => {
                     self.writer_channel
                         .send((self.socket_addr, m))
@@ -114,6 +120,7 @@ impl Listener {
     }
 }
 
+/// The Node struct is responsible for spawning a listener thread and keeping track of the connection.
 #[derive(Debug)]
 pub struct Node {
     pub stream: TcpStream,
@@ -129,7 +136,7 @@ impl Node {
         config: &Config,
     ) -> io::Result<Self> {
         let message = &format!("Established connection with node: {:?}", stream) as &str;
-        config.get_logger().log(message, VERBOSE);
+        config.log(message, VERBOSE);
 
         // update ui // handle error
         let _ = ui_sender.send(GtkMessage::UpdateLabel((
@@ -159,15 +166,16 @@ impl Node {
 
     fn _is_alive(&mut self, config: &Config) -> bool {
         let mut buf = [0u8; 1];
-        config.get_logger().log("is_alive: peeking", VERBOSE);
+        config.log("is_alive: peeking", VERBOSE);
         let bytes_read = self.stream.peek(&mut buf);
-        config.get_logger().log("is_alive: done peeking", VERBOSE);
+        config.log("is_alive: done peeking", VERBOSE);
         match bytes_read {
             Ok(_) => true,
             Err(..) => false,
         }
     }
 
+    /// This function is used to establish a connection with a node.
     pub fn try_from_addr(
         node_addr: SocketAddr,
         writer_channel: mpsc::Sender<(SocketAddr, Message)>,
@@ -218,6 +226,7 @@ impl Node {
         Ok(())
     }
 
+    /// This function is used to send a message to a node a payload.
     pub fn send(&mut self, payload: &[u8]) -> io::Result<()> {
         self.stream.write_all(payload)?;
         self.stream.flush()?;

@@ -4,12 +4,14 @@ use crate::utxo::p2pkh_to_address;
 use bitcoin_hashes::{ripemd160, sha256, Hash};
 use std::io::{self, Cursor, Error, Read};
 
+/// Struct that represents the pk_script data of a transaction output
 #[derive(Debug, Clone)]
 pub struct PkScriptData {
     pub pk_hash: [u8; 20],
 }
 
 impl PkScriptData {
+    /// Creates a new `PkScriptData` from a pk_script
     pub fn from_pk_script_bytes(pk_script_bytes: &[u8]) -> Result<Self, Error> {
         let first_hash = sha256::Hash::hash(pk_script_bytes);
         let second_hash = ripemd160::Hash::hash(&first_hash[..]);
@@ -20,6 +22,7 @@ impl PkScriptData {
     }
 }
 
+/// Struct that represents a transaction output (value and pk_script)
 #[derive(Debug, Clone)]
 pub struct TxOutput {
     pub value: u64,
@@ -28,11 +31,12 @@ pub struct TxOutput {
 }
 
 impl TxOutput {
+    /// Returns the destined address of the transaction output
     pub fn get_address(&self) -> io::Result<String> {
         let script_bytes = self.pk_script.clone();
         let mut cursor: Cursor<&[u8]> = Cursor::new(&script_bytes);
 
-        // consume cursor until reading
+        // consume cursor until reading 0x14
         let buf = &mut [0; 1];
         while buf[0] != 0x14 {
             cursor.read_exact(buf)?;
@@ -44,6 +48,7 @@ impl TxOutput {
         Ok(p2pkh_to_address(pk_hash))
     }
 
+    /// Checks if the transaction output is destined to the given address
     pub fn destined_to(&self, address: &str) -> bool {
         match self.get_address() {
             Ok(a) => a == address,
@@ -51,6 +56,7 @@ impl TxOutput {
         }
     }
 
+    /// Deserialize a `TxOutput` from a byte array.
     pub fn from_bytes(cursor: &mut Cursor<&[u8]>) -> Result<Self, Error> {
         let value = u64::from_le_stream(cursor)?; // this is actually a float?
         let pk_script_bytes = read_from_varint(cursor)?;
@@ -67,6 +73,7 @@ impl TxOutput {
         Ok(tx_output)
     }
 
+    /// Deserialize a vector of `TxOutput` from a byte array.
     pub fn vec_from_bytes(cursor: &mut Cursor<&[u8]>, n: usize) -> Result<Vec<Self>, Error> {
         let mut tx_outputs = vec![];
 
@@ -78,6 +85,7 @@ impl TxOutput {
         Ok(tx_outputs)
     }
 
+    /// Serialize a `TxOutput` into a byte array.
     pub fn _serialize(&self) -> Vec<u8> {
         let mut bytes = vec![];
         bytes.extend_from_slice(&self.value.to_le_bytes());
@@ -88,6 +96,7 @@ impl TxOutput {
         bytes
     }
 
+    /// Serialize a vector of `TxOutput` into a byte array.
     pub fn serialize_vec(tx_outputs: &Vec<Self>) -> Vec<u8> {
         let mut bytes = vec![];
         for tx_output in tx_outputs {
