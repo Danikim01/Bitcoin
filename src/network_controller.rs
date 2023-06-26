@@ -22,7 +22,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread::{self, JoinHandle};
-use std::{fs, io};
+use std::io;
 
 use crate::interface::components::table::{
     table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
@@ -55,16 +55,6 @@ impl NetworkController {
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
-
-        let secret_key_file = config.get_private_key_file();
-        let secret_key = match fs::read_to_string(secret_key_file) {
-            Ok(s) => s,
-            Err(_) => {
-                let err_msg = format!("Could not read secret key file {}", secret_key_file);
-                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
-            }
-        };
-
         Ok(Self {
             headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
             tallest_header: genesis_header,
@@ -73,7 +63,7 @@ impl NetworkController {
             pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config.clone())?,
-            wallet: Wallet::login(secret_key, Some(&ui_sender))?,
+            wallet: Wallet::login(config.get_secret_key().to_owned(), Some(&ui_sender))?,
             ui_sender,
             tx_read: HashMap::new(),
         })

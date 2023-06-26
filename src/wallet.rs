@@ -16,9 +16,18 @@ use secp256k1::{Secp256k1, SecretKey};
 use std::io;
 use std::str::FromStr;
 
+pub fn create_secret_key() -> io::Result<String> {
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    Ok(secret_key.display_secret().to_string())
+}
+
+pub fn validate_secret_key(secret_key: String) -> io::Result<String> {
+    let _key = SecretKey::from_str(&secret_key).map_err(to_io_err)?;
+    Ok(secret_key)
+}
+
 fn hash_address(address: &str) -> io::Result<Vec<u8>> {
     let bytes = bs58::decode(address).into_vec().map_err(to_io_err)?;
-
     Ok(bytes)
 }
 
