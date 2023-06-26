@@ -9,7 +9,6 @@ use crate::utility::double_hash;
 use crate::utility::to_io_err;
 use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
-use chrono::Utc;
 use gtk::glib::Sender;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
@@ -92,9 +91,7 @@ impl Block {
     }
 
     /// Validates the block by checking the proof of work, merkle root.
-    pub fn validate(
-        &self,
-    ) -> io::Result<()> {
+    pub fn validate(&self) -> io::Result<()> {
         self.header.validate_proof_of_work()?;
         self.validate_merkle_root()?;
         Ok(())
@@ -106,7 +103,7 @@ impl Block {
         utxo_set: &mut UtxoSet,
         ui_sender: Option<&Sender<GtkMessage>>,
         active_addr: Option<&str>,
-    ) -> io::Result<()>  {
+    ) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
             let _ = Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set);
@@ -158,14 +155,6 @@ impl Block {
 
         file.write_all(&data)?;
         Ok(())
-    }
-
-    /// Returns the age of the block in days.
-    pub fn get_days_old(&self) -> u64 {
-        let current_time = Utc::now().timestamp();
-        let block_time = self.header.timestamp as i64;
-        let age = (current_time - block_time) / 86400;
-        age as u64
     }
 }
 

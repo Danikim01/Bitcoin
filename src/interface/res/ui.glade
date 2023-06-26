@@ -662,10 +662,12 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="status_bar">
+          <object class="GtkProgressBar" id="progress_bar">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">status</property>
+            <property name="pulse-step">0.01</property>
+            <property name="text" translatable="yes">Initializing...</property>
+            <property name="show-text">True</property>
           </object>
           <packing>
             <property name="expand">False</property>

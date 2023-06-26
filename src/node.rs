@@ -50,6 +50,13 @@ impl Listener {
         }
     }
 
+    fn handle_headers_msg(&mut self, headers: Headers) -> io::Result<()> {
+        // request next headers
+        let getheader_message = GetHeader::from_last_header(headers.last_header_hash_unchecked());
+        self.send(&getheader_message.serialize()?)?;
+        Ok(())
+    }
+
     fn process_message_payload(
         &mut self,
         command_name: &str,
@@ -59,9 +66,7 @@ impl Listener {
             commands::HEADERS => match Headers::deserialize(&payload) {
                 Ok(Message::Headers(headers)) if headers.is_paginated() => {
                     // request next headers
-                    let getheader_message =
-                        GetHeader::from_last_header(headers.last_header_hash_unchecked());
-                    self.send(&getheader_message.serialize()?)?;
+                    self.handle_headers_msg(headers.clone())?;
                     Message::Headers(headers)
                 }
                 Ok(m) => m,

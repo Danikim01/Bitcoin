@@ -23,6 +23,8 @@ pub enum GtkMessage {
     /// type, notification title, notification message
     CreateNotification((gtk::MessageType, String, String)),
     UpdateTable((GtkTable, GtkTableData)),
+    /// optional new status, fraction
+    UpdateProgressBar((Option<String>, f64)),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -33,19 +35,26 @@ pub enum ModelRequest {
 }
 
 /// called from the model, to update the status bar in the ui
-pub fn update_ui_status_bar(sender: &GtkSender<GtkMessage>, msg: String) -> io::Result<()> {
-    update_ui_label(sender, "status_bar".to_string(), msg)
-}
-
-/// called from the model, to update the text of a specific label
-pub fn update_ui_label(
+pub fn update_ui_progress_bar(
     sender: &GtkSender<GtkMessage>,
-    label: String,
-    text: String,
+    new_status: Option<&str>,
+    mut fraction: f64,
 ) -> io::Result<()> {
-    sender
-        .send(GtkMessage::UpdateLabel((label, text)))
-        .map_err(to_io_err)
+    if fraction > 1.0 {
+        fraction = 1.0;
+    }
+    if let Some(new_status) = new_status {
+        sender
+            .send(GtkMessage::UpdateProgressBar((
+                Some(new_status.to_string()),
+                fraction,
+            )))
+            .map_err(to_io_err)
+    } else {
+        sender
+            .send(GtkMessage::UpdateProgressBar((None, fraction)))
+            .map_err(to_io_err)
+    }
 }
 
 fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
@@ -73,27 +82,39 @@ fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
     }
 }
 
+fn update_label(builder: gtk::Builder, label: String, text: String) {
+    if let Some(label) = builder.object::<gtk::Label>(label.as_str()) {
+        label.set_text(text.as_str());
+    }
+}
+
 /// Receiver that listen from messages from the model
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
         let builder_aux = builder.clone();
         match msg {
             GtkMessage::UpdateLabel((label, text)) => {
-                if let Some(label) = builder_aux.object::<gtk::Label>(label.as_str()) {
-                    label.set_text(text.as_str());
-                }
+                update_label(builder_aux, label, text);
             }
             GtkMessage::UpdateBalance((balance, pending)) => {
                 update_balance(builder_aux, balance, pending);
             }
             GtkMessage::UpdateOverviewTransactions((transaction, origin)) => {
-                update_overview_transactions(builder_aux, transaction, origin);
+                _ = update_overview_transactions(builder_aux, transaction, origin);
             }
             GtkMessage::CreateNotification((t, title, msg)) => {
                 create_notification_window(t, &title, &msg);
             }
             GtkMessage::UpdateTable((table, data)) => {
                 let _res = table_append_data(builder_aux, table, data);
+            }
+            GtkMessage::UpdateProgressBar((new_status, fraction)) => {
+                if let Some(progress_bar) = builder_aux.object::<gtk::ProgressBar>("progress_bar") {
+                    progress_bar.set_fraction(fraction);
+                    if let Some(new_status) = new_status {
+                        progress_bar.set_text(Some(new_status.as_str()));
+                    }
+                }
             }
         }
 

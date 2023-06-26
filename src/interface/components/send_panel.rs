@@ -81,7 +81,10 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
 
             let transaction_info = TransactionInfo { recipients, fee };
 
-            if let Err(_) = sender.send(ModelRequest::GenerateTransaction(transaction_info)) {
+            if sender
+                .send(ModelRequest::GenerateTransaction(transaction_info))
+                .is_err()
+            {
                 println!("could not send transaction details to model");
             }
         }
@@ -91,6 +94,11 @@ fn connect_send_btn(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::
     });
 
     Ok(())
+}
+
+fn get_builder() -> gtk::Builder {
+    let glade_src = include_str!("../res/ui.glade");
+    gtk::Builder::from_string(glade_src)
 }
 
 fn connect_clear_all_btn(builder: gtk::Builder) -> io::Result<()> {
@@ -115,8 +123,7 @@ fn connect_clear_all_btn(builder: gtk::Builder) -> io::Result<()> {
             transaction_recipients_info.remove(widget);
         });
 
-        let glade_src = include_str!("../res/ui.glade");
-        let inner_builder = gtk::Builder::from_string(glade_src);
+        let inner_builder = self::get_builder();
         let new_recipient: gtk::Widget =
             if let Some(widget) = inner_builder.object("transaction_info_template") {
                 widget

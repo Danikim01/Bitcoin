@@ -38,23 +38,24 @@ pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
     GtkTableData::Transaction(date, hash.to_string(), amount)
 }
 
-/// Receive a block and parse it's data to a RowData::BlocksData
-pub fn table_data_from_block(block: &Block) -> io::Result<GtkTableData> {
+/// Receive a vector of blocks and parse their data to a vector of RowData::BlocksData
+pub fn table_data_from_blocks(blocks: Vec<&Block>) -> Vec<GtkTableData> {
     // need height, date, hash and tx count
-    let height = block.header.height.to_string();
-    let date = Local::now().format("%Y-%m-%d %H:%M").to_string();
-    let hash = block.hash();
-    let tx_count = block.txn_count.to_string();
+    let mut data = Vec::new();
 
-    Ok(GtkTableData::Blocks(
-        height,
-        date,
-        hash.to_string(),
-        tx_count,
-    ))
+    for block in blocks {
+        data.push(GtkTableData::Blocks(
+            block.header.height.to_string(),
+            date_from_timestamp(block.header.timestamp),
+            block.hash().to_string(),
+            block.txn_count.to_string(),
+        ))
+    }
+
+    data
 }
 
-/// Receive a header and parse it's data to a RowData::HeadersData
+/// Receive a vector of headers and parse their data to a vector of RowData::HeadersData
 pub fn table_data_from_headers(headers: Vec<&BlockHeader>) -> Vec<GtkTableData> {
     // need height, date and hash
     let mut data = Vec::new();

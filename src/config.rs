@@ -1,6 +1,7 @@
 use crate::logger::{Log, Logger};
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, VERBOSE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, PRIVATE_KEY_FILE
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PRIVATE_KEY_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
+    VERBOSE,
 };
 use crate::messages::HashId;
 use std::collections::HashMap;

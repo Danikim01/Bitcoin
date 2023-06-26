@@ -33,10 +33,10 @@ fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
         return Ok(row.upcast());
     }
 
-    return Err(io::Error::new(
+    Err(io::Error::new(
         io::ErrorKind::InvalidInput,
         "failed to create widget from data",
-    ));
+    ))
 }
 
 pub fn add_data_to_transactions_table(builder: gtk::Builder, data: GtkTableData) -> io::Result<()> {
@@ -49,8 +49,8 @@ pub fn add_data_to_transactions_table(builder: gtk::Builder, data: GtkTableData)
         return Ok(());
     }
 
-    return Err(io::Error::new(
+    Err(io::Error::new(
         io::ErrorKind::InvalidInput,
         "failed to add data to transactions table",
-    ));
+    ))
 }

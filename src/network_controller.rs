@@ -17,13 +17,19 @@ use chrono::Utc;
 use gtk::glib::Sender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, mpsc::{self, Receiver}};
+use std::sync::{
+    mpsc::{self, Receiver},
+    Arc, Mutex,
+};
 use std::thread::{self, JoinHandle};
 use std::{fs, io};
 
-use crate::interface::{update_ui_status_bar, components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo}};
 use crate::interface::components::table::{
-    table_data_from_block, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
+    table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
+};
+use crate::interface::{
+    components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
+    update_ui_progress_bar,
 };
 pub type BlockSet = HashMap<HashId, Block>;
 
@@ -71,6 +77,10 @@ impl NetworkController {
             ui_sender,
             tx_read: HashMap::new(),
         })
+    }
+
+    fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
+        _ = update_ui_progress_bar(&self.ui_sender, msg, progress);
     }
 
     fn update_ui_table(&self, table: GtkTable, data: GtkTableData) -> io::Result<()> {
@@ -123,22 +133,6 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    fn update_ui_with_block(&self, block: &mut Block) {
-        let days_old = block.get_days_old();
-        if days_old > 0 {
-            let _ = update_ui_status_bar(
-                &self.ui_sender,
-                format!("Reading blocks, {:?} days behind", block.get_days_old()),
-            );
-        } else {
-            let _ = update_ui_status_bar(&self.ui_sender, "Up to date".to_string());
-        }
-        // get data from block and update ui
-        let data = table_data_from_block(block).unwrap();
-        let _ = self.update_ui_table(GtkTable::Blocks, data);
-        let _ = self.update_ui_balance();
-    }
-
     fn read_wallet_balance(&self) -> io::Result<(u64, u64)> {
         let balance = self.utxo_set.get_wallet_balance(&self.wallet.address);
         let pending_balance = self
@@ -147,7 +141,8 @@ impl NetworkController {
 
         Ok((balance, pending_balance))
     }
-    fn get_best_headers(&mut self, amount: usize) -> Vec<&BlockHeader> {
+
+    fn get_best_headers(&self, amount: usize) -> Vec<&BlockHeader> {
         let mut best_headers = vec![];
         let mut current_header = &self.tallest_header;
         for _ in 0..amount {
@@ -156,8 +151,19 @@ impl NetworkController {
                 Some(header) => header,
                 None => break,
             }
-        };
+        }
+        best_headers.reverse();
         best_headers
+    }
+
+    fn get_best_blocks(&self, headers: Vec<&BlockHeader>) -> Vec<&Block> {
+        let mut best_blocks = vec![];
+        for header in headers {
+            if let Some(block) = self.valid_blocks.get(&header.hash()) {
+                best_blocks.push(block);
+            }
+        }
+        best_blocks
     }
 
     fn read_backup_block(&mut self, block: Block) {
@@ -172,12 +178,12 @@ impl NetworkController {
             self.put_block_on_hold(block);
         }
     }
-    
+
     fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
         if self.validate_block(&block).is_err() {
             return Ok(()); // ignore invalid or duplicate blocks
         }
-        println!("read_incoming_block");
+
         block.save_to_file(config.get_blocks_file())?;
         if let Some(previous_block) = self.valid_blocks.get(&block.header.prev_block_hash) {
             block.header.height = previous_block.header.height + 1;
@@ -206,15 +212,29 @@ impl NetworkController {
         Ok(())
     }
 
-    fn _add_to_valid_blocks(&mut self, block: Block) {
+    fn _add_to_valid_blocks(&mut self, mut block: Block) {
         let _ = block.expand_utxo(
             &mut self.utxo_set,
-            None, // Some(&self.ui_sender),
-            None, // Some(&self.wallet.address),
+            Some(&self.ui_sender),
+            Some(&self.wallet.address),
         );
-        
+
         let _ = self.update_ui_balance();
-        // self.update_ui_with_block(&mut block);
+
+        // get real height of the block
+        block.header.height = match self.headers.get(&block.hash()) {
+            Some(header) => header.height,
+            None => 0,
+        };
+
+        // update progress bar
+        let mut progress =
+            ((block.header.height as f64 / self.tallest_header.height as f64) * 100.0) % 1.0;
+        if progress == 0.0 {
+            progress = 1.0;
+        }
+        _ = update_ui_progress_bar(&self.ui_sender, None, progress);
+
         self.valid_blocks.insert(block.hash(), block);
     }
 
@@ -261,6 +281,24 @@ impl NetworkController {
         self.request_blocks_evenly(&mut headers, config)
     }
 
+    fn get_downloadable_bck_headers(&mut self, headers: Headers) -> Headers {
+        // since every block needs to come after a valid block, create a "pseudo genesis" validated block
+        if headers.block_headers.is_empty() {
+            return headers;
+        }
+
+        // since every block needs to come after a valid block, create a "pseudo genesis" validated block
+        let first_downloadable_header = headers.block_headers[0];
+        if let Some(previous_header) = self.headers.get(&first_downloadable_header.prev_block_hash)
+        {
+            // this never fails
+            let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
+            self.valid_blocks
+                .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
+        }
+        headers
+    }
+
     fn read_backup_headers(&mut self, mut headers: Headers, config: &Config) -> Headers {
         // save new headers to hashmap and backup file
         let mut new_headers = vec![];
@@ -281,22 +319,40 @@ impl NetworkController {
         }
 
         config.log(
-            &format!("Read backup headers. New header count: {:?}", self.headers.len()),
+            &format!(
+                "Read backup headers. New header count: {:?}",
+                self.headers.len()
+            ),
             VERBOSE,
         );
         // request blocks mined after given date
         headers = Headers::new(new_headers.len(), new_headers);
         headers.trim_timestamp(config.get_start_timestamp());
 
+        self.get_downloadable_bck_headers(headers)
+    }
+
+    fn try_request_trimmed_blocks(
+        &mut self,
+        mut headers: Headers,
+        config: &Config,
+    ) -> io::Result<()> {
+        headers.trim_timestamp(config.get_start_timestamp());
+
         // since every block needs to come after a valid block, create a "pseudo genesis" validated block
+        if headers.block_headers.is_empty() {
+            return Ok(());
+        }
+
         let first_downloadable_header = headers.block_headers[0];
         if let Some(previous_header) = self.headers.get(&first_downloadable_header.prev_block_hash)
-        { // this never fails
+        {
+            // this never fails
             let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
             self.valid_blocks
                 .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
         }
-        headers
+        self.request_blocks(headers, config)
     }
 
     fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
@@ -327,10 +383,11 @@ impl NetworkController {
             &format!("Read headers. New header count: {:?}", self.headers.len()),
             VERBOSE,
         );
+        let msg = format!("Read headers. New header count: {:?}", self.headers.len());
+        self.update_ui_progress(Some(&msg), 0.0);
         // request blocks mined after given date
-        let mut headers = Headers::new(new_headers.len(), new_headers);
-        headers.trim_timestamp(config.get_start_timestamp());
-        self.request_blocks(headers, config)
+        let headers = Headers::new(new_headers.len(), new_headers);
+        self.try_request_trimmed_blocks(headers, config)
     }
 
     fn request_headers(&mut self, header_hash: HashId, config: &Config) -> io::Result<()> {
@@ -444,32 +501,25 @@ impl NetworkController {
         let mut downloadable_headers = Headers::default();
         // attempt to read headers from backup file
         if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
-            update_ui_status_bar(
-                &self.ui_sender,
-                "Reading headers from backup file...".to_string(),
-            )?;
+            self.update_ui_progress(Some("Reading headers from backup file..."), 0.0);
             downloadable_headers = self.read_backup_headers(headers, config);
-            update_ui_status_bar(
-                &self.ui_sender,
-                "Read headers from backup file.".to_string(),
-            )?;
+            update_ui_progress_bar(&self.ui_sender, Some("Read headers from backup file."), 1.0)?;
         }
 
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
-            update_ui_status_bar(
-                &self.ui_sender,
-                "Found blocks backup file, reading blocks...".to_string(),
-            )?;
+            self.update_ui_progress(Some("Found blocks backup file, reading blocks..."), 0.0);
             for (_, block) in blocks.into_iter() {
                 self.read_backup_block(block);
             }
-            update_ui_status_bar(&self.ui_sender, "Read blocks from backup file.".to_string())?;
+            update_ui_progress_bar(&self.ui_sender, Some("Read blocks from backup file."), 1.0)?;
         }
         // Finally, catch up to blockchain doing IBD
         let mut missing_blocks: Vec<BlockHeader> = vec![];
         for header in downloadable_headers.block_headers {
-            if !self.valid_blocks.contains_key(&header.hash()) && !self.blocks_on_hold.contains_key(&header.hash()) {
+            if !self.valid_blocks.contains_key(&header.hash())
+                && !self.blocks_on_hold.contains_key(&header.hash())
+            {
                 missing_blocks.push(header);
             }
         }
@@ -600,19 +650,24 @@ impl OuterNetworkController {
         Ok(handle)
     }
 
-    fn update_ui_headers_periodically(&self) -> io::Result<()> {
+    fn update_ui_data_periodically(&self) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
             loop {
                 thread::sleep(std::time::Duration::from_secs(3));
-                let mut controller = inner.lock().map_err(to_io_err)?;
+                let controller = inner.lock().map_err(to_io_err)?;
                 if controller.tallest_header.hash() != tallest_header_hash {
                     tallest_header_hash = controller.tallest_header.hash();
                     // update ui with last 100 headers
-                    let headers = controller.get_best_headers(100);
-                    let data = table_data_from_headers(headers);
+                    let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
+                    let data = table_data_from_headers(headers.clone());
                     controller.update_ui_table_with_vec(GtkTable::Headers, data)?;
+
+                    // update ui with last 100 blocks
+                    let blocks = controller.get_best_blocks(headers);
+                    let data = table_data_from_blocks(blocks);
+                    controller.update_ui_table_with_vec(GtkTable::Blocks, data)?;
                 }
             }
         });
@@ -637,6 +692,6 @@ impl OuterNetworkController {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
         self.sync(config)?;
-        self.update_ui_headers_periodically()
+        self.update_ui_data_periodically()
     }
 }
