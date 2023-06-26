@@ -1,7 +1,6 @@
 use crate::logger::{Log, Logger};
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT,
-    VERBOSE,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, VERBOSE,
 };
 use crate::messages::HashId;
 use crate::wallet::Wallet;
@@ -19,7 +18,7 @@ pub struct Config {
     tcp_timeout_seconds: u64,
     logger: Logger,
     genesis_hash: HashId,
-    wallet: Wallet,
+    wallet: Option<Wallet>,
 }
 
 impl Config {
@@ -55,20 +54,20 @@ impl Config {
         self.genesis_hash
     }
 
-    pub fn get_wallet(&self) -> &Wallet {
-        &self.wallet
+    pub fn get_wallet(&self) -> Option<Wallet> {
+        self.wallet.clone()
     }
 
     fn remove_or(hashmap: &mut HashMap<String, String>, key: &str, default: &str) -> String {
         hashmap.remove(key).unwrap_or(default.to_string())
     }
 
-    fn wallet_from_file(secret_key_file: String) -> io::Result<Wallet> {
+    fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
         if secret_key_file.is_empty() {
-            return Ok(Wallet::new());
+            return Ok(None);
         }
         match fs::read_to_string(&secret_key_file) {
-            Ok(file_content) => file_content.as_str().try_into(),
+            Ok(file_content) => Ok(Some(file_content.as_str().try_into()?)),
             Err(_) => {
                 let err_msg = format!("Could not read secret key file {}", secret_key_file);
                 Err(io::Error::new(io::ErrorKind::Other, err_msg))
@@ -96,7 +95,11 @@ impl Config {
                 "genesis_hash",
                 "",
             ))?,
-            wallet: Config::wallet_from_file(Config::remove_or(&mut values, "private_key_file", ""))?,
+            wallet: Config::wallet_from_file(Config::remove_or(
+                &mut values,
+                "private_key_file",
+                "",
+            ))?,
         })
     }
 

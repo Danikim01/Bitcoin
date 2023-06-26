@@ -7,9 +7,7 @@ use crate::messages::{HashId, Serialize};
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
-use std::{
-    io::{Error, Read},
-};
+use std::io::{Error, Read};
 
 use gtk::glib::Sender;
 pub mod tx_input;
@@ -21,7 +19,7 @@ use tx_output::TxOutput;
 
 use super::messages::Message as Msg;
 
-use secp256k1::{Message, PublicKey, Secp256k1, SecretKey, All};
+use secp256k1::{All, Message, PublicKey, Secp256k1, SecretKey};
 
 const SIGHASH_ALL: u32 = 1;
 
@@ -37,7 +35,7 @@ fn der_sign_with_priv_key(z: &[u8], private_key: &SecretKey) -> io::Result<Vec<u
     let secp: Secp256k1<secp256k1::All> = Secp256k1::gen_new();
     let message_slice: &[u8] = message;
     let message_slice = Message::from_slice(message_slice).map_err(to_io_err)?;
-    let signature = secp.sign_ecdsa(&message_slice, &private_key);
+    let signature = secp.sign_ecdsa(&message_slice, private_key);
 
     // Convert the DER-encoded signature to bytes
     Ok(signature.serialize_der().to_vec())
@@ -126,7 +124,14 @@ impl RawTransaction {
 
         let der_len = (der.len() + 1) as u8;
         let pub_key_len = pub_key.len() as u8;
-        let script_sig = [&[der_len], &der[..], &[0x01], &[pub_key_len], &pub_key.into_bytes()].concat();
+        let script_sig = [
+            &[der_len],
+            &der[..],
+            &[0x01],
+            &[pub_key_len],
+            &pub_key.into_bytes(),
+        ]
+        .concat();
 
         // change script sig of index
         match self.tx_in {
