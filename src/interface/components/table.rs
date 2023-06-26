@@ -21,9 +21,11 @@ pub enum GtkTable {
 /// Enum with the different types of data that can be added to a table
 pub enum GtkTableData {
     /// height, date, hash, tx count
-    Blocks(String, String, String, String),
+    Blocks(Vec<(String, String, String, String)>),
+    Block(String, String, String, String),
     /// height, date, hash (all as String)
-    Headers(String, String, String),
+    Headers(Vec<(String, String, String)>),
+    Header(String, String, String),
     /// date, hash, amount
     Transaction(String, String, String),
 }
@@ -39,36 +41,35 @@ pub fn table_data_from_tx(tx: &RawTransaction) -> GtkTableData {
 }
 
 /// Receive a vector of blocks and parse their data to a vector of RowData::BlocksData
-pub fn table_data_from_blocks(blocks: Vec<&Block>) -> Vec<GtkTableData> {
+pub fn table_data_from_blocks(blocks: Vec<&Block>) -> GtkTableData {
     // need height, date, hash and tx count
     let mut data = Vec::new();
 
     for block in blocks {
-        data.push(GtkTableData::Blocks(
+        data.push((
             block.header.height.to_string(),
             date_from_timestamp(block.header.timestamp),
             block.hash().to_string(),
-            block.txn_count.to_string(),
-        ))
+            block.txn_count.to_string()),
+        );
     }
 
-    data
+    GtkTableData::Blocks(data)
 }
 
 /// Receive a vector of headers and parse their data to a vector of RowData::HeadersData
-pub fn table_data_from_headers(headers: Vec<&BlockHeader>) -> Vec<GtkTableData> {
+pub fn table_data_from_headers(headers: Vec<&BlockHeader>) -> GtkTableData {
     // need height, date and hash
     let mut data = Vec::new();
 
     for header in headers {
-        data.push(GtkTableData::Headers(
+        data.push((
             header.height.to_string(),
             date_from_timestamp(header.timestamp),
-            header.hash().to_string(),
-        ))
+            header.hash().to_string()));
     }
 
-    data
+    GtkTableData::Headers(data)
 }
 
 pub fn table_append_data(
