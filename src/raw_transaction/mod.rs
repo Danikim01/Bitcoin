@@ -120,7 +120,7 @@ impl RawTransaction {
     ) -> io::Result<()> {
         let z = self.sig_hash(prev_pk_script, index)?;
         let der = der_sign_with_priv_key(&z, secret_key)?;
-        let pub_key = PublicKey::from_secret_key(secp, secret_key).to_string();
+        let pub_key = PublicKey::from_secret_key(secp, secret_key).serialize().to_vec();
 
         let der_len = (der.len() + 1) as u8;
         let pub_key_len = pub_key.len() as u8;
@@ -129,7 +129,7 @@ impl RawTransaction {
             &der[..],
             &[0x01],
             &[pub_key_len],
-            &pub_key.into_bytes(),
+            &pub_key,
         ]
         .concat();
 
