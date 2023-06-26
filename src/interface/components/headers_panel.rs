@@ -2,7 +2,7 @@ use std::io;
 
 use super::{table::GtkTableData, utils::append_to_limited_container};
 use gtk::prelude::{BuilderExtManual, Cast, ContainerExt, LabelExt};
-use crate::interface::components::utils::_redraw_container;
+use crate::interface::components::utils::redraw_container;
 
 fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
     let (height, date, hash) = match data {
@@ -46,7 +46,7 @@ pub fn add_data_to_headers_table(builder: gtk::Builder, data: GtkTableData) -> i
         },
         _ => println!("wrong GtkTableData"),
     }
-    _redraw_container(&table_box, widgets);
+    redraw_container(&table_box, widgets);
     //append_to_limited_container(&table_box, &widget, 100);
     Ok(())
 }

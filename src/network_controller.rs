@@ -90,17 +90,7 @@ impl NetworkController {
 
         Ok(())
     }
-
-    fn update_ui_table_with_vec(
-        &self,
-        gtk_table: GtkTable,
-        vec_data: Vec<GtkTableData>,
-    ) -> io::Result<()> {
-        for data in vec_data {
-            self.update_ui_table(gtk_table.clone(), data)?;
-        }
-        Ok(())
-    }
+    
 
     fn update_ui_balance(&self) -> io::Result<()> {
         let (balance, pending) = self.read_wallet_balance()?;
