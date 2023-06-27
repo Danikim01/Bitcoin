@@ -20,7 +20,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::{
     mpsc::{self, Receiver},
-    Arc, Mutex,
+    Arc, RwLock,
 };
 use std::thread::{self, JoinHandle};
 
@@ -90,7 +90,6 @@ impl NetworkController {
 
         Ok(())
     }
-    
 
     fn update_ui_balance(&self) -> io::Result<()> {
         let (balance, pending) = self.read_wallet_balance()?;
@@ -521,7 +520,7 @@ impl NetworkController {
 
 /// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
 pub struct OuterNetworkController {
-    inner: Arc<Mutex<NetworkController>>,
+    inner: Arc<RwLock<NetworkController>>,
 }
 
 impl OuterNetworkController {
@@ -531,18 +530,18 @@ impl OuterNetworkController {
         writer_end: mpsc::Sender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
-        let inner = Arc::new(Mutex::new(NetworkController::new(
+        let inner = Arc::new(RwLock::new(NetworkController::new(
             ui_sender, writer_end, config,
         )?));
         Ok(Self { inner })
     }
 
     fn handle_ui_generate_transaction(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         transaction_info: TransactionInfo,
         config: Config,
     ) -> io::Result<()> {
-        let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
+        let mut inner_lock = t_inner.write().map_err(to_io_err)?;
         inner_lock.generate_transaction(transaction_info, &config)
     }
 
@@ -554,7 +553,7 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
-                let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
+                let t_inner: Arc<RwLock<NetworkController>> = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
                     ModelRequest::GenerateTransaction(transaction_info) => {
                         Self::handle_ui_generate_transaction(
@@ -570,44 +569,44 @@ impl OuterNetworkController {
     }
 
     fn handle_node_block_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         block: Block,
         config: &Config,
     ) -> io::Result<()> {
         t_inner
-            .lock()
+            .write()
             .map_err(to_io_err)?
             .read_incoming_block(block, config)
     }
 
     fn handle_node_headers_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         headers: Headers,
         config: &Config,
     ) -> io::Result<()> {
         t_inner
-            .lock()
+            .write()
             .map_err(to_io_err)?
             .read_headers(headers, config)
     }
 
     fn handle_node_inv_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
         inventories: Vec<Inventory>,
         config: &Config,
     ) -> io::Result<()> {
         t_inner
-            .lock()
+            .write()
             .map_err(to_io_err)?
             .read_inventories(peer_addr, inventories, config)
     }
 
     fn handle_node_tx_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         tx: RawTransaction,
     ) -> io::Result<()> {
-        t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
+        t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
     fn recv_node_messages(
@@ -618,7 +617,7 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         let handle = thread::spawn(move || -> io::Result<()> {
             loop {
-                let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
+                let t_inner: Arc<RwLock<NetworkController>> = inner.clone();
                 if let Err(result) = match node_receiver.recv().map_err(to_io_err)? {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config)
@@ -646,7 +645,7 @@ impl OuterNetworkController {
             let mut tallest_header_hash = HashId::default();
             loop {
                 thread::sleep(std::time::Duration::from_secs(3));
-                let controller = inner.lock().map_err(to_io_err)?;
+                let controller = inner.read().map_err(to_io_err)?;
                 if controller.tallest_header.hash() != tallest_header_hash {
                     tallest_header_hash = controller.tallest_header.hash();
                     // update ui with last 100 headers
@@ -667,7 +666,7 @@ impl OuterNetworkController {
     fn sync(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
-            inner.lock().map_err(to_io_err)?.start_sync(&config)
+            inner.write().map_err(to_io_err)?.start_sync(&config)
         });
         Ok(())
     }
