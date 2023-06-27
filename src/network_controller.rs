@@ -317,7 +317,7 @@ impl NetworkController {
         config.log(
             &format!(
                 "Read backup headers. New header count: {:?}",
-                self.headers.len()
+                self.headers.len() -1
             ),
             VERBOSE,
         );
