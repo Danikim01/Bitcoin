@@ -91,7 +91,6 @@ impl NetworkController {
         Ok(())
     }
 
-
     fn update_ui_balance(&self) -> io::Result<()> {
         let (balance, pending) = self.read_wallet_balance()?;
         self.ui_sender
@@ -318,7 +317,7 @@ impl NetworkController {
         config.log(
             &format!(
                 "Read backup headers. New header count: {:?}",
-                self.headers.len() -1
+                self.headers.len() - 1
             ),
             VERBOSE,
         );
