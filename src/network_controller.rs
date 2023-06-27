@@ -90,7 +90,6 @@ impl NetworkController {
 
         Ok(())
     }
-    
 
     fn update_ui_balance(&self) -> io::Result<()> {
         let (balance, pending) = self.read_wallet_balance()?;

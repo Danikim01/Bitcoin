@@ -62,8 +62,8 @@ pub fn create_notification_window(
         return Ok(());
     }
 
-    return Err(std::io::Error::new(
+    Err(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Unable to build notification window",
-    ));
+    ))
 }

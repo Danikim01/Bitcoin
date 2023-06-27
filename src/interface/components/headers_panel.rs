@@ -27,10 +27,10 @@ fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
         }
         return Ok(row.upcast());
     }
-    return Err(io::Error::new(
+    Err(io::Error::new(
         io::ErrorKind::Other,
         "Unable to build headers table row template",
-    ));
+    ))
 }
 
 pub fn add_data_to_headers_table(builder: gtk::Builder, data: GtkTableData) -> io::Result<()> {
@@ -49,8 +49,8 @@ pub fn add_data_to_headers_table(builder: gtk::Builder, data: GtkTableData) -> i
         redraw_container(&table_box, widgets);
         return Ok(());
     }
-    return Err(io::Error::new(
+    Err(io::Error::new(
         io::ErrorKind::Other,
         "Unable to build headers table",
-    ));
+    ))
 }

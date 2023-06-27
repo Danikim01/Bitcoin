@@ -50,8 +50,8 @@ pub fn table_data_from_blocks(blocks: Vec<&Block>) -> GtkTableData {
             block.header.height.to_string(),
             date_from_timestamp(block.header.timestamp),
             block.hash().to_string(),
-            block.txn_count.to_string()),
-        );
+            block.txn_count.to_string(),
+        ));
     }
 
     GtkTableData::Blocks(data)
@@ -66,7 +66,8 @@ pub fn table_data_from_headers(headers: Vec<&BlockHeader>) -> GtkTableData {
         data.push((
             header.height.to_string(),
             date_from_timestamp(header.timestamp),
-            header.hash().to_string()));
+            header.hash().to_string(),
+        ));
     }
 
     GtkTableData::Headers(data)

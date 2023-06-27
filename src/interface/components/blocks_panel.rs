@@ -1,6 +1,6 @@
 use std::io;
 
-use super::{table::GtkTableData, utils::append_to_limited_container};
+use super::table::GtkTableData;
 use crate::interface::components::utils::redraw_container;
 use gtk::prelude::{BuilderExtManual, Cast, ContainerExt, LabelExt};
 
