@@ -180,7 +180,14 @@ impl NetworkController {
                 entry.insert(block.header);
             }
             let hash = block.hash();
+            let block_header = block.header;
             self.blocks_on_hold.insert(hash, block);
+
+            if block_header.prev_block_hash == self.tallest_header.hash() {
+                self.headers.insert(hash, block_header);
+                self.tallest_header = block_header;
+            }
+
             self.add_to_valid_blocks(hash);
         } else {
             self.put_block_on_hold(block);
@@ -211,9 +218,9 @@ impl NetworkController {
         let _ = self.update_ui_balance();
 
         // get real height of the block
-        block.header.height = match self.headers.get(&block.hash()) {
-            Some(header) => header.height,
-            None => 0,
+        block.header.height = match self.valid_blocks.get(&block.header.prev_block_hash) {
+            Some(prev_block) => prev_block.header.height + 1,
+            _ => self.tallest_header.height + 1,
         };
 
         // update progress bar
@@ -644,7 +651,7 @@ impl OuterNetworkController {
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
             loop {
-                thread::sleep(std::time::Duration::from_secs(3));
+                thread::sleep(std::time::Duration::from_secs(30));
                 let controller = inner.lock().map_err(to_io_err)?;
                 if controller.tallest_header.hash() != tallest_header_hash {
                     tallest_header_hash = controller.tallest_header.hash();
