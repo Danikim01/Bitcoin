@@ -351,71 +351,10 @@ impl NetworkController {
         self.request_blocks(headers, config)
     }
 
-    fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
-        let prev_header_count = self.headers.len();
-        // save new headers to hashmap and backup file
-        let mut new_headers: Vec<BlockHeader> = vec![];
-        for mut header in headers.block_headers {
-            match self.headers.get(&header.prev_block_hash) {
-                Some(parent_header) => {
-                    header.height = parent_header.height + 1;
-                }
-                None => continue, // ignore header if prev_header is unknown
-            }
-            let hash = header.hash();
-            if let Vacant(entry) = self.headers.entry(hash) {
-                header.save_to_file(config.get_headers_file())?;
-                new_headers.push(header);
-                entry.insert(header);
-                if header.height > self.tallest_header.height {
-                    self.tallest_header = header
-                }
-            }
-        }
-        if prev_header_count == self.headers.len() {
-            return Ok(());
-        }
-        config.log(
-            &format!("Read headers. New header count: {:?}", self.headers.len()),
-            VERBOSE,
-        );
-        let msg = format!("Read headers. New header count: {:?}", self.headers.len());
-        self.update_ui_progress(Some(&msg), 0.0);
-        // request blocks mined after given date
-        let headers = Headers::new(new_headers.len(), new_headers);
-        self.try_request_trimmed_blocks(headers, config)
-    }
-
     fn request_headers(&mut self, header_hash: HashId, config: &Config) -> io::Result<()> {
         let getheader_message = GetHeader::from_last_header(header_hash);
         self.nodes
             .send_to_all(&getheader_message.serialize()?, config)?;
-        Ok(())
-    }
-
-    /// read inv message from peer, if it contains tx invs, request txs to same peer
-    fn read_inventories(
-        &mut self,
-        peer: SocketAddr,
-        inventories: Vec<Inventory>,
-        config: &Config,
-    ) -> io::Result<()> {
-        let mut filtered_inv: Vec<Inventory> = Vec::new();
-        for inventory in inventories {
-            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
-                filtered_inv.push(inventory);
-            }
-        }
-
-        if filtered_inv.is_empty() {
-            return Ok(());
-        }
-
-        let getdata_message = GetData::new(filtered_inv.len(), filtered_inv);
-        // ignore inv and error if target node is not reachable
-        let _ = self
-            .nodes
-            .send_to_specific(&peer, &getdata_message.serialize()?, config);
         Ok(())
     }
 
@@ -591,10 +530,48 @@ impl OuterNetworkController {
         headers: Headers,
         config: &Config,
     ) -> io::Result<()> {
-        t_inner
-            .write()
-            .map_err(to_io_err)?
-            .read_headers(headers, config)
+        let inner_read = t_inner.read().map_err(to_io_err)?;
+        let prev_header_count = inner_read.headers.len();
+        // save new headers to hashmap and backup file
+        let mut new_headers: Vec<BlockHeader> = vec![];
+        for mut header in headers.block_headers {
+            match inner_read.headers.get(&header.prev_block_hash) {
+                Some(parent_header) => {
+                    header.height = parent_header.height + 1;
+                }
+                None => continue, // ignore header if prev_header is unknown
+            }
+            let hash = header.hash();
+            let mut inner_write = t_inner.write().map_err(to_io_err)?;
+            if let Vacant(entry) = inner_write.headers.entry(hash) {
+                header.save_to_file(config.get_headers_file())?;
+                new_headers.push(header);
+                entry.insert(header);
+                if header.height > inner_read.tallest_header.height {
+                    inner_write.tallest_header = header
+                }
+            }
+        }
+        if prev_header_count == inner_read.headers.len() {
+            return Ok(());
+        }
+        config.log(
+            &format!(
+                "Read headers. New header count: {:?}",
+                inner_read.headers.len()
+            ),
+            VERBOSE,
+        );
+        let msg = format!(
+            "Read headers. New header count: {:?}",
+            inner_read.headers.len()
+        );
+
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        inner_write.update_ui_progress(Some(&msg), 0.0);
+        // request blocks mined after given date
+        let headers = Headers::new(new_headers.len(), new_headers);
+        inner_write.try_request_trimmed_blocks(headers, config)
     }
 
     fn handle_node_inv_message(
@@ -603,10 +580,23 @@ impl OuterNetworkController {
         inventories: Vec<Inventory>,
         config: &Config,
     ) -> io::Result<()> {
-        t_inner
-            .write()
-            .map_err(to_io_err)?
-            .read_inventories(peer_addr, inventories, config)
+        let mut filtered_inv: Vec<Inventory> = Vec::new();
+        for inventory in inventories {
+            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
+                filtered_inv.push(inventory);
+            }
+        }
+
+        if filtered_inv.is_empty() {
+            return Ok(());
+        }
+
+        let getdata_message = GetData::new(filtered_inv.len(), filtered_inv);
+        let mut nc = t_inner.write().map_err(to_io_err)?;
+        _ = nc
+            .nodes
+            .send_to_specific(&peer_addr, &getdata_message.serialize()?, config);
+        Ok(())
     }
 
     fn handle_node_tx_message(
@@ -625,6 +615,7 @@ impl OuterNetworkController {
         let handle = thread::spawn(move || -> io::Result<()> {
             loop {
                 let t_inner: Arc<RwLock<NetworkController>> = inner.clone();
+                println!("received node message");
                 if let Err(result) = match node_receiver.recv().map_err(to_io_err)? {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config)
