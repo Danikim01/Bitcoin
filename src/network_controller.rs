@@ -168,33 +168,6 @@ impl NetworkController {
         }
     }
 
-    // fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
-    //     if self.validate_block(&block).is_err() {
-    //         return Ok(()); // ignore invalid or duplicate blocks
-    //     }
-
-    //     block.save_to_file(config.get_blocks_file())?;
-    //     if let Some(previous_block) = self.valid_blocks.get(&block.header.prev_block_hash) {
-    //         block.header.height = previous_block.header.height + 1;
-    //         if let Vacant(entry) = self.headers.entry(block.hash()) {
-    //             entry.insert(block.header);
-    //         }
-    //         let hash = block.hash();
-    //         let block_header = block.header;
-    //         self.blocks_on_hold.insert(hash, block);
-
-    //         if block_header.prev_block_hash == self.tallest_header.hash() {
-    //             self.headers.insert(hash, block_header);
-    //             self.tallest_header = block_header;
-    //         }
-
-    //         self.add_to_valid_blocks(hash);
-    //     } else {
-    //         self.put_block_on_hold(block);
-    //     }
-    //     Ok(())
-    // }
-
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
         let _ = block.expand_utxo(
             &mut self.utxo_set,
@@ -216,7 +189,8 @@ impl NetworkController {
         if progress == 0.0 {
             progress = 1.0;
         }
-        _ = update_ui_progress_bar(&self.ui_sender, None, progress);
+        let msg = format!("Reading block {}", block.header.height);
+        _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
         self.valid_blocks.insert(block.hash(), block);
     }
@@ -477,24 +451,31 @@ impl OuterNetworkController {
         let ui_sender = self.ui_sender.clone();
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
+            let mut block_count = 0;
             loop {
                 thread::sleep(std::time::Duration::from_secs(10));
                 let controller = inner.read().map_err(to_io_err)?;
+                let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
+
                 if controller.tallest_header.hash() != tallest_header_hash {
                     tallest_header_hash = controller.tallest_header.hash();
                     // update ui with last 100 headers
-                    let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
                     let data = table_data_from_headers(headers.clone());
                     ui_sender
                         .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
                         .map_err(to_io_err)?;
+                }
 
+                let curr_block_count = controller.valid_blocks.len();
+                if curr_block_count > block_count {
                     // update ui with last best blocks
                     let blocks = controller.get_best_blocks(headers);
                     let data = table_data_from_blocks(blocks);
                     ui_sender
                         .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
                         .map_err(to_io_err)?;
+
+                    block_count = curr_block_count;
                 }
             }
         });
@@ -586,13 +567,18 @@ impl OuterNetworkController {
             ),
             VERBOSE,
         );
+
         let msg = format!(
             "Read headers. New header count: {:?}",
             inner_read.headers.len()
         );
+        let most_recent_timestamp = inner_read.tallest_header.timestamp;
 
-        drop(inner_read);
-        _ = update_ui_progress_bar(ui_sender, Some(&msg), 0.0);
+        // the closer the timestamp is to the current time, the more progress we have made
+        let diff = (Utc::now().timestamp() - most_recent_timestamp as i64) as f64 / 1000000000.0;
+        let progress = 1.0 - diff;
+
+        _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
         Ok(())
     }
 
