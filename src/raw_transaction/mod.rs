@@ -9,7 +9,7 @@ use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
 use std::io::{Error, Read};
 
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
@@ -314,7 +314,7 @@ impl RawTransaction {
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
         let new_utxo_id = HashId::from_hash(double_hash(&self.serialize()));
@@ -353,7 +353,7 @@ impl RawTransaction {
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
         self.generate_utxo_in(utxo_set, origin.clone())?;

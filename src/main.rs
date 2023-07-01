@@ -21,9 +21,9 @@ use std::thread;
 /// Main function that starts the program spawning the UI thread and the network thread and starting the sync
 fn main() -> io::Result<()> {
     fs::create_dir_all("./tmp")?;
-    let (ui_sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+    let (ui_sender, receiver) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
     let (sender_aux, receiver_aux) = mpsc::channel();
-    let (writer_end, node_receiver) = mpsc::channel();
+    let (writer_end, node_receiver) = mpsc::sync_channel(100);
     let config_file = args_parser::get_args();
     let config = config::Config::from_file(config_file)?;
     thread::spawn(move || -> io::Result<()> {

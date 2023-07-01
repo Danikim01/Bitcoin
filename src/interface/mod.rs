@@ -5,7 +5,7 @@ use crate::interface::components::utils::create_notification_window;
 use crate::raw_transaction::TransactionOrigin;
 use crate::utility::to_io_err;
 use gtk::glib;
-use gtk::glib::{Receiver as GtkReceiver, Sender as GtkSender};
+use gtk::glib::{Receiver as GtkReceiver, SyncSender as GtkSender};
 use gtk::prelude::*;
 use std::io;
 use std::sync::mpsc::Sender;

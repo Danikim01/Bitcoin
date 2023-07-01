@@ -14,13 +14,13 @@ use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use chrono::Utc;
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::net::SocketAddr;
 use std::sync::{
     mpsc::{self, Receiver},
-    Arc, RwLock,
+    Arc, RwLock, RwLockReadGuard,
 };
 use std::thread::{self, JoinHandle};
 
@@ -42,7 +42,7 @@ pub struct NetworkController {
     pending_blocks: HashMap<HashId, Vec<HashId>>, // blocks which haven't arrived, and the blocks which come immediately after them
     utxo_set: UtxoSet,
     nodes: NodeController,
-    ui_sender: Sender<GtkMessage>,
+    ui_sender: SyncSender<GtkMessage>,
     wallet: Wallet,
     tx_read: HashMap<HashId, ()>,
 }
@@ -50,8 +50,8 @@ pub struct NetworkController {
 impl NetworkController {
     /// Creates a new network controller from the given sender and writer
     pub fn new(
-        ui_sender: Sender<GtkMessage>,
-        writer_end: mpsc::Sender<(SocketAddr, Message)>,
+        ui_sender: SyncSender<GtkMessage>,
+        writer_end: mpsc::SyncSender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
@@ -168,45 +168,32 @@ impl NetworkController {
         }
     }
 
-    fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
-        if self.validate_block(&block).is_err() {
-            return Ok(()); // ignore invalid or duplicate blocks
-        }
+    // fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
+    //     if self.validate_block(&block).is_err() {
+    //         return Ok(()); // ignore invalid or duplicate blocks
+    //     }
 
-        block.save_to_file(config.get_blocks_file())?;
-        if let Some(previous_block) = self.valid_blocks.get(&block.header.prev_block_hash) {
-            block.header.height = previous_block.header.height + 1;
-            if let Vacant(entry) = self.headers.entry(block.hash()) {
-                entry.insert(block.header);
-            }
-            let hash = block.hash();
-            let block_header = block.header;
-            self.blocks_on_hold.insert(hash, block);
+    //     block.save_to_file(config.get_blocks_file())?;
+    //     if let Some(previous_block) = self.valid_blocks.get(&block.header.prev_block_hash) {
+    //         block.header.height = previous_block.header.height + 1;
+    //         if let Vacant(entry) = self.headers.entry(block.hash()) {
+    //             entry.insert(block.header);
+    //         }
+    //         let hash = block.hash();
+    //         let block_header = block.header;
+    //         self.blocks_on_hold.insert(hash, block);
 
-            if block_header.prev_block_hash == self.tallest_header.hash() {
-                self.headers.insert(hash, block_header);
-                self.tallest_header = block_header;
-            }
+    //         if block_header.prev_block_hash == self.tallest_header.hash() {
+    //             self.headers.insert(hash, block_header);
+    //             self.tallest_header = block_header;
+    //         }
 
-            self.add_to_valid_blocks(hash);
-        } else {
-            self.put_block_on_hold(block);
-        }
-        Ok(())
-    }
-
-    fn validate_block(&mut self, block: &Block) -> io::Result<()> {
-        if self.valid_blocks.contains_key(&block.hash())
-            || self.blocks_on_hold.contains_key(&block.hash())
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                "This block has already been received before",
-            ));
-        }
-        block.validate()?;
-        Ok(())
-    }
+    //         self.add_to_valid_blocks(hash);
+    //     } else {
+    //         self.put_block_on_hold(block);
+    //     }
+    //     Ok(())
+    // }
 
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
         let _ = block.expand_utxo(
@@ -467,19 +454,51 @@ impl NetworkController {
 /// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
 pub struct OuterNetworkController {
     inner: Arc<RwLock<NetworkController>>,
+    ui_sender: SyncSender<GtkMessage>,
 }
 
 impl OuterNetworkController {
     /// Creates a new OuterNetworkController given a ui_sender and a writer
     pub fn new(
-        ui_sender: Sender<GtkMessage>,
-        writer_end: mpsc::Sender<(SocketAddr, Message)>,
+        ui_sender: SyncSender<GtkMessage>,
+        writer_end: mpsc::SyncSender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
         let inner = Arc::new(RwLock::new(NetworkController::new(
-            ui_sender, writer_end, config,
+            ui_sender.clone(),
+            writer_end,
+            config,
         )?));
-        Ok(Self { inner })
+        Ok(Self { inner, ui_sender })
+    }
+
+    fn update_ui_data_periodically(&self) -> io::Result<()> {
+        let inner = self.inner.clone();
+        let ui_sender = self.ui_sender.clone();
+        thread::spawn(move || -> io::Result<()> {
+            let mut tallest_header_hash = HashId::default();
+            loop {
+                thread::sleep(std::time::Duration::from_secs(10));
+                let controller = inner.read().map_err(to_io_err)?;
+                if controller.tallest_header.hash() != tallest_header_hash {
+                    tallest_header_hash = controller.tallest_header.hash();
+                    // update ui with last 100 headers
+                    let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
+                    let data = table_data_from_headers(headers.clone());
+                    ui_sender
+                        .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
+                        .map_err(to_io_err)?;
+
+                    // update ui with last best blocks
+                    let blocks = controller.get_best_blocks(headers);
+                    let data = table_data_from_blocks(blocks);
+                    ui_sender
+                        .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
+                        .map_err(to_io_err)?;
+                }
+            }
+        });
+        Ok(())
     }
 
     fn handle_ui_generate_transaction(
@@ -516,45 +535,50 @@ impl OuterNetworkController {
 
     fn handle_node_block_message(
         t_inner: Arc<RwLock<NetworkController>>,
-        block: Block,
-        config: &Config,
-    ) -> io::Result<()> {
-        t_inner
-            .write()
-            .map_err(to_io_err)?
-            .read_incoming_block(block, config)
-    }
-
-    fn handle_node_headers_message(
-        t_inner: Arc<RwLock<NetworkController>>,
-        headers: Headers,
+        mut block: Block,
         config: &Config,
     ) -> io::Result<()> {
         let inner_read = t_inner.read().map_err(to_io_err)?;
-        let prev_header_count = inner_read.headers.len();
-        // save new headers to hashmap and backup file
-        let mut new_headers: Vec<BlockHeader> = vec![];
-        for mut header in headers.block_headers {
-            match inner_read.headers.get(&header.prev_block_hash) {
-                Some(parent_header) => {
-                    header.height = parent_header.height + 1;
-                }
-                None => continue, // ignore header if prev_header is unknown
-            }
-            let hash = header.hash();
-            let mut inner_write = t_inner.write().map_err(to_io_err)?;
-            if let Vacant(entry) = inner_write.headers.entry(hash) {
-                header.save_to_file(config.get_headers_file())?;
-                new_headers.push(header);
-                entry.insert(header);
-                if header.height > inner_read.tallest_header.height {
-                    inner_write.tallest_header = header
-                }
-            }
-        }
-        if prev_header_count == inner_read.headers.len() {
+        if inner_read.valid_blocks.contains_key(&block.hash())
+            || inner_read.blocks_on_hold.contains_key(&block.hash())
+        {
+            // println!("This block has already been received before");
             return Ok(());
         }
+        if block.validate().is_err() {
+            // println!("invalid block, discarting");
+            return Ok(());
+        }
+        block.save_to_file(config.get_blocks_file())?;
+
+        drop(inner_read);
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        if let Some(previous_block) = inner_write.valid_blocks.get(&block.header.prev_block_hash) {
+            block.header.height = previous_block.header.height + 1;
+            if let Vacant(entry) = inner_write.headers.entry(block.hash()) {
+                entry.insert(block.header);
+            }
+            let hash = block.hash();
+            let block_header = block.header;
+            inner_write.blocks_on_hold.insert(hash, block);
+
+            if block_header.prev_block_hash == inner_write.tallest_header.hash() {
+                inner_write.headers.insert(hash, block_header);
+                inner_write.tallest_header = block_header;
+            }
+
+            inner_write.add_to_valid_blocks(hash);
+        } else {
+            inner_write.put_block_on_hold(block);
+        }
+        Ok(())
+    }
+
+    fn handle_headers_message_info(
+        config: &Config,
+        inner_read: RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+    ) -> io::Result<()> {
         config.log(
             &format!(
                 "Read headers. New header count: {:?}",
@@ -567,11 +591,61 @@ impl OuterNetworkController {
             inner_read.headers.len()
         );
 
-        let mut inner_write = t_inner.write().map_err(to_io_err)?;
-        inner_write.update_ui_progress(Some(&msg), 0.0);
-        // request blocks mined after given date
+        drop(inner_read);
+        _ = update_ui_progress_bar(ui_sender, Some(&msg), 0.0);
+        Ok(())
+    }
+
+    fn try_request_trimmed_blocks(
+        t_inner: Arc<RwLock<NetworkController>>,
+        new_headers: Vec<BlockHeader>,
+        config: &Config,
+    ) -> io::Result<()> {
         let headers = Headers::new(new_headers.len(), new_headers);
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
         inner_write.try_request_trimmed_blocks(headers, config)
+    }
+
+    fn handle_node_headers_message(
+        t_inner: Arc<RwLock<NetworkController>>,
+        headers: Headers,
+        config: &Config,
+        ui_sender: &SyncSender<GtkMessage>,
+    ) -> io::Result<()> {
+        let mut inner_read: RwLockReadGuard<'_, NetworkController> =
+            t_inner.read().map_err(to_io_err)?;
+        let prev_header_count = inner_read.headers.len();
+        // save new headers to hashmap and backup file
+        let mut new_headers: Vec<BlockHeader> = vec![];
+        for mut header in headers.block_headers {
+            match inner_read.headers.get(&header.prev_block_hash) {
+                Some(parent_header) => {
+                    header.height = parent_header.height + 1;
+                }
+                None => continue, // ignore header if prev_header is unknown
+            }
+            let hash = header.hash();
+            drop(inner_read);
+            let mut inner_write = t_inner.write().map_err(to_io_err)?;
+            if let Vacant(entry) = inner_write.headers.entry(hash) {
+                header.save_to_file(config.get_headers_file())?;
+                new_headers.push(header);
+                entry.insert(header);
+                if header.height > inner_write.tallest_header.height {
+                    inner_write.tallest_header = header
+                }
+            }
+            drop(inner_write);
+            inner_read = t_inner.read().map_err(to_io_err)?;
+        }
+        if prev_header_count == inner_read.headers.len() {
+            return Ok(());
+        }
+
+        Self::handle_headers_message_info(config, inner_read, ui_sender)?;
+
+        // request blocks mined after given date
+        Self::try_request_trimmed_blocks(t_inner, new_headers, config)
     }
 
     fn handle_node_inv_message(
@@ -612,13 +686,13 @@ impl OuterNetworkController {
         config: Config,
     ) -> io::Result<JoinHandle<io::Result<()>>> {
         let inner = self.inner.clone();
+        let ui_sender = self.ui_sender.clone();
         let handle = thread::spawn(move || -> io::Result<()> {
             loop {
                 let t_inner: Arc<RwLock<NetworkController>> = inner.clone();
-                println!("received node message");
                 if let Err(result) = match node_receiver.recv().map_err(to_io_err)? {
                     (_, Message::Headers(headers)) => {
-                        Self::handle_node_headers_message(t_inner, headers, &config)
+                        Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
@@ -635,30 +709,6 @@ impl OuterNetworkController {
             }
         });
         Ok(handle)
-    }
-
-    fn update_ui_data_periodically(&self) -> io::Result<()> {
-        let inner = self.inner.clone();
-        thread::spawn(move || -> io::Result<()> {
-            let mut tallest_header_hash = HashId::default();
-            loop {
-                thread::sleep(std::time::Duration::from_secs(3));
-                let controller = inner.read().map_err(to_io_err)?;
-                if controller.tallest_header.hash() != tallest_header_hash {
-                    tallest_header_hash = controller.tallest_header.hash();
-                    // update ui with last 100 headers
-                    let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
-                    let data = table_data_from_headers(headers.clone());
-                    controller.update_ui_table(GtkTable::Headers, data)?;
-
-                    // update ui with last 100 blocks
-                    let blocks = controller.get_best_blocks(headers);
-                    let data = table_data_from_blocks(blocks);
-                    controller.update_ui_table(GtkTable::Blocks, data)?;
-                }
-            }
-        });
-        Ok(())
     }
 
     fn sync(&self, config: Config) -> io::Result<()> {

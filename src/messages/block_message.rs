@@ -9,7 +9,7 @@ use crate::utility::double_hash;
 use crate::utility::to_io_err;
 use crate::utxo::UtxoSet;
 use bitcoin_hashes::{sha256, Hash};
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -67,7 +67,7 @@ impl Block {
     }
 
     fn update_ui(
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
         txn: &RawTransaction,
         timestamp: u32,
@@ -101,7 +101,7 @@ impl Block {
     pub fn expand_utxo(
         &self,
         utxo_set: &mut UtxoSet,
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
         for txn in self.txns.iter() {

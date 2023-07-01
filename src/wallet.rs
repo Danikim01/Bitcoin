@@ -9,7 +9,7 @@ use crate::raw_transaction::{
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Lock, UtxoSet, UtxoTransaction};
 use bitcoin_hashes::{hash160, Hash};
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
 use std::io;
@@ -56,7 +56,7 @@ impl Wallet {
     }
 
     /// Show wallet address in the UI
-    pub fn display_in_ui(wallet: &Wallet, ui_sender: Option<&Sender<GtkMessage>>) {
+    pub fn display_in_ui(wallet: &Wallet, ui_sender: Option<&SyncSender<GtkMessage>>) {
         if let Some(sender) = ui_sender {
             let _ = sender
                 .send(GtkMessage::UpdateLabel((
