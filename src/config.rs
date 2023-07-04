@@ -58,11 +58,19 @@ impl Config {
         self.wallet.clone()
     }
 
+    pub fn get_wallets_dir(&self) -> String {
+        "./wallets".to_string()
+    }
+
+    pub fn get_default_wallet_addr(&self) -> String {
+        "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string() // HAHAHARDCODED FIX L8R
+    }
+
     fn remove_or(hashmap: &mut HashMap<String, String>, key: &str, default: &str) -> String {
         hashmap.remove(key).unwrap_or(default.to_string())
     }
 
-    fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
+    pub fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
         match fs::read_to_string(&secret_key_file) {
             Ok(file_content) => Ok(Some(file_content.as_str().try_into()?)),
             Err(_) => {

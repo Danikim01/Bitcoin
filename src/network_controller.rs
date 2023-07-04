@@ -43,7 +43,8 @@ pub struct NetworkController {
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: SyncSender<GtkMessage>,
-    wallet: Wallet,
+    active_wallet: Wallet,
+    wallets: HashMap<String, Wallet>, // key is address of the wallet
     tx_read: HashMap<HashId, ()>,
 }
 
@@ -55,16 +56,8 @@ impl NetworkController {
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
-        let wallet = match config.get_wallet() {
-            Some(w) => w,
-            None => {
-                let new_wallet = Wallet::new();
-                //utils::create_notification_window(gtk::MessageType::Info, title, message);
-                eprintln!("Since a secret key was not provided through the configuration file, a new wallet has been created. {{Secret key: {}, Address: {}}}", new_wallet.secret_key.display_secret(), new_wallet.address);
-                new_wallet
-            }
-        };
-        Wallet::display_in_ui(&wallet, Some(&ui_sender));
+        let (active_wallet, wallets) = Wallet::init_all(&config)?;
+        Wallet::display_in_ui(&active_wallet, Some(&ui_sender));
         Ok(Self {
             headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
             tallest_header: genesis_header,
@@ -73,7 +66,8 @@ impl NetworkController {
             pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config)?,
-            wallet,
+            active_wallet,
+            wallets,
             ui_sender,
             tx_read: HashMap::new(),
         })
@@ -100,7 +94,7 @@ impl NetworkController {
 
     fn update_ui_overview(&mut self, transaction: &RawTransaction) -> io::Result<()> {
         let transaction_info: TransactionDisplayInfo = transaction.transaction_info_for(
-            &self.wallet.address,
+            &self.active_wallet.address,
             Utc::now().timestamp() as u32,
             &mut self.utxo_set,
         );
@@ -123,10 +117,12 @@ impl NetworkController {
     }
 
     fn read_wallet_balance(&self) -> io::Result<(u64, u64)> {
-        let balance = self.utxo_set.get_wallet_balance(&self.wallet.address);
+        let balance = self
+            .utxo_set
+            .get_wallet_balance(&self.active_wallet.address);
         let pending_balance = self
             .utxo_set
-            .get_pending_wallet_balance(&self.wallet.address);
+            .get_pending_wallet_balance(&self.active_wallet.address);
 
         Ok((balance, pending_balance))
     }
@@ -172,7 +168,7 @@ impl NetworkController {
         let _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
-            Some(&self.wallet.address),
+            Some(&self.active_wallet.address),
         );
 
         let _ = self.update_ui_balance();
@@ -326,12 +322,12 @@ impl NetworkController {
             return Ok(());
         }
 
-        if transaction.address_is_involved(&self.wallet.address) {
+        if transaction.address_is_involved(&self.active_wallet.address) {
             transaction.generate_utxo(
                 &mut self.utxo_set,
                 TransactionOrigin::Pending,
                 Some(&self.ui_sender),
-                Some(&self.wallet.address),
+                Some(&self.active_wallet.address),
             )?;
 
             // get wallet balance and update UI
@@ -356,7 +352,7 @@ impl NetworkController {
         config: &Config,
     ) -> io::Result<()> {
         let tx = self
-            .wallet
+            .active_wallet
             .generate_transaction(&mut self.utxo_set, details);
 
         match tx {
@@ -425,7 +421,7 @@ impl NetworkController {
     }
 }
 
-/// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
+/// OuterNetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
 pub struct OuterNetworkController {
     inner: Arc<RwLock<NetworkController>>,
     ui_sender: SyncSender<GtkMessage>,

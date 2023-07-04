@@ -21,6 +21,7 @@ use std::thread;
 /// Main function that starts the program spawning the UI thread and the network thread and starting the sync
 fn main() -> io::Result<()> {
     fs::create_dir_all("./tmp")?;
+    fs::create_dir_all("./wallets")?;
     let (ui_sender, receiver) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
     let (sender_aux, receiver_aux) = mpsc::channel();
     let (writer_end, node_receiver) = mpsc::sync_channel(100);

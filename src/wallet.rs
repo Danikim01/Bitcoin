@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::GtkMessage;
 use crate::messages::HashId;
@@ -12,6 +13,7 @@ use bitcoin_hashes::{hash160, Hash};
 use gtk::glib::SyncSender;
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
+use std::collections::HashMap;
 use std::io;
 use std::str::FromStr;
 
@@ -75,6 +77,53 @@ impl Wallet {
             secret_key: sk,
             address: Self::get_address_from_secret_key(&sk),
         }
+    }
+
+    /// Iterates all files in the wallet directory
+    /// returns the hashmap of wallets with their addresses as keys
+    /// and the first wallet as the default wallet
+    pub fn init_all(config: &Config) -> io::Result<(Wallet, HashMap<String, Wallet>)> {
+        let mut wallets: HashMap<String, Wallet> = HashMap::new();
+
+        // read wallets from directory
+        let wallets_dir = config.get_wallets_dir();
+        let dir = std::fs::read_dir(wallets_dir)?;
+        for entry in dir {
+            if let Ok(file) = entry {
+                println!("file: {:?}", file);
+                let path_string = match file.path().to_str() {
+                    Some(p) => p.to_string(),
+                    None => continue,
+                };
+                let wallet = Config::wallet_from_file(path_string)?;
+                if let Some(w) = wallet {
+                    wallets.insert(w.address.clone(), w);
+                }
+            }
+        }
+
+        // if wallets is still empty, create a new wallet
+
+        // set active address to default specified in config, or the first wallet found
+        let active_wallet = match wallets.get(&config.get_default_wallet_addr()) {
+            Some(w) => w.clone(),
+            None => {
+                // make any wallet the active wallet
+                let foo = wallets.iter().next();
+                match foo {
+                    Some((_, w)) => w.clone(),
+                    None => {
+                        // return error, this should never happen
+                        return Err(io::Error::new(
+                            io::ErrorKind::Other,
+                            "Could not find any wallets",
+                        ));
+                    }
+                }
+            }
+        };
+
+        Ok((active_wallet, wallets))
     }
 
     fn fill_needed(
