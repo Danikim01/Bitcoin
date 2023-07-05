@@ -10,12 +10,14 @@ use crate::raw_transaction::TransactionOrigin;
 
 use super::utils::append_to_limited_container;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransactionRole {
     Receiver,
     Sender,
 }
 
 /// Struct that holds the information to be displayed in the transaction list in the UI
+#[derive(Debug, Clone, PartialEq)]
 pub struct TransactionDisplayInfo {
     pub role: TransactionRole,
     pub date: String,
@@ -31,7 +33,7 @@ fn try_remove_pending_transaction(overview_transaction_container: &gtk::Box, tx_
                     inner_box.foreach(|widget: &gtk::Widget| {
                         if let Some(hash_label) = widget.downcast_ref::<gtk::Label>() {
                             if hash_label.text() == tx_hash {
-                                println!("removing pending transaction from overview");
+                                // println!("removing pending transaction from overview");
                                 overview_transaction_container.remove(overview_tx);
                             }
                         }

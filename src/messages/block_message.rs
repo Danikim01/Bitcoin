@@ -1,5 +1,4 @@
 use super::Message;
-use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::GtkMessage;
 use crate::io::{self, Cursor};
 use crate::messages::MerkleTree;
@@ -8,6 +7,7 @@ use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::double_hash;
 use crate::utility::to_io_err;
 use crate::utxo::UtxoSet;
+use crate::wallet::Wallet;
 use bitcoin_hashes::{sha256, Hash};
 use gtk::glib::SyncSender;
 use std::collections::HashMap;
@@ -66,27 +66,27 @@ impl Block {
         }
     }
 
-    fn update_ui(
-        ui_sender: Option<&SyncSender<GtkMessage>>,
-        active_addr: Option<&str>,
-        txn: &RawTransaction,
-        timestamp: u32,
-        utxo_set: &mut UtxoSet,
+    // MAYBE REMOVE THIS? if you are seeing this outside of multi-wallet branch, remove it
+    fn update_ui(// ui_sender: Option<&SyncSender<GtkMessage>>,
+        // active_addr: Option<&str>,
+        // txn: &RawTransaction,
+        // timestamp: u32,
+        // utxo_set: &mut UtxoSet,
     ) -> io::Result<()> {
-        if let Some(addr) = active_addr {
-            if txn.address_is_involved(addr) {
-                let transaction_info: TransactionDisplayInfo =
-                    txn.transaction_info_for(addr, timestamp, utxo_set);
-                if let Some(ui_sender) = ui_sender {
-                    ui_sender
-                        .send(GtkMessage::UpdateOverviewTransactions((
-                            transaction_info,
-                            TransactionOrigin::Block,
-                        )))
-                        .map_err(to_io_err)?
-                }
-            }
-        }
+        // if let Some(addr) = active_addr {
+        //     if txn.address_is_involved(addr) {
+        //         let transaction_info: TransactionDisplayInfo =
+        //             txn.transaction_info_for(addr, timestamp, utxo_set);
+        //         if let Some(ui_sender) = ui_sender {
+        //             ui_sender
+        //                 .send(GtkMessage::UpdateOverviewTransactions((
+        //                     transaction_info,
+        //                     TransactionOrigin::Block,
+        //                 )))
+        //                 .map_err(to_io_err)?
+        //         }
+        //     }
+        // }
         Ok(())
     }
 
@@ -97,16 +97,34 @@ impl Block {
         Ok(())
     }
 
+    fn update_wallets(
+        &self,
+        utxo_set: &mut UtxoSet,
+        txn: &RawTransaction,
+        wallets: &mut HashMap<String, Wallet>,
+    ) -> io::Result<()> {
+        for wallet in wallets.values_mut() {
+            if txn.address_is_involved(vec![&wallet.address]) {
+                let txn_info =
+                    txn.transaction_info_for(&wallet.address, self.header.timestamp, utxo_set);
+                wallet.update_history(txn_info, TransactionOrigin::Block);
+            }
+        }
+        Ok(())
+    }
+
     /// Adds to the utxo set
     pub fn expand_utxo(
         &self,
         utxo_set: &mut UtxoSet,
         ui_sender: Option<&SyncSender<GtkMessage>>,
+        wallets: &mut HashMap<String, Wallet>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
-            let _ = Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set);
+            // let _ = Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set); // disable this after wallets impl
+            self.update_wallets(utxo_set, txn, wallets)?;
         }
         Ok(())
     }

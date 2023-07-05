@@ -27,10 +27,7 @@ use std::thread::{self, JoinHandle};
 use crate::interface::components::table::{
     table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
 };
-use crate::interface::{
-    components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
-    update_ui_progress_bar,
-};
+use crate::interface::{components::send_panel::TransactionInfo, update_ui_progress_bar};
 pub type BlockSet = HashMap<HashId, Block>;
 
 /// Structs of the network controller (main controller of the program)
@@ -43,7 +40,7 @@ pub struct NetworkController {
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: SyncSender<GtkMessage>,
-    active_wallet: Wallet,
+    active_wallet: String,
     wallets: HashMap<String, Wallet>, // key is address of the wallet
     tx_read: HashMap<HashId, ()>,
 }
@@ -86,23 +83,9 @@ impl NetworkController {
     }
 
     fn update_ui_balance(&self) -> io::Result<()> {
-        let (balance, pending) = self.read_wallet_balance()?;
+        let (balance, pending) = self.read_active_wallet_balance()?;
         self.ui_sender
             .send(GtkMessage::UpdateBalance((balance, pending)))
-            .map_err(to_io_err)
-    }
-
-    fn update_ui_overview(&mut self, transaction: &RawTransaction) -> io::Result<()> {
-        let transaction_info: TransactionDisplayInfo = transaction.transaction_info_for(
-            &self.active_wallet.address,
-            Utc::now().timestamp() as u32,
-            &mut self.utxo_set,
-        );
-        self.ui_sender
-            .send(GtkMessage::UpdateOverviewTransactions((
-                transaction_info,
-                TransactionOrigin::Pending,
-            )))
             .map_err(to_io_err)
     }
 
@@ -116,13 +99,11 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    fn read_wallet_balance(&self) -> io::Result<(u64, u64)> {
-        let balance = self
-            .utxo_set
-            .get_wallet_balance(&self.active_wallet.address);
+    fn read_active_wallet_balance(&self) -> io::Result<(u64, u64)> {
+        let balance = self.utxo_set.get_wallet_balance(&self.active_wallet);
         let pending_balance = self
             .utxo_set
-            .get_pending_wallet_balance(&self.active_wallet.address);
+            .get_pending_wallet_balance(&self.active_wallet);
 
         Ok((balance, pending_balance))
     }
@@ -165,10 +146,12 @@ impl NetworkController {
     }
 
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
+        // change this for wallets
         let _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
-            Some(&self.active_wallet.address),
+            &mut self.wallets,
+            Some(&self.active_wallet),
         );
 
         let _ = self.update_ui_balance();
@@ -315,29 +298,41 @@ impl NetworkController {
         Ok(())
     }
 
+    fn get_all_addresses(&self) -> Vec<&str> {
+        let mut addresses: Vec<&str> = vec![];
+        for wallet in self.wallets.values() {
+            addresses.push(&wallet.address);
+        }
+        addresses
+    }
+
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
-        // get data from tx and update ui
         let tx_hash: HashId = transaction.get_hash();
         if self.tx_read.contains_key(&tx_hash) {
             return Ok(());
         }
 
-        if transaction.address_is_involved(&self.active_wallet.address) {
-            transaction.generate_utxo(
+        transaction.generate_utxo(
+            &mut self.utxo_set,
+            TransactionOrigin::Pending,
+            Some(&self.ui_sender),
+            Some(&self.active_wallet),
+        )?;
+
+        // change to any address of all loaded wallets
+        if transaction.address_is_involved(self.get_all_addresses()) {
+            let wallet = match self.wallets.get_mut(&self.active_wallet) {
+                Some(w) => w,
+                None => return Err(io::Error::new(io::ErrorKind::Other, "Wallet not found")),
+            };
+            let tx_info = transaction.transaction_info_for(
+                &self.active_wallet,
+                Utc::now().timestamp() as u32,
                 &mut self.utxo_set,
-                TransactionOrigin::Pending,
-                Some(&self.ui_sender),
-                Some(&self.active_wallet.address),
-            )?;
-
-            // get wallet balance and update UI
-            self.update_ui_balance()?;
-
-            // add transaction to overview
-            self.update_ui_overview(&transaction)?;
+            );
+            wallet.update_history(tx_info, TransactionOrigin::Pending);
         }
 
-        // if self.tx_read
         let data = table_data_from_tx(&transaction);
         self.update_ui_table(GtkTable::Transactions, data)?;
 
@@ -351,9 +346,12 @@ impl NetworkController {
         details: TransactionInfo,
         config: &Config,
     ) -> io::Result<()> {
-        let tx = self
-            .active_wallet
-            .generate_transaction(&mut self.utxo_set, details);
+        let wallet = match self.wallets.get_mut(&self.active_wallet) {
+            Some(w) => w,
+            None => return Err(io::Error::new(io::ErrorKind::Other, "Wallet not found")),
+        };
+
+        let tx = wallet.generate_transaction(&mut self.utxo_set, details);
 
         match tx {
             Ok(tx) => {
@@ -473,6 +471,29 @@ impl OuterNetworkController {
 
                     block_count = curr_block_count;
                 }
+
+                // THIS SHOULN'T BE HERE, IT IS JUST FOR TESTING
+                let curr_active_wallet = controller.active_wallet.clone();
+                controller.update_ui_balance()?;
+                Wallet::display_in_ui(&curr_active_wallet, Some(&ui_sender));
+
+                // get last 10 transactions of wallet history
+                let wallet = match controller.wallets.get(&curr_active_wallet) {
+                    Some(w) => w,
+                    None => {
+                        continue;
+                    }
+                };
+                let transactions = wallet.get_last_n_transactions(10);
+                for tx_info in transactions {
+                    _ = ui_sender
+                        .send(GtkMessage::UpdateOverviewTransactions((
+                            tx_info,
+                            TransactionOrigin::Block,
+                        )))
+                        .map_err(to_io_err);
+                }
+                // END OF TESTING CODE
             }
         });
         Ok(())

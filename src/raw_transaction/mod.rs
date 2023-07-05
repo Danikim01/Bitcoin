@@ -166,8 +166,13 @@ impl RawTransaction {
     }
 
     /// Checks if the given address is involved in the transaction (either as input or output)
-    pub fn address_is_involved(&self, address: &str) -> bool {
-        self.is_from_address(address) || self.is_destined_to_address(address)
+    pub fn address_is_involved(&self, addresses: Vec<&str>) -> bool {
+        for address in addresses {
+            if self.is_from_address(address) || self.is_destined_to_address(address) {
+                return true;
+            }
+        }
+        false
     }
 
     fn get_input_value(&self, address: &str, utxoset: &UtxoSet, txin: &TxInput) -> u64 {
@@ -617,9 +622,9 @@ mod tests {
         let transaction_bytes = _decode_hex("0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000");
         let transaction =
             RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes.unwrap())).unwrap();
-        let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
+        let address = vec!["myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"];
         assert!(transaction.address_is_involved(address));
-        assert!(!transaction.address_is_involved("foo"));
+        assert!(!transaction.address_is_involved(vec!["foo"]));
     }
 
     #[test]

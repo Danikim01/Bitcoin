@@ -1,7 +1,9 @@
 use crate::config::Config;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::GtkMessage;
 use crate::messages::HashId;
+use crate::raw_transaction::TransactionOrigin;
 use crate::raw_transaction::{
     tx_input::{Outpoint, TxInput, TxInputType},
     tx_output::TxOutput,
@@ -43,9 +45,36 @@ fn build_p2pkh_script(hashed_pk: Vec<u8>) -> io::Result<Vec<u8>> {
 pub struct Wallet {
     pub secret_key: SecretKey,
     pub address: String,
+    pub history: Vec<TransactionDisplayInfo>,
 }
 
 impl Wallet {
+    pub fn get_last_n_transactions(&self, n: usize) -> Vec<TransactionDisplayInfo> {
+        let mut history = self.history.clone();
+        history.reverse();
+        history.truncate(n);
+        history.reverse();
+        history
+    }
+
+    pub fn update_history(
+        &mut self,
+        transaction_info: TransactionDisplayInfo,
+        origin: TransactionOrigin,
+    ) {
+        if origin == TransactionOrigin::Block {
+            // try to remove the pending transaction from the history
+            // completely not optimal as it could be a hashmap
+            for (i, tx) in self.history.iter().enumerate() {
+                if tx.hash == transaction_info.hash {
+                    self.history[i] = transaction_info;
+                    return;
+                }
+            }
+        }
+        self.history.push(transaction_info); // pending tx get here yet they don't show on the ui
+    }
+
     fn get_address_from_secret_key(secret_key: &SecretKey) -> String {
         let secp = Secp256k1::new();
         let pubkey = secret_key.public_key(&secp).serialize();
@@ -58,12 +87,12 @@ impl Wallet {
     }
 
     /// Show wallet address in the UI
-    pub fn display_in_ui(wallet: &Wallet, ui_sender: Option<&SyncSender<GtkMessage>>) {
+    pub fn display_in_ui(wallet: &String, ui_sender: Option<&SyncSender<GtkMessage>>) {
         if let Some(sender) = ui_sender {
             let _ = sender
                 .send(GtkMessage::UpdateLabel((
                     "active_address_label".to_string(),
-                    wallet.address.clone(),
+                    wallet.clone(),
                 )))
                 .map_err(to_io_err);
         }
@@ -76,13 +105,14 @@ impl Wallet {
         Self {
             secret_key: sk,
             address: Self::get_address_from_secret_key(&sk),
+            history: Vec::new(),
         }
     }
 
     /// Iterates all files in the wallet directory
     /// returns the hashmap of wallets with their addresses as keys
     /// and the first wallet as the default wallet
-    pub fn init_all(config: &Config) -> io::Result<(Wallet, HashMap<String, Wallet>)> {
+    pub fn init_all(config: &Config) -> io::Result<(String, HashMap<String, Wallet>)> {
         let mut wallets: HashMap<String, Wallet> = HashMap::new();
 
         // read wallets from directory
@@ -90,7 +120,6 @@ impl Wallet {
         let dir = std::fs::read_dir(wallets_dir)?;
         for entry in dir {
             if let Ok(file) = entry {
-                println!("file: {:?}", file);
                 let path_string = match file.path().to_str() {
                     Some(p) => p.to_string(),
                     None => continue,
@@ -105,13 +134,13 @@ impl Wallet {
         // if wallets is still empty, create a new wallet
 
         // set active address to default specified in config, or the first wallet found
-        let active_wallet = match wallets.get(&config.get_default_wallet_addr()) {
-            Some(w) => w.clone(),
+        let active_wallet = match wallets.get_key_value(&config.get_default_wallet_addr()) {
+            Some((k, _)) => k.clone(),
             None => {
                 // make any wallet the active wallet
                 let foo = wallets.iter().next();
                 match foo {
-                    Some((_, w)) => w.clone(),
+                    Some((k, _)) => k.clone(),
                     None => {
                         // return error, this should never happen
                         return Err(io::Error::new(
@@ -259,6 +288,7 @@ impl TryFrom<&str> for Wallet {
         Ok(Self {
             secret_key: key,
             address: Self::get_address_from_secret_key(&key),
+            history: Vec::new(),
         })
     }
 }

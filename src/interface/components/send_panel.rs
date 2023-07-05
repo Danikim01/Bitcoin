@@ -12,7 +12,7 @@ use std::sync::mpsc::Sender;
 use gtk::prelude::Cast;
 
 /// Struct with transaction info (recipients and fee)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TransactionInfo {
     pub recipients: Vec<RecipientDetails>,
     pub fee: u64,

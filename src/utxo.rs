@@ -107,19 +107,17 @@ impl WalletUtxo {
         }
 
         if let Some(_pending) = self.pending.utxos.remove(&utxo_id) {
-            if let Some(addr) = active_addr {
+            if let (Some(addr), Some(sender)) = (active_addr, ui_sender) {
                 if addr == utxo.get_address()? {
                     println!("pending utxo is now confirmed!");
-                    if let Some(sender) = ui_sender {
-                        let msg = format!("Transaction {} is now confirmed", utxo_id);
-                        let _ui = sender
-                            .send(GtkMessage::CreateNotification((
-                                gtk::MessageType::Info,
-                                "Confirmed".to_string(),
-                                msg,
-                            )))
-                            .map_err(to_io_err);
-                    }
+                    let msg = format!("Transaction {} is now confirmed", utxo_id);
+                    let _ui = sender
+                        .send(GtkMessage::CreateNotification((
+                            gtk::MessageType::Info,
+                            "Confirmed".to_string(),
+                            msg,
+                        )))
+                        .map_err(to_io_err);
                 }
             }
         }
