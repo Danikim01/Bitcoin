@@ -319,6 +319,9 @@ impl NetworkController {
             Some(&self.active_wallet),
         )?;
 
+        let data = table_data_from_tx(&transaction);
+        self.update_ui_table(GtkTable::Transactions, data)?;
+
         // change to any address of all loaded wallets
         if transaction.address_is_involved(self.get_all_addresses()) {
             let wallet = match self.wallets.get_mut(&self.active_wallet) {
@@ -332,9 +335,6 @@ impl NetworkController {
             );
             wallet.update_history(tx_info, TransactionOrigin::Pending);
         }
-
-        let data = table_data_from_tx(&transaction);
-        self.update_ui_table(GtkTable::Transactions, data)?;
 
         self.tx_read.insert(tx_hash, ());
         Ok(())
