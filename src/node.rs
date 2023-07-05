@@ -90,6 +90,10 @@ impl Listener {
                 }
                 Message::Ignore
             }
+            commands::GETHEADERS => match GetHeader::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
             _ => Message::Ignore,
         };
         Ok(dyn_message)

@@ -680,6 +680,10 @@ impl OuterNetworkController {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
+                    (_, Message::_GetHeader(get_headers)) => {
+                        println!("Received getheaders message: {:?}", get_headers);
+                        Ok(())
+                    }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
                     }
