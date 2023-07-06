@@ -30,7 +30,7 @@ pub use version_message::Version;
 /// A struct that represents a hash with 32 bytes to display in hexadecimal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HashId {
-    hash: [u8; 32],
+    pub hash: [u8; 32],
 }
 
 impl HashId {

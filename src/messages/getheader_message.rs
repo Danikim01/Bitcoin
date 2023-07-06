@@ -11,10 +11,10 @@ use std::io::Cursor;
 /// Struct that represents the data GetHeader message
 #[derive(Debug, Clone, PartialEq)]
 pub struct GetHeader {
-    version: u32,
-    hash_count: u8,
-    block_header_hashes: Vec<HashId>,
-    stop_hash: HashId,
+    pub version: u32,
+    pub hash_count: u8,
+    pub block_header_hashes: Vec<HashId>,
+    pub stop_hash: HashId,
 }
 
 impl GetHeader {

@@ -13,6 +13,7 @@ use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::Hash;
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -76,6 +77,53 @@ impl NetworkController {
             wallet,
             ui_sender,
             tx_read: HashMap::new(),
+        })
+    }
+
+    fn find_next_block_header(&self, block_header_hash: &HashId) -> Option<BlockHeader> {
+        for block_header in self.headers.values() {
+            if block_header.prev_block_hash == *block_header_hash {
+                return Some(block_header.clone());
+            }
+        }
+        return None;
+    }
+
+    fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
+        let mut headers: Vec<BlockHeader> = Vec::new();
+        let last_known_hash = match getheaders_message.block_header_hashes.first() {
+            Some(hash) => hash.clone(),
+            None => return None, // No hay hashes disponibles, devolver None
+        };
+        let stop_hash = HashId { hash: [0; 32] };
+        let mut count = 0;
+
+        // Si el stop_hash es igual a ceros, limitamos a 2000 bloques, de lo contrario, agregamos solo el siguiente bloque
+        let max_blocks = if getheaders_message.stop_hash == stop_hash {
+            2000
+        } else {
+            1
+        };
+
+        // if next block header is None, return empty Headers message
+        if self.find_next_block_header(&last_known_hash).is_none() {
+            return Some(Headers {
+                count: 0,
+                block_headers: headers,
+            });
+        }
+
+        let mut next_block_header = self.find_next_block_header(&last_known_hash)?;
+
+        while count < max_blocks {
+            headers.push(next_block_header.clone());
+            next_block_header = self.find_next_block_header(&next_block_header.hash())?;
+            count += 1;
+        }
+
+        Some(Headers {
+            count: headers.len(),
+            block_headers: headers,
         })
     }
 
@@ -421,6 +469,7 @@ impl NetworkController {
         }
         self.request_blocks(Headers::new(missing_blocks.len(), missing_blocks), config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
+
         Ok(())
     }
 }
@@ -666,6 +715,23 @@ impl OuterNetworkController {
         t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
+    fn handle_get_headers_message(
+        t_inner: Arc<RwLock<NetworkController>>,
+        getheaders: GetHeader,
+        peer_addr: SocketAddr,
+        config: &Config,
+    ) -> io::Result<()> {
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
+            _ = inner_write.nodes.send_to_specific(
+                &peer_addr,
+                &getheaders_message.serialize()?,
+                config,
+            );
+        }
+        Ok(())
+    }
+
     fn recv_node_messages(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
@@ -680,9 +746,9 @@ impl OuterNetworkController {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
-                    (_, Message::_GetHeader(get_headers)) => {
+                    (peer_addr, Message::_GetHeader(get_headers)) => {
                         println!("Received getheaders message: {:?}", get_headers);
-                        Ok(())
+                        Self::handle_get_headers_message(t_inner, get_headers, peer_addr, &config)
                     }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)

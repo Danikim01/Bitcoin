@@ -13,7 +13,7 @@ pub struct BlockHeader {
     pub timestamp: u32,
     nbits: u32,
     nonce: u32,
-    hash: HashId,
+    pub hash: HashId,
     pub height: usize,
 }
 
@@ -50,6 +50,9 @@ impl BlockHeader {
             height,
         }
     }
+
+    
+
 
     pub fn genesis(hash: HashId) -> Self {
         // return Genesis block header
