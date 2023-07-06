@@ -95,16 +95,6 @@ impl NetworkController {
             Some(hash) => hash.clone(),
             None => return None, // No hay hashes disponibles, devolver None
         };
-        let stop_hash = HashId { hash: [0; 32] };
-        let mut count = 0;
-
-        // Si el stop_hash es igual a ceros, limitamos a 2000 bloques, de lo contrario, agregamos solo el siguiente bloque
-        let max_blocks = if getheaders_message.stop_hash == stop_hash {
-            2000
-        } else {
-            1
-        };
-
         // if next block header is None, return empty Headers message
         if self.find_next_block_header(&last_known_hash).is_none() {
             return Some(Headers {
@@ -112,6 +102,28 @@ impl NetworkController {
                 block_headers: headers,
             });
         }
+
+        let stop_hash = HashId { hash: [0; 32] };
+        let mut count = 0;
+
+        // Si el stop_hash es igual a ceros, limitamos a 2000 bloques, de lo contrario, agregamos solo el siguiente bloque
+        let max_blocks = if getheaders_message.stop_hash == stop_hash {
+            2000
+        } else {
+            let mut next_block_header = self.find_next_block_header(&last_known_hash)?;
+            while next_block_header.hash != getheaders_message.stop_hash {
+                headers.push(next_block_header.clone());
+                next_block_header = self.find_next_block_header(&next_block_header.hash())?;
+                count += 1;
+                if count >= 2000 {
+                    break;
+                }
+            }
+            return Some(Headers {
+                count: headers.len(),
+                block_headers: headers,
+            });
+        };
 
         let mut next_block_header = self.find_next_block_header(&last_known_hash)?;
 
