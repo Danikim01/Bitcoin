@@ -20,6 +20,7 @@ pub enum TransactionRole {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TransactionDisplayInfo {
     pub role: TransactionRole,
+    pub origin: TransactionOrigin,
     pub date: String,
     pub amount: i64,
     pub hash: HashId,
@@ -133,7 +134,7 @@ pub fn update_overview_transactions(
 
     let tx_widget = get_transaction_widget(transaction, origin)?;
 
-    append_to_limited_container(&overview_transaction_container, &tx_widget, 10);
+    append_to_limited_container(&overview_transaction_container, &tx_widget, 20);
 
     Ok(())
 }

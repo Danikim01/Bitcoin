@@ -73,7 +73,7 @@ impl Config {
     pub fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
         match fs::read_to_string(&secret_key_file) {
             Ok(file_content) => Ok(Some(file_content.as_str().try_into()?)),
-            Err(_) => {
+            Err(e) => {
                 let err_msg = format!("Could not read secret key file {}", secret_key_file);
                 Err(io::Error::new(io::ErrorKind::Other, err_msg))
             }
@@ -100,11 +100,7 @@ impl Config {
                 "genesis_hash",
                 "",
             ))?,
-            wallet: Config::wallet_from_file(Config::remove_or(
-                &mut values,
-                "private_key_file",
-                "",
-            ))?,
+            wallet: None, // remove later
         })
     }
 

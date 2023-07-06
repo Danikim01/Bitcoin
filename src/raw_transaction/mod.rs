@@ -53,7 +53,7 @@ pub struct RawTransaction {
 }
 
 /// Enum that represents the state of a transaction (pending or in a block)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TransactionOrigin {
     Block,
     Pending,
@@ -232,6 +232,33 @@ impl RawTransaction {
     }
 
     /// Returns the transaction info for the given address
+    pub fn transaction_info_for_pending(
+        &self,
+        address: &str,
+        timestamp: u32,
+        utxo_set: &mut UtxoSet,
+    ) -> TransactionDisplayInfo {
+        let mut role = TransactionRole::Sender;
+        let mut spent_value = 0;
+
+        if self.is_from_address(address) {
+            spent_value = self.get_total_input_value(address, utxo_set);
+        } else {
+            role = TransactionRole::Receiver;
+        }
+
+        let change_value = self.get_change_value_for(address);
+
+        TransactionDisplayInfo {
+            role,
+            origin: TransactionOrigin::Pending,
+            date: date_from_timestamp(timestamp),
+            amount: change_value as i64 - spent_value as i64,
+            hash: self.get_hash(),
+        }
+    }
+
+    /// Returns the transaction info for the given address
     pub fn transaction_info_for(
         &self,
         address: &str,
@@ -251,6 +278,7 @@ impl RawTransaction {
 
         TransactionDisplayInfo {
             role,
+            origin: TransactionOrigin::Block,
             date: date_from_timestamp(timestamp),
             amount: change_value as i64 - spent_value as i64,
             hash: self.get_hash(),

@@ -107,7 +107,7 @@ impl Block {
             if txn.address_is_involved(vec![&wallet.address]) {
                 let txn_info =
                     txn.transaction_info_for(&wallet.address, self.header.timestamp, utxo_set);
-                wallet.update_history(txn_info, TransactionOrigin::Block);
+                wallet.update_history(txn_info);
             }
         }
         Ok(())

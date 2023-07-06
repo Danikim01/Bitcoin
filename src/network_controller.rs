@@ -12,7 +12,7 @@ use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
-use crate::wallet::Wallet;
+use crate::wallet::{self, Wallet};
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -53,8 +53,7 @@ impl NetworkController {
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
-        let (active_wallet, wallets) = Wallet::init_all(&config)?;
-        Wallet::display_in_ui(&active_wallet, Some(&ui_sender));
+        let (active_wallet, wallets) = Wallet::init_all(&config, Some(&ui_sender))?;
         Ok(Self {
             headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
             tallest_header: genesis_header,
@@ -299,6 +298,7 @@ impl NetworkController {
     }
 
     fn get_all_addresses(&self) -> Vec<&str> {
+        // this can probably be done by getting all keys from the hashmap
         let mut addresses: Vec<&str> = vec![];
         for wallet in self.wallets.values() {
             addresses.push(&wallet.address);
@@ -328,12 +328,12 @@ impl NetworkController {
                 Some(w) => w,
                 None => return Err(io::Error::new(io::ErrorKind::Other, "Wallet not found")),
             };
-            let tx_info = transaction.transaction_info_for(
+            let tx_info = transaction.transaction_info_for_pending(
                 &self.active_wallet,
                 Utc::now().timestamp() as u32,
                 &mut self.utxo_set,
             );
-            wallet.update_history(tx_info, TransactionOrigin::Pending);
+            wallet.update_history(tx_info);
         }
 
         self.tx_read.insert(tx_hash, ());
@@ -472,30 +472,63 @@ impl OuterNetworkController {
                     block_count = curr_block_count;
                 }
 
-                // THIS SHOULN'T BE HERE, IT IS JUST FOR TESTING
+                // THIS MAY NOT END UP HERE, IT IS JUST FOR TESTING
                 let curr_active_wallet = controller.active_wallet.clone();
                 controller.update_ui_balance()?;
-                Wallet::display_in_ui(&curr_active_wallet, Some(&ui_sender));
 
                 // get last 10 transactions of wallet history
                 let wallet = match controller.wallets.get(&curr_active_wallet) {
                     Some(w) => w,
                     None => {
+                        // should never happen, not throwing error because it would crash the entire program
                         continue;
                     }
                 };
-                let transactions = wallet.get_last_n_transactions(10);
+                let transactions = wallet.get_last_n_transactions(20);
+
+                // change for later, send them all at once
                 for tx_info in transactions {
+                    let origin = tx_info.origin;
                     _ = ui_sender
-                        .send(GtkMessage::UpdateOverviewTransactions((
-                            tx_info,
-                            TransactionOrigin::Block,
-                        )))
+                        .send(GtkMessage::UpdateOverviewTransactions((tx_info, origin)))
                         .map_err(to_io_err);
                 }
                 // END OF TESTING CODE
             }
         });
+        Ok(())
+    }
+
+    fn handle_ui_change_active_wallet(
+        t_inner: Arc<RwLock<NetworkController>>,
+        wallet: String,
+    ) -> io::Result<()> {
+        let mut inner_lock = t_inner.write().map_err(to_io_err)?;
+        inner_lock.active_wallet = wallet;
+
+        // update immediately, not efficient yet running only once per wallet change should be fine
+        let curr_active_wallet = inner_lock.active_wallet.clone();
+        inner_lock.update_ui_balance()?;
+
+        // get last 10 transactions of wallet history
+        let wallet = match inner_lock.wallets.get(&curr_active_wallet) {
+            Some(w) => w,
+            None => {
+                // should never happen, not throwing error because it would crash the entire program
+                return Ok(());
+            }
+        };
+        let transactions = wallet.get_last_n_transactions(20);
+
+        // change for later, send them all at once
+        for tx_info in transactions {
+            let origin = tx_info.origin;
+            _ = inner_lock
+                .ui_sender
+                .send(GtkMessage::UpdateOverviewTransactions((tx_info, origin)))
+                .map_err(to_io_err);
+        }
+
         Ok(())
     }
 
@@ -524,6 +557,9 @@ impl OuterNetworkController {
                             transaction_info,
                             config.clone(),
                         )
+                    }
+                    ModelRequest::ChangeActiveWallet(wallet) => {
+                        Self::handle_ui_change_active_wallet(t_inner, wallet)
                     }
                 }?;
             }

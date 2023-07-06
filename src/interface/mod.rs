@@ -12,6 +12,7 @@ use std::sync::mpsc::Sender;
 
 use self::components::table::table_append_data;
 use self::components::table::{GtkTable, GtkTableData};
+use self::components::wallet_switcher::append_wallet;
 pub mod components;
 
 /// Enum with messages from the model to the interface
@@ -25,6 +26,8 @@ pub enum GtkMessage {
     UpdateTable((GtkTable, GtkTableData)),
     /// optional new status, fraction
     UpdateProgressBar((Option<String>, f64)),
+    /// wallet address
+    AddWalletEntry(String),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -32,6 +35,7 @@ pub type RecipientDetails = (String, String, u64); // (address, label, value)
 /// Enum with requests from the interface to the model
 pub enum ModelRequest {
     GenerateTransaction(TransactionInfo),
+    ChangeActiveWallet(String), // wallet address
 }
 
 /// called from the model, to update the status bar in the ui
@@ -115,6 +119,9 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                         progress_bar.set_text(Some(new_status.as_str()));
                     }
                 }
+            }
+            GtkMessage::AddWalletEntry(wallet) => {
+                append_wallet(wallet, builder_aux);
             }
         }
 

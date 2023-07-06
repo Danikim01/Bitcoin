@@ -57,12 +57,8 @@ impl Wallet {
         history
     }
 
-    pub fn update_history(
-        &mut self,
-        transaction_info: TransactionDisplayInfo,
-        origin: TransactionOrigin,
-    ) {
-        if origin == TransactionOrigin::Block {
+    pub fn update_history(&mut self, transaction_info: TransactionDisplayInfo) {
+        if transaction_info.origin == TransactionOrigin::Block {
             // try to remove the pending transaction from the history
             // completely not optimal as it could be a hashmap
             for (i, tx) in self.history.iter().enumerate() {
@@ -112,7 +108,10 @@ impl Wallet {
     /// Iterates all files in the wallet directory
     /// returns the hashmap of wallets with their addresses as keys
     /// and the first wallet as the default wallet
-    pub fn init_all(config: &Config) -> io::Result<(String, HashMap<String, Wallet>)> {
+    pub fn init_all(
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+    ) -> io::Result<(String, HashMap<String, Wallet>)> {
         let mut wallets: HashMap<String, Wallet> = HashMap::new();
 
         // read wallets from directory
@@ -126,20 +125,25 @@ impl Wallet {
                 };
                 let wallet = Config::wallet_from_file(path_string)?;
                 if let Some(w) = wallet {
+                    if let Some(sender) = ui_sender {
+                        let _ = sender
+                            .send(GtkMessage::AddWalletEntry(w.address.clone()))
+                            .map_err(to_io_err);
+                    }
                     wallets.insert(w.address.clone(), w);
                 }
             }
         }
 
-        // if wallets is still empty, create a new wallet
+        // if wallets is still empty, create a new wallet?
 
         // set active address to default specified in config, or the first wallet found
         let active_wallet = match wallets.get_key_value(&config.get_default_wallet_addr()) {
             Some((k, _)) => k.clone(),
             None => {
                 // make any wallet the active wallet
-                let foo = wallets.iter().next();
-                match foo {
+                let any = wallets.iter().next();
+                match any {
                     Some((k, _)) => k.clone(),
                     None => {
                         // return error, this should never happen

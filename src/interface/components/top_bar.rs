@@ -75,6 +75,6 @@ pub fn init(builder: gtk::Builder) -> io::Result<()> {
     register_btn_panel_changer(builder.clone(), transactions_btn, "transactions_panel")?;
 
     set_default_panel(builder, "overview_panel")?;
-
+    
     Ok(())
 }
