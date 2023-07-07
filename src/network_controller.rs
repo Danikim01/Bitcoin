@@ -81,14 +81,6 @@ impl NetworkController {
         })
     }
 
-    fn find_next_block_header(&self, block_header_hash: &HashId) -> Option<BlockHeader> {
-        for block_header in self.headers.values() {
-            if block_header.prev_block_hash == *block_header_hash {
-                return Some(block_header.clone());
-            }
-        }
-        return None;
-    }
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
         let mut headers: Vec<BlockHeader> = Vec::new();
@@ -97,7 +89,7 @@ impl NetworkController {
             None => return None, // No hay hashes disponibles, devolver None
         };
         // if next block header is None, return empty Headers message
-        if self.find_next_block_header(&last_known_hash).is_none() {
+        if self.headers.get_next_header(&last_known_hash).is_none() {
             return Some(Headers {
                 count: 0,
                 block_headers: headers,
@@ -111,10 +103,10 @@ impl NetworkController {
         let max_blocks = if getheaders_message.stop_hash == stop_hash {
             2000
         } else {
-            let mut next_block_header = self.find_next_block_header(&last_known_hash)?;
+            let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
             while next_block_header.hash != getheaders_message.stop_hash {
                 headers.push(next_block_header.clone());
-                next_block_header = self.find_next_block_header(&next_block_header.hash())?;
+                next_block_header = self.headers.get_next_header(&next_block_header.hash())?;
                 count += 1;
                 if count >= 2000 {
                     break;
@@ -126,11 +118,11 @@ impl NetworkController {
             });
         };
 
-        let mut next_block_header = self.find_next_block_header(&last_known_hash)?;
+        let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
 
         while count < max_blocks {
             headers.push(next_block_header.clone());
-            next_block_header = self.find_next_block_header(&next_block_header.hash())?;
+            next_block_header = self.headers.get_next_header(&next_block_header.hash())?;
             count += 1;
         }
 

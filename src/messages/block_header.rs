@@ -212,6 +212,15 @@ impl HeaderSet{
     }
 
 
+    pub fn get_next_header(&self, hash: &HashId) -> Option<&BlockHeader> {
+        if let Some(header) = self.headers.get(hash) {
+            if let Some(next_hash) = header.next_block_hash {
+                return self.headers.get(&next_hash);
+            }
+        }
+        None
+    }
+
     pub fn values(&self) -> std::collections::hash_map::Values<'_, HashId, BlockHeader> {
         self.headers.values()
     }
