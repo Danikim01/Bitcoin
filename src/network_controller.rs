@@ -68,7 +68,7 @@ impl NetworkController {
         };
         Wallet::display_in_ui(&wallet, Some(&ui_sender));
         Ok(Self {
-            headers: HeaderSet::new(),
+            headers: HeaderSet::with(genesis_header.hash(), genesis_header),
             tallest_header: genesis_header,
             valid_blocks: BlockSet::new(),
             blocks_on_hold: BlockSet::new(),

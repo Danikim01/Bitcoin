@@ -196,6 +196,15 @@ impl HeaderSet{
         }
     }
 
+    pub fn with(hash: HashId,header: BlockHeader) -> Self{
+        let mut headers = HashMap::new();
+        headers.insert(hash, header);
+
+        Self{
+            headers
+        }
+    }
+
     pub fn insert(&mut self, hash: HashId,header: BlockHeader){
         if let Some(prev_header) = self.headers.get_mut(&header.prev_block_hash){
             prev_header.next_block_hash = Some(header.hash());
