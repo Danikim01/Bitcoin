@@ -2,7 +2,7 @@ use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
-mod block_header;
+pub(crate) mod block_header;
 mod block_message;
 pub(crate) mod constants;
 mod getdata_message;

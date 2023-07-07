@@ -3,6 +3,8 @@ use crate::io::Cursor;
 use crate::messages::{utility::*, HashId, Hashable};
 use crate::utility::{double_hash, to_io_err};
 use std::io::{self, ErrorKind::InvalidData, Write};
+use bitcoin_hashes::sha1::Hash;
+use gtk::Entry;
 
 /// Block header struct as defined in the Bitcoin documentation.
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
@@ -188,19 +190,35 @@ pub struct HeaderSet{
 }
 
 impl HeaderSet{
-    fn new() -> Self{
+    pub fn new() -> Self{
         Self{
             headers: HashMap::new()
         }
     }
 
-    fn push(&mut self, header: BlockHeader){
+    pub fn insert(&mut self, hash: HashId,header: BlockHeader){
         if let Some(prev_header) = self.headers.get_mut(&header.prev_block_hash){
             prev_header.next_block_hash = Some(header.hash());
         }
-        self.headers.insert(header.hash, header);
+        self.headers.insert(hash, header);
     }
 
+    pub fn entry(&mut self, hash: HashId) -> std::collections::hash_map::Entry<'_, HashId, BlockHeader> {
+        self.headers.entry(hash)
+    }
+
+    pub fn get(&self, hash: &HashId) -> Option<&BlockHeader> {
+        self.headers.get(hash)
+    }
+
+
+    pub fn values(&self) -> std::collections::hash_map::Values<'_, HashId, BlockHeader> {
+        self.headers.values()
+    }
+
+    pub fn len(&self) -> usize {
+        self.headers.len()
+    }
 }
 
 #[cfg(test)]
@@ -285,8 +303,8 @@ mod tests {
             height: 0,
         };
 
-        headerset.push(child_header);
-        headerset.push(parent_header);
+        headerset.insert(child_header.hash,child_header);
+        headerset.insert(parent_header.hash,parent_header);
 
         assert_eq!(headerset.headers.get(&child_header.hash()).unwrap().next_block_hash, Some(parent_header.hash()));
     }

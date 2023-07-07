@@ -8,6 +8,7 @@ use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
     MessageHeader, Serialize,
 };
+use crate::messages::block_header::HeaderSet;
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
@@ -36,7 +37,7 @@ pub type BlockSet = HashMap<HashId, Block>;
 
 /// Structs of the network controller (main controller of the program)
 pub struct NetworkController {
-    headers: HashMap<HashId, BlockHeader>,
+    headers: HeaderSet,
     tallest_header: BlockHeader,
     valid_blocks: BlockSet,   // valid blocks downloaded so far
     blocks_on_hold: BlockSet, // downloaded blocks for which we don't have the previous block
@@ -67,7 +68,7 @@ impl NetworkController {
         };
         Wallet::display_in_ui(&wallet, Some(&ui_sender));
         Ok(Self {
-            headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
+            headers: HeaderSet::new(),
             tallest_header: genesis_header,
             valid_blocks: BlockSet::new(),
             blocks_on_hold: BlockSet::new(),
