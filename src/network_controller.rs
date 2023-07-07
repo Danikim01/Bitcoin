@@ -319,12 +319,10 @@ impl NetworkController {
                 }
                 None => continue, // ignore header if prev_header is unknown
             }
-            if let Vacant(entry) = self.headers.entry(header.hash()) {
-                new_headers.push(header);
-                entry.insert(header);
-                if header.height > self.tallest_header.height {
-                    self.tallest_header = header
-                }
+            self.headers.insert(header.hash(), header);
+            new_headers.push(header);
+            if header.height > self.tallest_header.height {
+                self.tallest_header = header
             }
         }
 
@@ -474,7 +472,6 @@ impl NetworkController {
         }
         self.request_blocks(Headers::new(missing_blocks.len(), missing_blocks), config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
-
         Ok(())
     }
 }
@@ -667,14 +664,13 @@ impl OuterNetworkController {
             let hash = header.hash();
             drop(inner_read);
             let mut inner_write = t_inner.write().map_err(to_io_err)?;
-            if let Vacant(entry) = inner_write.headers.entry(hash) {
-                header.save_to_file(config.get_headers_file())?;
-                new_headers.push(header);
-                entry.insert(header);
-                if header.height > inner_write.tallest_header.height {
+            inner_write.headers.insert(hash, header);
+            header.save_to_file(config.get_headers_file())?;
+            new_headers.push(header);
+            if header.height > inner_write.tallest_header.height {
                     inner_write.tallest_header = header
-                }
             }
+
             drop(inner_write);
             inner_read = t_inner.read().map_err(to_io_err)?;
         }

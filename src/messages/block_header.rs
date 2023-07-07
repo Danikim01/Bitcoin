@@ -213,6 +213,7 @@ impl HeaderSet{
     }
 
     pub fn entry(&mut self, hash: HashId) -> std::collections::hash_map::Entry<'_, HashId, BlockHeader> {
+
         self.headers.entry(hash)
     }
 
@@ -317,12 +318,14 @@ mod tests {
             timestamp: 0_u32,
             nbits: 0_u32,
             nonce: 0_u32,
-            hash: HashId::default(),
+            hash: HashId::new([1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,9]),
             height: 0,
         };
 
         headerset.insert(child_header.hash,child_header);
         headerset.insert(parent_header.hash,parent_header);
+
+        println!("My child block is: {:?}", headerset.get(&HashId::new([1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5])));
 
         assert_eq!(headerset.headers.get(&child_header.hash()).unwrap().next_block_hash, Some(parent_header.hash()));
     }
