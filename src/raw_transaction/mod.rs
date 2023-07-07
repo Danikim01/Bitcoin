@@ -322,11 +322,11 @@ impl RawTransaction {
                 let index = input.previous_output.index;
                 match utxo_set.set.get_mut(&address) {
                     Some(wallet) => {
-                        wallet.add_spent(utxo_id, index, origin.clone());
+                        wallet.add_spent(utxo_id, index, origin);
                     }
                     None => {
                         let mut wallet = WalletUtxo::new();
-                        wallet.add_spent(utxo_id, index, origin.clone());
+                        wallet.add_spent(utxo_id, index, origin);
                         utxo_set.set.insert(address, wallet);
                     }
                 }
@@ -358,7 +358,7 @@ impl RawTransaction {
                 Some(wallet) => wallet.add_utxo(
                     new_utxo_id,
                     utxo_transaction.clone(),
-                    origin.clone(),
+                    origin,
                     index as u32,
                     ui_sender,
                     active_addr,
@@ -368,7 +368,7 @@ impl RawTransaction {
                     wallet.add_utxo(
                         new_utxo_id,
                         utxo_transaction.clone(),
-                        origin.clone(),
+                        origin,
                         index as u32,
                         None,
                         None,
@@ -389,7 +389,7 @@ impl RawTransaction {
         ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
-        self.generate_utxo_in(utxo_set, origin.clone())?;
+        self.generate_utxo_in(utxo_set, origin)?;
         self.generate_utxo_out(utxo_set, origin, ui_sender, active_addr)?;
 
         Ok(())

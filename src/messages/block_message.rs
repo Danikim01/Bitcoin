@@ -66,30 +66,6 @@ impl Block {
         }
     }
 
-    // MAYBE REMOVE THIS? if you are seeing this outside of multi-wallet branch, remove it
-    fn update_ui(// ui_sender: Option<&SyncSender<GtkMessage>>,
-        // active_addr: Option<&str>,
-        // txn: &RawTransaction,
-        // timestamp: u32,
-        // utxo_set: &mut UtxoSet,
-    ) -> io::Result<()> {
-        // if let Some(addr) = active_addr {
-        //     if txn.address_is_involved(addr) {
-        //         let transaction_info: TransactionDisplayInfo =
-        //             txn.transaction_info_for(addr, timestamp, utxo_set);
-        //         if let Some(ui_sender) = ui_sender {
-        //             ui_sender
-        //                 .send(GtkMessage::UpdateOverviewTransactions((
-        //                     transaction_info,
-        //                     TransactionOrigin::Block,
-        //                 )))
-        //                 .map_err(to_io_err)?
-        //         }
-        //     }
-        // }
-        Ok(())
-    }
-
     /// Validates the block by checking the proof of work, merkle root.
     pub fn validate(&self) -> io::Result<()> {
         self.header.validate_proof_of_work()?;

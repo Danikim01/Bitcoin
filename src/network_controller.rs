@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::{GtkMessage, ModelRequest};
 use crate::messages::constants::{
     commands::TX,
@@ -12,7 +13,7 @@ use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
-use crate::wallet::{self, Wallet};
+use crate::wallet::Wallet;
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -322,7 +323,6 @@ impl NetworkController {
         let data = table_data_from_tx(&transaction);
         self.update_ui_table(GtkTable::Transactions, data)?;
 
-        // change to any address of all loaded wallets
         if transaction.address_is_involved(self.get_all_addresses()) {
             let wallet = match self.wallets.get_mut(&self.active_wallet) {
                 Some(w) => w,
@@ -440,60 +440,76 @@ impl OuterNetworkController {
         Ok(Self { inner, ui_sender })
     }
 
+    fn update_ui_headers_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        tallest_header_hash: &mut HashId,
+        headers: Vec<&BlockHeader>,
+    ) {
+        if inner.tallest_header.hash() != *tallest_header_hash {
+            *tallest_header_hash = inner.tallest_header.hash();
+            let data = table_data_from_headers(headers.clone());
+            _ = ui_sender
+                .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
+                .map_err(to_io_err);
+        }
+    }
+
+    fn update_ui_blocks_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        block_count: &mut usize,
+        headers: Vec<&BlockHeader>,
+    ) {
+        let curr_block_count = inner.valid_blocks.len();
+        if curr_block_count > *block_count {
+            let blocks = inner.get_best_blocks(headers);
+            let data = table_data_from_blocks(blocks);
+            _ = ui_sender
+                .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
+                .map_err(to_io_err);
+
+            *block_count = curr_block_count;
+        }
+    }
+
+    fn update_ui_overview_tx_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        txs_on_overview: &mut Vec<TransactionDisplayInfo>,
+    ) {
+        let curr_active_wallet = inner.active_wallet.clone();
+        _ = inner.update_ui_balance();
+        if let Some(wallet) = inner.wallets.get(&curr_active_wallet) {
+            let transactions = wallet.get_last_n_transactions(20);
+            if transactions != *txs_on_overview {
+                *txs_on_overview = transactions.clone();
+                _ = ui_sender.send(GtkMessage::UpdateOverviewTransactions(transactions));
+            }
+        }
+    }
+
     fn update_ui_data_periodically(&self) -> io::Result<()> {
         let inner = self.inner.clone();
-        let ui_sender = self.ui_sender.clone();
+        let ui_sender: SyncSender<GtkMessage> = self.ui_sender.clone();
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
             let mut block_count = 0;
+            let mut txs_on_overview: Vec<TransactionDisplayInfo> = Vec::new();
             loop {
                 thread::sleep(std::time::Duration::from_secs(10));
-                let controller = inner.read().map_err(to_io_err)?;
-                let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
+                let inner: RwLockReadGuard<'_, NetworkController> =
+                    inner.read().map_err(to_io_err)?;
+                let headers: Vec<&BlockHeader> = inner.get_best_headers(100);
 
-                if controller.tallest_header.hash() != tallest_header_hash {
-                    tallest_header_hash = controller.tallest_header.hash();
-                    // update ui with last 100 headers
-                    let data = table_data_from_headers(headers.clone());
-                    ui_sender
-                        .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
-                        .map_err(to_io_err)?;
-                }
-
-                let curr_block_count = controller.valid_blocks.len();
-                if curr_block_count > block_count {
-                    // update ui with last best blocks
-                    let blocks = controller.get_best_blocks(headers);
-                    let data = table_data_from_blocks(blocks);
-                    ui_sender
-                        .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
-                        .map_err(to_io_err)?;
-
-                    block_count = curr_block_count;
-                }
-
-                // THIS MAY NOT END UP HERE, IT IS JUST FOR TESTING
-                let curr_active_wallet = controller.active_wallet.clone();
-                controller.update_ui_balance()?;
-
-                // get last 10 transactions of wallet history
-                let wallet = match controller.wallets.get(&curr_active_wallet) {
-                    Some(w) => w,
-                    None => {
-                        // should never happen, not throwing error because it would crash the entire program
-                        continue;
-                    }
-                };
-                let transactions = wallet.get_last_n_transactions(20);
-
-                // change for later, send them all at once
-                for tx_info in transactions {
-                    let origin = tx_info.origin;
-                    _ = ui_sender
-                        .send(GtkMessage::UpdateOverviewTransactions((tx_info, origin)))
-                        .map_err(to_io_err);
-                }
-                // END OF TESTING CODE
+                Self::update_ui_headers_periodically(
+                    &inner,
+                    &ui_sender,
+                    &mut tallest_header_hash,
+                    headers.clone(),
+                );
+                Self::update_ui_blocks_periodically(&inner, &ui_sender, &mut block_count, headers);
+                Self::update_ui_overview_tx_periodically(&inner, &ui_sender, &mut txs_on_overview)
             }
         });
         Ok(())
@@ -506,27 +522,14 @@ impl OuterNetworkController {
         let mut inner_lock = t_inner.write().map_err(to_io_err)?;
         inner_lock.active_wallet = wallet;
 
-        // update immediately, not efficient yet running only once per wallet change should be fine
         let curr_active_wallet = inner_lock.active_wallet.clone();
         inner_lock.update_ui_balance()?;
 
-        // get last 10 transactions of wallet history
-        let wallet = match inner_lock.wallets.get(&curr_active_wallet) {
-            Some(w) => w,
-            None => {
-                // should never happen, not throwing error because it would crash the entire program
-                return Ok(());
-            }
-        };
-        let transactions = wallet.get_last_n_transactions(20);
-
-        // change for later, send them all at once
-        for tx_info in transactions {
-            let origin = tx_info.origin;
+        if let Some(wallet) = inner_lock.wallets.get(&curr_active_wallet) {
+            let transactions = wallet.get_last_n_transactions(20);
             _ = inner_lock
                 .ui_sender
-                .send(GtkMessage::UpdateOverviewTransactions((tx_info, origin)))
-                .map_err(to_io_err);
+                .send(GtkMessage::UpdateOverviewTransactions(transactions));
         }
 
         Ok(())
@@ -576,11 +579,9 @@ impl OuterNetworkController {
         if inner_read.valid_blocks.contains_key(&block.hash())
             || inner_read.blocks_on_hold.contains_key(&block.hash())
         {
-            // println!("This block has already been received before");
             return Ok(());
         }
         if block.validate().is_err() {
-            // println!("invalid block, discarting");
             return Ok(());
         }
         block.save_to_file(config.get_blocks_file())?;
@@ -767,7 +768,7 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
-        self.sync(config)?;
-        self.update_ui_data_periodically()
+        self.update_ui_data_periodically()?;
+        self.sync(config)
     }
 }

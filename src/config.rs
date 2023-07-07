@@ -18,7 +18,6 @@ pub struct Config {
     tcp_timeout_seconds: u64,
     logger: Logger,
     genesis_hash: HashId,
-    wallet: Option<Wallet>,
 }
 
 impl Config {
@@ -54,10 +53,6 @@ impl Config {
         self.genesis_hash
     }
 
-    pub fn get_wallet(&self) -> Option<Wallet> {
-        self.wallet.clone()
-    }
-
     pub fn get_wallets_dir(&self) -> String {
         "./wallets".to_string()
     }
@@ -73,7 +68,7 @@ impl Config {
     pub fn wallet_from_file(secret_key_file: String) -> io::Result<Option<Wallet>> {
         match fs::read_to_string(&secret_key_file) {
             Ok(file_content) => Ok(Some(file_content.as_str().try_into()?)),
-            Err(e) => {
+            Err(_e) => {
                 let err_msg = format!("Could not read secret key file {}", secret_key_file);
                 Err(io::Error::new(io::ErrorKind::Other, err_msg))
             }
@@ -100,7 +95,6 @@ impl Config {
                 "genesis_hash",
                 "",
             ))?,
-            wallet: None, // remove later
         })
     }
 
