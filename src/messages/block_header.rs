@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::io::Cursor;
 use crate::messages::{utility::*, HashId, Hashable};
 use crate::utility::{double_hash, to_io_err};
@@ -9,6 +10,7 @@ use std::io::{self, ErrorKind::InvalidData, Write};
 pub struct BlockHeader {
     version: i32,
     pub prev_block_hash: HashId,
+    pub next_block_hash: Option<HashId>,
     pub merkle_root_hash: HashId,
     pub timestamp: u32,
     nbits: u32,
@@ -21,6 +23,7 @@ impl BlockHeader {
     pub fn new(
         version: i32,
         prev_block_hash: HashId,
+        next_block_hash: Option<HashId>,
         merkle_root_hash: HashId,
         timestamp: u32,
         nbits: u32,
@@ -43,6 +46,7 @@ impl BlockHeader {
             version,
             prev_block_hash,
             merkle_root_hash,
+            next_block_hash,
             timestamp,
             nbits,
             nonce,
@@ -51,7 +55,7 @@ impl BlockHeader {
         }
     }
 
-    
+
 
 
     pub fn genesis(hash: HashId) -> Self {
@@ -59,6 +63,7 @@ impl BlockHeader {
         Self {
             version: 0_i32,
             prev_block_hash: HashId::default(),
+            next_block_hash: None,
             merkle_root_hash: HashId::default(),
             timestamp: 0_u32,
             nbits: 0_u32,
@@ -80,6 +85,7 @@ impl BlockHeader {
         let actual_header = BlockHeader::new(
             version,
             prev_block_hash,
+            None,
             merkle_root_hash,
             timestamp,
             nbits,
@@ -177,6 +183,26 @@ impl Hashable for BlockHeader {
     }
 }
 
+pub struct HeaderSet{
+    headers: HashMap<HashId, BlockHeader>
+}
+
+impl HeaderSet{
+    fn new() -> Self{
+        Self{
+            headers: HashMap::new()
+        }
+    }
+
+    fn push(&mut self, header: BlockHeader){
+        if let Some(prev_header) = self.headers.get_mut(&header.prev_block_hash){
+            prev_header.next_block_hash = Some(header.hash());
+        }
+        self.headers.insert(header.hash, header);
+    }
+
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,5 +265,29 @@ mod tests {
         assert_eq!(block_header.timestamp, 1681095679);
         assert_eq!(block_header.nbits, 422120062);
         assert_eq!(block_header.nonce, 1823431201);
+    }
+
+
+    #[test]
+    fn test_push_headers_to_headerset(){
+        let mut headerset = HeaderSet::new();
+        let child_header = BlockHeader::genesis(HashId::new([1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5]));
+
+        let parent_header = BlockHeader{
+            version: 0_i32,
+            prev_block_hash: child_header.hash(),
+            next_block_hash: None,
+            merkle_root_hash: HashId::default(),
+            timestamp: 0_u32,
+            nbits: 0_u32,
+            nonce: 0_u32,
+            hash: HashId::default(),
+            height: 0,
+        };
+
+        headerset.push(child_header);
+        headerset.push(parent_header);
+
+        assert_eq!(headerset.headers.get(&child_header.hash()).unwrap().next_block_hash, Some(parent_header.hash()));
     }
 }
