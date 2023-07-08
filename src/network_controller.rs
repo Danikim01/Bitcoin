@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::interface::{GtkMessage, ModelRequest};
+use crate::messages::block_header::HeaderSet;
 use crate::messages::constants::{
     commands::TX,
     config::{MAGIC, QUIET, VERBOSE},
@@ -8,7 +9,6 @@ use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
     MessageHeader, Serialize,
 };
-use crate::messages::block_header::HeaderSet;
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
@@ -80,7 +80,6 @@ impl NetworkController {
             tx_read: HashMap::new(),
         })
     }
-
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
         let mut headers: Vec<BlockHeader> = Vec::new();
@@ -668,7 +667,7 @@ impl OuterNetworkController {
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
             if header.height > inner_write.tallest_header.height {
-                    inner_write.tallest_header = header
+                inner_write.tallest_header = header
             }
 
             drop(inner_write);
@@ -787,5 +786,53 @@ impl OuterNetworkController {
         self.recv_node_messages(node_receiver, config.clone())?;
         self.sync(config)?;
         self.update_ui_data_periodically()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::messages::block_header;
+
+    use super::*;
+    use gtk::glib;
+    use std::path::PathBuf;
+    use std::sync::mpsc::SyncSender;
+
+    #[test]
+    fn test_handle_getheaders_message() {
+        // Create a test NetworkController instance
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
+
+        let config = Config::from_file(config_path).unwrap();
+        let mut network_controller =
+            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        network_controller.start_sync(&config);
+
+        let block_header_hashes = vec![config.get_genesis()];
+        let getheaders_message = GetHeader {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes,
+            stop_hash: HashId {
+                hash: [
+                    69, 36, 173, 236, 194, 35, 82, 55, 18, 238, 17, 97, 150, 136, 232, 247, 203,
+                    192, 154, 69, 33, 156, 91, 217, 99, 186, 219, 190, 0, 0, 0, 0,
+                ],
+            },
+        };
+
+        //test handle_getheaders_message
+        let headers = network_controller
+            .handle_getheaders_message(getheaders_message)
+            .unwrap();
+
+        println!("Headers: {:?}", headers);
+
+        assert_eq!(headers.count, 1667);
     }
 }
