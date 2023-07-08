@@ -797,6 +797,36 @@ mod tests {
     use gtk::glib;
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
+    #[test]
+    fn test_handle_getheaders_message_genesis() {
+        // Create a test NetworkController instance
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
+
+        let config = Config::from_file(config_path).unwrap();
+        let mut network_controller =
+            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        network_controller.start_sync(&config);
+
+        let block_header_hashes = vec![config.get_genesis()];
+        let getheaders_message = GetHeader {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes,
+            stop_hash: config.get_genesis(),
+        };
+
+        //test handle_getheaders_message
+        let headers = network_controller
+            .handle_getheaders_message(getheaders_message)
+            .unwrap();
+
+        assert_eq!(headers.count, 2000);
+    }
 
     #[test]
     fn test_handle_getheaders_message() {
@@ -831,7 +861,7 @@ mod tests {
             .handle_getheaders_message(getheaders_message)
             .unwrap();
 
-        println!("Headers: {:?}", headers);
+        //println!("Headers: {:?}", headers);
 
         assert_eq!(headers.count, 1667);
     }
