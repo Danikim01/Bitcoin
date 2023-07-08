@@ -817,10 +817,9 @@ mod tests {
             version: 70015,
             hash_count: 1,
             block_header_hashes,
-            stop_hash: config.get_genesis(),
+            stop_hash: HashId { hash: [0u8; 32] },
         };
 
-        //test handle_getheaders_message
         let headers = network_controller
             .handle_getheaders_message(getheaders_message)
             .unwrap();
@@ -829,7 +828,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_getheaders_message() {
+    fn test_gethandle_message_until_stophash_from_hash() {
         // Create a test NetworkController instance
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
         let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
@@ -843,26 +842,64 @@ mod tests {
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
         network_controller.start_sync(&config);
 
-        let block_header_hashes = vec![config.get_genesis()];
+        let start_hash_id = HashId {
+            hash: [
+                69, 36, 173, 236, 194, 35, 82, 55, 18, 238, 17, 97, 150, 136, 232, 247, 203, 192,
+                154, 69, 33, 156, 91, 217, 99, 186, 219, 190, 0, 0, 0, 0,
+            ],
+        };
+
+        let block_header_hashes = vec![start_hash_id];
         let getheaders_message = GetHeader {
             version: 70015,
             hash_count: 1,
             block_header_hashes,
             stop_hash: HashId {
                 hash: [
-                    69, 36, 173, 236, 194, 35, 82, 55, 18, 238, 17, 97, 150, 136, 232, 247, 203,
-                    192, 154, 69, 33, 156, 91, 217, 99, 186, 219, 190, 0, 0, 0, 0,
+                    21, 46, 64, 71, 214, 53, 190, 154, 214, 175, 106, 193, 63, 2, 161, 224, 9, 192,
+                    11, 245, 202, 187, 120, 34, 61, 30, 86, 44, 0, 0, 0, 0,
                 ],
             },
         };
 
-        //test handle_getheaders_message
         let headers = network_controller
             .handle_getheaders_message(getheaders_message)
             .unwrap();
 
-        //println!("Headers: {:?}", headers);
+        //println!("headers: {:?}", headers);
+        assert_eq!(headers.count, 2);
+    }
 
-        assert_eq!(headers.count, 1667);
+    #[test]
+    fn test_handle_getheaders_message_unknown_hash() {
+        // Create a test NetworkController instance
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
+
+        let config = Config::from_file(config_path).unwrap();
+        let mut network_controller =
+            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        network_controller.start_sync(&config);
+
+        let unknown_hash = HashId { hash: [1; 32] };
+
+        let block_header_hashes = vec![unknown_hash];
+        let getheaders_message = GetHeader {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes,
+            stop_hash: HashId { hash: [0u8; 32] },
+        };
+
+        let headers = network_controller
+            .handle_getheaders_message(getheaders_message)
+            .unwrap();
+
+        assert_eq!(headers.count, 0);
+        assert_eq!(headers.block_headers.len(), 0);
     }
 }
