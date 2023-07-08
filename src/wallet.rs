@@ -16,7 +16,8 @@ use gtk::glib::SyncSender;
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
 use std::collections::HashMap;
-use std::io;
+use std::fs::DirEntry;
+use std::io::{self, Write};
 use std::str::FromStr;
 
 fn hash_address(address: &str) -> io::Result<Vec<u8>> {
@@ -83,7 +84,7 @@ impl Wallet {
     }
 
     /// Creates a new Wallet with a random secret key and address.
-    pub fn _new() -> Self {
+    pub fn new() -> Self {
         let secp = Secp256k1::new();
         let (sk, _addr) = secp.generate_keypair(&mut OsRng);
         Self {
@@ -91,6 +92,38 @@ impl Wallet {
             address: Self::get_address_from_secret_key(&sk),
             history: Vec::new(),
         }
+    }
+
+    /// Saves a wallet to a file in the wallets directory.
+    fn save_to_disk(&self, config: &Config) -> io::Result<()> {
+        let wallets_dir = config.get_wallets_dir();
+        let file_name = format!("{}.raw", self.address);
+        let file_path = format!("{}/{}", wallets_dir, file_name);
+        let file = std::fs::File::create(file_path)?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        let secret_key = self.secret_key.display_secret().to_string();
+        writer.write_all(secret_key.as_bytes())
+    }
+
+    fn create_and_save(
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+    ) -> io::Result<Self> {
+        let wallet = Wallet::new();
+        if let Some(sender) = ui_sender {
+            _ = sender.send(GtkMessage::CreateNotification((
+                    gtk::MessageType::Info,
+                    "New wallet created".to_string(),
+                    format!(
+                        "No wallet found, created new wallet of address: {}\nStored on wallets directory",
+                        wallet.address
+                    ),
+                )));
+            Self::update_ui_wallet_entry(sender, &wallet.address, true)
+        }
+        wallet.save_to_disk(config)?;
+        Ok(wallet)
     }
 
     pub fn update_ui_wallet_entry(
@@ -106,6 +139,33 @@ impl Wallet {
             .map_err(to_io_err);
     }
 
+    fn from_dir_entry(
+        file: DirEntry,
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+        wallets: &mut HashMap<String, Wallet>,
+        active_wallet: &mut String,
+    ) -> io::Result<()> {
+        let path_string = match file.path().to_str() {
+            Some(p) => p.to_string(),
+            None => return Ok(()),
+        };
+        let wallet = Config::wallet_from_file(path_string)?;
+        if let Some(w) = wallet {
+            let mut is_main_wallet = false;
+            if w.address == config.get_default_wallet_addr() || wallets.is_empty() {
+                *active_wallet = w.address.clone();
+                is_main_wallet = true;
+            }
+
+            if let Some(sender) = ui_sender {
+                Self::update_ui_wallet_entry(sender, &w.address, is_main_wallet)
+            }
+            wallets.insert(w.address.clone(), w);
+        }
+        Ok(())
+    }
+
     /// Iterates all files in the wallet directory
     /// returns the hashmap of wallets with their addresses as keys
     /// and the first wallet as the default wallet
@@ -116,32 +176,24 @@ impl Wallet {
         let mut wallets: HashMap<String, Wallet> = HashMap::new();
         let mut active_wallet: String = String::default();
 
-        // read wallets from directory
         let wallets_dir = config.get_wallets_dir();
         let dir = std::fs::read_dir(wallets_dir)?;
         for file in dir.flatten() {
-            let path_string = match file.path().to_str() {
-                Some(p) => p.to_string(),
-                None => continue,
-            };
-            let wallet = Config::wallet_from_file(path_string)?;
-            if let Some(w) = wallet {
-                let mut is_main_wallet = false;
-                if w.address == config.get_default_wallet_addr() {
-                    active_wallet = w.address.clone();
-                    is_main_wallet = true;
-                }
-
-                if let Some(sender) = ui_sender {
-                    Self::update_ui_wallet_entry(sender, &w.address, is_main_wallet)
-                }
-                wallets.insert(w.address.clone(), w);
-            }
+            Self::from_dir_entry(file, config, ui_sender, &mut wallets, &mut active_wallet)?;
         }
 
-        // if wallets is still empty, create a new wallet?
-
-        // if active_wallet is empty, set the first wallet as active
+        if wallets.is_empty() {
+            let wallet = Self::create_and_save(config, ui_sender)?;
+            active_wallet = wallet.address.clone();
+            wallets.insert(wallet.address.clone(), wallet);
+        } else if active_wallet == String::default() {
+            if let Some(first_wallet) = wallets.keys().next() {
+                active_wallet = first_wallet.clone();
+                if let Some(sender) = ui_sender {
+                    Self::update_ui_wallet_entry(sender, first_wallet, true)
+                }
+            }
+        }
 
         Ok((active_wallet, wallets))
     }
@@ -303,7 +355,7 @@ mod tests {
 
     #[test]
     fn create_wallet() {
-        let my_wallet = Wallet::_new();
+        let my_wallet = Wallet::new();
         println!("Wallet: {:?}", my_wallet);
     }
 
