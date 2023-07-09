@@ -1,8 +1,10 @@
 use crate::io::{self, Cursor};
+use crate::messages::constants::commands::TX;
+use crate::messages::constants::config::MAGIC;
 use crate::messages::utility::{
     date_from_timestamp, read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
 };
-use crate::messages::{HashId, Serialize};
+use crate::messages::{HashId, MessageHeader, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
@@ -466,6 +468,23 @@ impl RawTransaction {
         transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
         transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
+    }
+
+    /// build message to be broadcasted
+    pub fn build_message(&self) -> io::Result<Vec<u8>> {
+        let tx_hash = double_hash(&self.serialize());
+
+        let payload = self.serialize();
+        let mut bytes = MessageHeader::new(
+            MAGIC,
+            TX.to_string(),
+            payload.len() as u32,
+            [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
+        )
+        .serialize()?;
+
+        bytes.extend(payload);
+        Ok(bytes)
     }
 }
 

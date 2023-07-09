@@ -1,13 +1,10 @@
 use crate::config::Config;
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::{GtkMessage, ModelRequest};
-use crate::messages::constants::{
-    commands::TX,
-    config::{MAGIC, QUIET, VERBOSE},
-};
+use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
-    MessageHeader, Serialize,
+    Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
@@ -347,19 +344,7 @@ impl NetworkController {
         match tx {
             Ok(tx) => {
                 let tx_hash = double_hash(&tx.serialize());
-
-                let payload = tx.serialize();
-                let mut bytes = MessageHeader::new(
-                    MAGIC,
-                    TX.to_string(),
-                    payload.len() as u32,
-                    [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
-                )
-                .serialize()?;
-
-                bytes.extend(payload);
-
-                // send bytes to all
+                let bytes = tx.build_message()?;
                 self.nodes.send_to_all(&bytes, config)?;
 
                 self.read_pending_tx(tx)?;
