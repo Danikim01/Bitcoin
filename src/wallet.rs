@@ -62,14 +62,14 @@ impl Wallet {
         if transaction_info.origin == TransactionOrigin::Block {
             // try to remove the pending transaction from the history
             // completely not optimal as it could be a hashmap
-            for (i, tx) in self.history.iter().enumerate() {
+            for (i, tx) in self.history.iter_mut().enumerate() {
                 if tx.hash == transaction_info.hash {
-                    self.history[i] = transaction_info;
+                    self.history[i].origin = TransactionOrigin::Block;
                     return;
                 }
             }
         }
-        self.history.push(transaction_info); // pending tx get here yet they don't show on the ui
+        self.history.push(transaction_info);
     }
 
     fn get_address_from_secret_key(secret_key: &SecretKey) -> String {
@@ -339,6 +339,7 @@ impl TryFrom<&str> for Wallet {
 #[cfg(test)]
 mod tests {
     use crate::{
+        interface::components::overview_panel::TransactionRole,
         raw_transaction::{RawTransaction, TransactionOrigin},
         utility::{_decode_hex, _encode_hex},
     };
@@ -479,5 +480,31 @@ mod tests {
 
         let balance = utxo_set.get_wallet_balance(&wallet.address);
         assert_eq!(balance, 1905236 + 10000);
+    }
+
+    #[test]
+    fn test_update_transaction_history_from_pending() {
+        let mut wallet = Wallet {
+            secret_key: SecretKey::new(&mut OsRng),
+            address: "bar".to_string(),
+            history: Vec::new(),
+        };
+
+        let mut transaction_info = TransactionDisplayInfo {
+            role: TransactionRole::Sender,
+            origin: TransactionOrigin::Pending,
+            date: "date".to_string(),
+            amount: 10,
+            hash: HashId::new([0_u8; 32]),
+        };
+
+        wallet.update_history(transaction_info.clone());
+        assert_eq!(wallet.history.len(), 1);
+        assert_eq!(wallet.history[0].origin, TransactionOrigin::Pending);
+
+        transaction_info.origin = TransactionOrigin::Block;
+        wallet.update_history(transaction_info.clone());
+        assert_eq!(wallet.history.len(), 1);
+        assert_eq!(wallet.history[0].origin, TransactionOrigin::Block);
     }
 }

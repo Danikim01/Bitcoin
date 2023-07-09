@@ -80,7 +80,7 @@ impl Block {
         wallets: &mut HashMap<String, Wallet>,
     ) -> io::Result<()> {
         for wallet in wallets.values_mut() {
-            if txn.address_is_involved(vec![&wallet.address]) {
+            if txn.address_is_involved(&wallet.address) {
                 let txn_info =
                     txn.transaction_info_for(&wallet.address, self.header.timestamp, utxo_set);
                 wallet.update_history(txn_info);
@@ -99,7 +99,6 @@ impl Block {
     ) -> io::Result<()> {
         for txn in self.txns.iter() {
             txn.generate_utxo(utxo_set, TransactionOrigin::Block, ui_sender, active_addr)?;
-            // let _ = Self::update_ui(ui_sender, active_addr, txn, self.header.timestamp, utxo_set); // disable this after wallets impl
             self.update_wallets(utxo_set, txn, wallets)?;
         }
         Ok(())

@@ -168,7 +168,7 @@ impl NetworkController {
         if progress == 0.0 {
             progress = 1.0;
         }
-        let msg = format!("Reading block {}", block.header.height);
+        let msg = format!("Received block {}", block.header.height);
         _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
         self.valid_blocks.insert(block.hash(), block);
@@ -298,15 +298,6 @@ impl NetworkController {
         Ok(())
     }
 
-    fn get_all_addresses(&self) -> Vec<&str> {
-        // this can probably be done by getting all keys from the hashmap
-        let mut addresses: Vec<&str> = vec![];
-        for wallet in self.wallets.values() {
-            addresses.push(&wallet.address);
-        }
-        addresses
-    }
-
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
         let tx_hash: HashId = transaction.get_hash();
         if self.tx_read.contains_key(&tx_hash) {
@@ -323,17 +314,17 @@ impl NetworkController {
         let data = table_data_from_tx(&transaction);
         self.update_ui_table(GtkTable::Transactions, data)?;
 
-        if transaction.address_is_involved(self.get_all_addresses()) {
-            let wallet = match self.wallets.get_mut(&self.active_wallet) {
-                Some(w) => w,
-                None => return Err(io::Error::new(io::ErrorKind::Other, "Wallet not found")),
-            };
-            let tx_info = transaction.transaction_info_for_pending(
-                &self.active_wallet,
-                Utc::now().timestamp() as u32,
-                &mut self.utxo_set,
-            );
-            wallet.update_history(tx_info);
+        // have to check for each wallet separately
+        for w in self.wallets.iter_mut() {
+            let (address, wallet) = w;
+            if transaction.address_is_involved(address) {
+                let tx_info = transaction.transaction_info_for_pending(
+                    address,
+                    Utc::now().timestamp() as u32,
+                    &mut self.utxo_set,
+                );
+                wallet.update_history(tx_info);
+            }
         }
 
         self.tx_read.insert(tx_hash, ());
@@ -371,6 +362,7 @@ impl NetworkController {
                 // send bytes to all
                 self.nodes.send_to_all(&bytes, config)?;
 
+                self.read_pending_tx(tx)?;
                 self.notify_ui_message(
                     gtk::MessageType::Info,
                     "Transaction broadcasted",
