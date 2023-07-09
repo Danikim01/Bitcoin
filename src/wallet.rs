@@ -1,6 +1,9 @@
+use crate::config::Config;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::GtkMessage;
 use crate::messages::HashId;
+use crate::raw_transaction::TransactionOrigin;
 use crate::raw_transaction::{
     tx_input::{Outpoint, TxInput, TxInputType},
     tx_output::TxOutput,
@@ -9,10 +12,12 @@ use crate::raw_transaction::{
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Lock, UtxoSet, UtxoTransaction};
 use bitcoin_hashes::{hash160, Hash};
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
-use std::io;
+use std::collections::HashMap;
+use std::fs::DirEntry;
+use std::io::{self, Write};
 use std::str::FromStr;
 
 fn hash_address(address: &str) -> io::Result<Vec<u8>> {
@@ -41,9 +46,32 @@ fn build_p2pkh_script(hashed_pk: Vec<u8>) -> io::Result<Vec<u8>> {
 pub struct Wallet {
     pub secret_key: SecretKey,
     pub address: String,
+    pub history: Vec<TransactionDisplayInfo>,
 }
 
 impl Wallet {
+    pub fn get_last_n_transactions(&self, n: usize) -> Vec<TransactionDisplayInfo> {
+        let mut history = self.history.clone();
+        history.reverse();
+        history.truncate(n);
+        history.reverse();
+        history
+    }
+
+    pub fn update_history(&mut self, transaction_info: TransactionDisplayInfo) {
+        if transaction_info.origin == TransactionOrigin::Block {
+            // try to remove the pending transaction from the history
+            // completely not optimal as it could be a hashmap
+            for (i, tx) in self.history.iter_mut().enumerate() {
+                if tx.hash == transaction_info.hash {
+                    self.history[i].origin = TransactionOrigin::Block;
+                    return;
+                }
+            }
+        }
+        self.history.push(transaction_info);
+    }
+
     fn get_address_from_secret_key(secret_key: &SecretKey) -> String {
         let secp = Secp256k1::new();
         let pubkey = secret_key.public_key(&secp).serialize();
@@ -55,18 +83,6 @@ impl Wallet {
         bs58::encode(input).into_string()
     }
 
-    /// Show wallet address in the UI
-    pub fn display_in_ui(wallet: &Wallet, ui_sender: Option<&Sender<GtkMessage>>) {
-        if let Some(sender) = ui_sender {
-            let _ = sender
-                .send(GtkMessage::UpdateLabel((
-                    "active_address_label".to_string(),
-                    wallet.address.clone(),
-                )))
-                .map_err(to_io_err);
-        }
-    }
-
     /// Creates a new Wallet with a random secret key and address.
     pub fn new() -> Self {
         let secp = Secp256k1::new();
@@ -74,7 +90,112 @@ impl Wallet {
         Self {
             secret_key: sk,
             address: Self::get_address_from_secret_key(&sk),
+            history: Vec::new(),
         }
+    }
+
+    /// Saves a wallet to a file in the wallets directory.
+    fn save_to_disk(&self, config: &Config) -> io::Result<()> {
+        let wallets_dir = config.get_wallets_dir();
+        let file_name = format!("{}.raw", self.address);
+        let file_path = format!("{}/{}", wallets_dir, file_name);
+        let file = std::fs::File::create(file_path)?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        let secret_key = self.secret_key.display_secret().to_string();
+        writer.write_all(secret_key.as_bytes())
+    }
+
+    fn create_and_save(
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+    ) -> io::Result<Self> {
+        let wallet = Wallet::new();
+        if let Some(sender) = ui_sender {
+            _ = sender.send(GtkMessage::CreateNotification((
+                    gtk::MessageType::Info,
+                    "New wallet created".to_string(),
+                    format!(
+                        "No wallet found, created new wallet of address: {}\nStored on wallets directory",
+                        wallet.address
+                    ),
+                )));
+            Self::update_ui_wallet_entry(sender, &wallet.address, true)
+        }
+        wallet.save_to_disk(config)?;
+        Ok(wallet)
+    }
+
+    pub fn update_ui_wallet_entry(
+        sender: &SyncSender<GtkMessage>,
+        address: &str,
+        is_main_wallet: bool,
+    ) {
+        let _ = sender
+            .send(GtkMessage::AddWalletEntry(
+                address.to_string(),
+                is_main_wallet,
+            ))
+            .map_err(to_io_err);
+    }
+
+    fn from_dir_entry(
+        file: DirEntry,
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+        wallets: &mut HashMap<String, Wallet>,
+        active_wallet: &mut String,
+    ) -> io::Result<()> {
+        let path_string = match file.path().to_str() {
+            Some(p) => p.to_string(),
+            None => return Ok(()),
+        };
+        let wallet = Config::wallet_from_file(path_string)?;
+        if let Some(w) = wallet {
+            let mut is_main_wallet = false;
+            if w.address == config.get_default_wallet_addr() || wallets.is_empty() {
+                *active_wallet = w.address.clone();
+                is_main_wallet = true;
+            }
+
+            if let Some(sender) = ui_sender {
+                Self::update_ui_wallet_entry(sender, &w.address, is_main_wallet)
+            }
+            wallets.insert(w.address.clone(), w);
+        }
+        Ok(())
+    }
+
+    /// Iterates all files in the wallet directory
+    /// returns the hashmap of wallets with their addresses as keys
+    /// and the first wallet as the default wallet
+    pub fn init_all(
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+    ) -> io::Result<(String, HashMap<String, Wallet>)> {
+        let mut wallets: HashMap<String, Wallet> = HashMap::new();
+        let mut active_wallet: String = String::default();
+
+        let wallets_dir = config.get_wallets_dir();
+        let dir = std::fs::read_dir(wallets_dir)?;
+        for file in dir.flatten() {
+            Self::from_dir_entry(file, config, ui_sender, &mut wallets, &mut active_wallet)?;
+        }
+
+        if wallets.is_empty() {
+            let wallet = Self::create_and_save(config, ui_sender)?;
+            active_wallet = wallet.address.clone();
+            wallets.insert(wallet.address.clone(), wallet);
+        } else if active_wallet == String::default() {
+            if let Some(first_wallet) = wallets.keys().next() {
+                active_wallet = first_wallet.clone();
+                if let Some(sender) = ui_sender {
+                    Self::update_ui_wallet_entry(sender, first_wallet, true)
+                }
+            }
+        }
+
+        Ok((active_wallet, wallets))
     }
 
     fn fill_needed(
@@ -210,6 +331,7 @@ impl TryFrom<&str> for Wallet {
         Ok(Self {
             secret_key: key,
             address: Self::get_address_from_secret_key(&key),
+            history: Vec::new(),
         })
     }
 }
@@ -217,6 +339,7 @@ impl TryFrom<&str> for Wallet {
 #[cfg(test)]
 mod tests {
     use crate::{
+        interface::components::overview_panel::TransactionRole,
         raw_transaction::{RawTransaction, TransactionOrigin},
         utility::{_decode_hex, _encode_hex},
     };
@@ -357,5 +480,31 @@ mod tests {
 
         let balance = utxo_set.get_wallet_balance(&wallet.address);
         assert_eq!(balance, 1905236 + 10000);
+    }
+
+    #[test]
+    fn test_update_transaction_history_from_pending() {
+        let mut wallet = Wallet {
+            secret_key: SecretKey::new(&mut OsRng),
+            address: "bar".to_string(),
+            history: Vec::new(),
+        };
+
+        let mut transaction_info = TransactionDisplayInfo {
+            role: TransactionRole::Sender,
+            origin: TransactionOrigin::Pending,
+            date: "date".to_string(),
+            amount: 10,
+            hash: HashId::new([0_u8; 32]),
+        };
+
+        wallet.update_history(transaction_info.clone());
+        assert_eq!(wallet.history.len(), 1);
+        assert_eq!(wallet.history[0].origin, TransactionOrigin::Pending);
+
+        transaction_info.origin = TransactionOrigin::Block;
+        wallet.update_history(transaction_info.clone());
+        assert_eq!(wallet.history.len(), 1);
+        assert_eq!(wallet.history[0].origin, TransactionOrigin::Block);
     }
 }

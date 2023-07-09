@@ -2,7 +2,7 @@ use crate::interface::GtkMessage;
 use crate::messages::HashId;
 use crate::raw_transaction::{tx_output::TxOutput, RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 use std::collections::HashMap;
 use std::io::{self, Cursor, Read};
 
@@ -98,7 +98,7 @@ impl WalletUtxo {
         utxo: UtxoTransaction,
         origin: TransactionOrigin,
         index: u32,
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
         if origin == TransactionOrigin::Pending {
@@ -107,19 +107,17 @@ impl WalletUtxo {
         }
 
         if let Some(_pending) = self.pending.utxos.remove(&utxo_id) {
-            if let Some(addr) = active_addr {
+            if let (Some(addr), Some(sender)) = (active_addr, ui_sender) {
                 if addr == utxo.get_address()? {
                     println!("pending utxo is now confirmed!");
-                    if let Some(sender) = ui_sender {
-                        let msg = format!("Transaction {} is now confirmed", utxo_id);
-                        let _ui = sender
-                            .send(GtkMessage::CreateNotification((
-                                gtk::MessageType::Info,
-                                "Confirmed".to_string(),
-                                msg,
-                            )))
-                            .map_err(to_io_err);
-                    }
+                    let msg = format!("Transaction {} is now confirmed", utxo_id);
+                    let _ui = sender
+                        .send(GtkMessage::CreateNotification((
+                            gtk::MessageType::Info,
+                            "Confirmed".to_string(),
+                            msg,
+                        )))
+                        .map_err(to_io_err);
                 }
             }
         }

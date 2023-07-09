@@ -1,15 +1,17 @@
 use crate::io::{self, Cursor};
+use crate::messages::constants::commands::TX;
+use crate::messages::constants::config::MAGIC;
 use crate::messages::utility::{
     date_from_timestamp, read_from_varint, read_hash, to_compact_size_bytes, to_varint, StreamRead,
 };
-use crate::messages::{HashId, Serialize};
+use crate::messages::{HashId, MessageHeader, Serialize};
 
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::{Utxo, UtxoSet, UtxoTransaction, WalletUtxo};
 use bitcoin_hashes::Hash;
 use std::io::{Error, Read};
 
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 pub mod tx_input;
 use tx_input::{CoinBaseInput, Outpoint, TxInput, TxInputType};
 pub mod tx_output;
@@ -53,7 +55,7 @@ pub struct RawTransaction {
 }
 
 /// Enum that represents the state of a transaction (pending or in a block)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TransactionOrigin {
     Block,
     Pending,
@@ -167,7 +169,11 @@ impl RawTransaction {
 
     /// Checks if the given address is involved in the transaction (either as input or output)
     pub fn address_is_involved(&self, address: &str) -> bool {
-        self.is_from_address(address) || self.is_destined_to_address(address)
+        if self.is_from_address(address) || self.is_destined_to_address(address) {
+            return true;
+        }
+
+        false
     }
 
     fn get_input_value(&self, address: &str, utxoset: &UtxoSet, txin: &TxInput) -> u64 {
@@ -227,6 +233,33 @@ impl RawTransaction {
     }
 
     /// Returns the transaction info for the given address
+    pub fn transaction_info_for_pending(
+        &self,
+        address: &str,
+        timestamp: u32,
+        utxo_set: &mut UtxoSet,
+    ) -> TransactionDisplayInfo {
+        let mut role = TransactionRole::Sender;
+        let mut spent_value = 0;
+
+        if self.is_from_address(address) {
+            spent_value = self.get_total_input_value(address, utxo_set);
+        } else {
+            role = TransactionRole::Receiver;
+        }
+
+        let change_value = self.get_change_value_for(address);
+
+        TransactionDisplayInfo {
+            role,
+            origin: TransactionOrigin::Pending,
+            date: date_from_timestamp(timestamp),
+            amount: change_value as i64 - spent_value as i64,
+            hash: self.get_hash(),
+        }
+    }
+
+    /// Returns the transaction info for the given address
     pub fn transaction_info_for(
         &self,
         address: &str,
@@ -246,6 +279,7 @@ impl RawTransaction {
 
         TransactionDisplayInfo {
             role,
+            origin: TransactionOrigin::Block,
             date: date_from_timestamp(timestamp),
             amount: change_value as i64 - spent_value as i64,
             hash: self.get_hash(),
@@ -289,11 +323,11 @@ impl RawTransaction {
                 let index = input.previous_output.index;
                 match utxo_set.set.get_mut(&address) {
                     Some(wallet) => {
-                        wallet.add_spent(utxo_id, index, origin.clone());
+                        wallet.add_spent(utxo_id, index, origin);
                     }
                     None => {
                         let mut wallet = WalletUtxo::new();
-                        wallet.add_spent(utxo_id, index, origin.clone());
+                        wallet.add_spent(utxo_id, index, origin);
                         utxo_set.set.insert(address, wallet);
                     }
                 }
@@ -314,7 +348,7 @@ impl RawTransaction {
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
         let new_utxo_id = HashId::from_hash(double_hash(&self.serialize()));
@@ -325,7 +359,7 @@ impl RawTransaction {
                 Some(wallet) => wallet.add_utxo(
                     new_utxo_id,
                     utxo_transaction.clone(),
-                    origin.clone(),
+                    origin,
                     index as u32,
                     ui_sender,
                     active_addr,
@@ -335,7 +369,7 @@ impl RawTransaction {
                     wallet.add_utxo(
                         new_utxo_id,
                         utxo_transaction.clone(),
-                        origin.clone(),
+                        origin,
                         index as u32,
                         None,
                         None,
@@ -353,10 +387,10 @@ impl RawTransaction {
         &self,
         utxo_set: &mut UtxoSet,
         origin: TransactionOrigin,
-        ui_sender: Option<&Sender<GtkMessage>>,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
         active_addr: Option<&str>,
     ) -> io::Result<()> {
-        self.generate_utxo_in(utxo_set, origin.clone())?;
+        self.generate_utxo_in(utxo_set, origin)?;
         self.generate_utxo_out(utxo_set, origin, ui_sender, active_addr)?;
 
         Ok(())
@@ -434,6 +468,23 @@ impl RawTransaction {
         transaction_bytes.extend(TxOutput::serialize_vec(&self.tx_out));
         transaction_bytes.extend(self.lock_time.to_le_bytes());
         transaction_bytes
+    }
+
+    /// build message to be broadcasted
+    pub fn build_message(&self) -> io::Result<Vec<u8>> {
+        let tx_hash = double_hash(&self.serialize());
+
+        let payload = self.serialize();
+        let mut bytes = MessageHeader::new(
+            MAGIC,
+            TX.to_string(),
+            payload.len() as u32,
+            [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
+        )
+        .serialize()?;
+
+        bytes.extend(payload);
+        Ok(bytes)
     }
 }
 

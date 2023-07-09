@@ -12,17 +12,17 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 // gtk imports
 use crate::interface::GtkMessage;
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 
 /// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
 pub struct Listener {
     socket_addr: SocketAddr,
     stream: TcpStream,
-    writer_channel: mpsc::Sender<(SocketAddr, Message)>,
+    writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
 }
 
 impl Listener {
-    fn new(stream: TcpStream, writer_channel: mpsc::Sender<(SocketAddr, Message)>) -> Self {
+    fn new(stream: TcpStream, writer_channel: mpsc::SyncSender<(SocketAddr, Message)>) -> Self {
         Self {
             socket_addr: stream.peer_addr().unwrap(), // handle this error
             stream,
@@ -132,17 +132,15 @@ impl Node {
     fn new(
         stream: TcpStream,
         listener: JoinHandle<io::Result<()>>,
-        ui_sender: Sender<GtkMessage>,
+        ui_sender: SyncSender<GtkMessage>,
         config: &Config,
     ) -> io::Result<Self> {
         let message = &format!("Established connection with node: {:?}", stream) as &str;
         config.log(message, VERBOSE);
 
-        // update ui // handle error
-        let _ = ui_sender.send(GtkMessage::UpdateLabel((
-            "status_bar".to_string(),
-            message.to_string(),
-        )));
+        // update ui
+        let msg = format!("Connected to {}", stream.peer_addr()?);
+        let _ = ui_sender.send(GtkMessage::UpdateProgressBar((Some(msg), 1.0)));
         let address = stream.peer_addr()?;
 
         Ok(Self {
@@ -154,8 +152,8 @@ impl Node {
 
     fn spawn(
         stream: TcpStream,
-        writer_channel: mpsc::Sender<(SocketAddr, Message)>,
-        ui_sender: Sender<GtkMessage>,
+        writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
+        ui_sender: SyncSender<GtkMessage>,
         config: Config,
     ) -> io::Result<Self> {
         let listener = Listener::new(stream.try_clone()?, writer_channel);
@@ -178,8 +176,8 @@ impl Node {
     /// This function is used to establish a connection with a node.
     pub fn try_from_addr(
         node_addr: SocketAddr,
-        writer_channel: mpsc::Sender<(SocketAddr, Message)>,
-        ui_sender: Sender<GtkMessage>,
+        writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
+        ui_sender: SyncSender<GtkMessage>,
         config: Config,
     ) -> io::Result<(SocketAddr, Node)> {
         if !node_addr.is_ipv4() {

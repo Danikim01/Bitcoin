@@ -32,6 +32,7 @@ pub mod commands {
     pub const TX: &str = "tx\0\0\0\0\0\0\0\0\0\0";
     pub const VERACK: &str = "verack\0\0\0\0\0\0";
     pub const VERSION: &str = "version\0\0\0\0\0";
+    pub const NOTFOUND: &str = "notfound\0\0\0\0";
 }
 
 /// Constants with accepted version which is latest version
