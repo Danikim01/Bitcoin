@@ -18,6 +18,8 @@ pub struct Config {
     tcp_timeout_seconds: u64,
     logger: Logger,
     genesis_hash: HashId,
+    wallets_dir: String,
+    default_wallet_addr: String,
 }
 
 impl Config {
@@ -53,12 +55,12 @@ impl Config {
         self.genesis_hash
     }
 
-    pub fn get_wallets_dir(&self) -> String {
-        "./wallets".to_string()
+    pub fn get_wallets_dir(&self) -> &str {
+        &self.wallets_dir
     }
 
-    pub fn get_default_wallet_addr(&self) -> String {
-        "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX".to_string() // HAHAHARDCODED FIX L8R
+    pub fn get_default_wallet_addr(&self) -> &str {
+        &self.default_wallet_addr
     }
 
     fn remove_or(hashmap: &mut HashMap<String, String>, key: &str, default: &str) -> String {
@@ -95,6 +97,8 @@ impl Config {
                 "genesis_hash",
                 "",
             ))?,
+            wallets_dir: Config::remove_or(&mut values, "wallets_dir", ""),
+            default_wallet_addr: Config::remove_or(&mut values, "default_wallet_addr", ""),
         })
     }
 
