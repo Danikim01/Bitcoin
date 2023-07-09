@@ -121,7 +121,10 @@ impl NetworkController {
 
         while count < max_blocks {
             headers.push(next_block_header.clone());
-            next_block_header = self.headers.get_next_header(&next_block_header.hash())?;
+            next_block_header = match self.headers.get_next_header(&next_block_header.hash()) {
+                Some(header) => header,
+                None => break, // Manejar el caso en el que no se encuentre el siguiente encabezado
+            };
             count += 1;
         }
 
@@ -901,5 +904,53 @@ mod tests {
 
         assert_eq!(headers.count, 0);
         assert_eq!(headers.block_headers.len(), 0);
+    }
+
+    #[test]
+    fn test_handle_getheaders_message_tallesthash() {
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into();
+
+        let config = Config::from_file(config_path).unwrap();
+        let mut network_controller =
+            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        network_controller.start_sync(&config);
+
+        let block_header_hashes = vec![config.get_genesis()];
+        let mut getheaders_message = GetHeader {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes,
+            stop_hash: HashId { hash: [0u8; 32] },
+        };
+
+        let mut headers = network_controller
+            .handle_getheaders_message(getheaders_message.clone())
+            .unwrap();
+
+        while headers.count == 2000 {
+            let last_header = headers.block_headers.last().unwrap();
+            //let next_block_hash = last_header.next_block_hash.unwrap();
+            getheaders_message.block_header_hashes = vec![last_header.hash];
+            // println!("last_header: {:?}", last_header);
+            // println!(
+            //     "last header of nc: {:?}",
+            //     network_controller.tallest_header.hash
+            // );
+            headers = network_controller
+                .handle_getheaders_message(getheaders_message.clone())
+                .unwrap();
+        }
+
+        let nc_tallest_header = &network_controller.tallest_header;
+        let tallest_header = headers.block_headers.last().unwrap();
+
+        //println!("tallest_header: {:?}", tallest_header.hash);
+
+        assert_eq!(nc_tallest_header.hash, tallest_header.hash);
     }
 }
