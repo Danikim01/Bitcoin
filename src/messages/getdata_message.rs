@@ -141,6 +141,10 @@ impl GetData {
         }
         Self::new(count, inventory_vector)
     }
+
+    pub fn get_inventory(&self) -> Vec<Inventory> {
+        self.inventory.clone()
+    }
 }
 
 impl Serialize for GetData {

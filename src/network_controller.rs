@@ -9,6 +9,8 @@ use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
     MessageHeader, Serialize,
 };
+
+use crate::messages::invblock_message::{InventoryBlock, InventoryVector};
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
@@ -33,6 +35,8 @@ use crate::interface::{
     components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
     update_ui_progress_bar,
 };
+use crate::messages::InvType::MSGBlock;
+
 pub type BlockSet = HashMap<HashId, Block>;
 
 /// Structs of the network controller (main controller of the program)
@@ -133,6 +137,25 @@ impl NetworkController {
             block_headers: headers,
         })
     }
+
+    fn handle_getdata_message(&self, getdata_message: GetData) -> Option<InventoryVector>{
+        let mut blocks: Vec<Block> = Vec::new();
+        for inventory in getdata_message.get_inventory() {
+            match inventory.inv_type {
+                InvType::_MSGCompactBlock => {
+                    let block = match self.valid_blocks.get(&inventory.hash) {
+                        Some(block) => block.clone(),
+                        None => continue,
+                    };
+                    blocks.push(block);
+                }
+                _ => continue,
+            }
+        }
+
+        Some(InventoryVector::from_inv(blocks.len(),blocks))
+    }
+
 
     fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
         _ = update_ui_progress_bar(&self.ui_sender, msg, progress);
@@ -720,17 +743,32 @@ impl OuterNetworkController {
 
     fn handle_get_headers_message(
         t_inner: Arc<RwLock<NetworkController>>,
-        getheaders: GetHeader,
+    getheaders: GetHeader,
+    peer_addr: SocketAddr,
+    config: &Config,
+    ) -> io::Result<()> {
+    let mut inner_write = t_inner.write().map_err(to_io_err)?;
+    if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
+    _ = inner_write.nodes.send_to_specific(
+    &peer_addr,
+    &getheaders_message.serialize()?,
+    config,
+    );
+    }
+    Ok(())
+    }
+
+    fn handle_get_data_message(
+        t_inner: Arc<RwLock<NetworkController>>,
+        getdata: GetData,
         peer_addr: SocketAddr,
         config: &Config,
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
-        if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
-            _ = inner_write.nodes.send_to_specific(
-                &peer_addr,
-                &getheaders_message.serialize()?,
-                config,
-            );
+        if let Some(inventory_message) = inner_write.handle_getdata_message(getdata) {
+            let _ = inner_write
+                .nodes
+                .send_to_specific(&peer_addr, &inventory_message.serialize()?, config);
         }
         Ok(())
     }
@@ -760,6 +798,7 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories, &config)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
+                    (peer_address, Message::_GetData(GetData)) => Self::handle_get_data_message(t_inner, GetData, peer_address, &config),
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
                     config.log(&format!("Received unhandled error: {:?}", result), QUIET);

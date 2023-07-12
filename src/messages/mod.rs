@@ -14,6 +14,7 @@ mod ping_message;
 pub mod utility;
 mod verack_message;
 mod version_message;
+pub(crate) mod invblock_message;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;

@@ -94,6 +94,10 @@ impl Listener {
                 Ok(m) => m,
                 Err(..) => Message::Ignore,
             },
+            commands::GETDATA => match GetData::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
             _ => Message::Ignore,
         };
         Ok(dyn_message)
