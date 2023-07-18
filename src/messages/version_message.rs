@@ -106,7 +106,7 @@ impl Version {
         }
     }
 
-    fn build_payload(&self) -> io::Result<Vec<u8>> {
+    pub fn build_payload(&self) -> io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
         payload.extend::<[u8; 8]>(self.services.into());

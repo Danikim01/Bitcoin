@@ -893,31 +893,26 @@ mod tests {
 
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
 
+        //Envio un version
+        let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());
+        let payload = msg_version.serialize().unwrap();
+        socket.write_all(&payload).unwrap();
+        socket.flush().unwrap();
 
-        let version = Version::default();
-        let mut version_buffer = vec![0_u8; version.serialize().unwrap().len()];
-        let verack = VerAck::new();
-        let mut verack_buffer = vec![0_u8;verack.serialize().unwrap().len()];
-
-        socket.write_all(&version.serialize().unwrap()).unwrap();
+        //Leo el header del version message
+        let version_header = MessageHeader::from_stream(&mut socket).unwrap();
+        //Leo el payload del version message
+        let payload_data = version_header.read_payload(&mut socket).unwrap();
+ 
+        //Recibo un verack message
+        let verack = VerAck::from_stream(&mut socket).unwrap();
+        
+        //Envio un verack message
+        let payload = VerAck::new().serialize().unwrap();
+        socket.write_all(&payload).unwrap();
         socket.flush().unwrap();
 
         println!("Stream content is: {:?}",socket.read_to_end(&mut vec![]).unwrap());
-
-        //socket.read_exact(&mut version_buffer).unwrap();
-        //let version_read = Version::deserialize(version_buffer.as_slice()).unwrap();
-
-/*
-        socket.read_exact(&mut verack_buffer).unwrap();
-        let verack_read = VerAck::deserialize(verack_buffer.as_slice()).unwrap();
-        println!("Verack: {:?}", verack_read);
-
-        socket.write_all(&verack.serialize().unwrap()).unwrap();
-        socket.flush().unwrap();
-
-        println!("Version: {:?}", version_read);
-
-*/
 
     }
 

@@ -263,14 +263,13 @@ impl Node {
             ));
         }
 
-        /*
         let payload = VerAck::new().serialize()?;
         stream.write_all(&payload)?; // send verack
         stream.flush()?;
 
         VerAck::from_stream(stream)?; // receive verack
         println!("inverse_handshake: done");
-        */
+        
         Ok(())
     }
 
