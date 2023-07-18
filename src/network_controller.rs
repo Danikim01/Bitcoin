@@ -505,8 +505,9 @@ impl NetworkController {
 
     pub fn listen_for_nodes(&self) -> io::Result<()>{
         thread::spawn(move || -> io::Result<()> {
-            let listener = TcpListener::bind(LOCALSERVER).unwrap();
+            let listener = TcpListener::bind(LOCALSERVER)?;
             println!("Listening on port {}", PORT);
+            println!("Listener: {:?}", listener);
             for stream in listener.incoming() {
                 println!("Incoming connection");
                 println!("Stream: {:?}", stream);
