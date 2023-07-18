@@ -21,7 +21,7 @@ use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, RwLock, RwLockReadGuard,
@@ -35,7 +35,9 @@ use crate::interface::{
     components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
     update_ui_progress_bar,
 };
+use crate::messages::constants::config::{LOCALHOST, LOCALSERVER, PORT};
 use crate::messages::InvType::MSGBlock;
+use crate::node::Node;
 
 pub type BlockSet = HashMap<HashId, Block>;
 
@@ -497,6 +499,33 @@ impl NetworkController {
         }
         self.request_blocks(Headers::new(missing_blocks.len(), missing_blocks), config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
+        self.listen_for_nodes()?;
+        Ok(())
+    }
+
+    pub fn listen_for_nodes(&self) -> io::Result<()>{
+        thread::spawn(move || -> io::Result<()> {
+            let listener = TcpListener::bind(LOCALSERVER).unwrap();
+            println!("Listening on port {}", PORT);
+            for stream in listener.incoming() {
+                println!("Incoming connection");
+                println!("Stream: {:?}", stream);
+                match stream {
+                    Ok(mut stream) => {
+                        println!("New connectionn: {}", stream.peer_addr()?);
+                        Node::inverse_handshake(&mut stream)?;
+                        println!("New connection: {}", stream.peer_addr()?);
+                        //let mut node = Node::spawn(stream, writer_channel, self.ui_sender, config)?;
+                        //node.start();
+                    }
+                    Err(e) => {
+                        println!("Error: {}", e);
+                    }
+                }
+            }
+
+            Ok(())
+        });
         Ok(())
     }
 }
@@ -817,6 +846,7 @@ impl OuterNetworkController {
         Ok(())
     }
 
+
     /// Starts the sync process and requests headers periodically.
     pub fn start_sync(
         &self,
@@ -833,12 +863,64 @@ impl OuterNetworkController {
 
 #[cfg(test)]
 mod tests {
-    use crate::messages::block_header;
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use crate::messages::{block_header, VerAck};
+    use crate::messages::version_message::Version;
 
     use super::*;
     use gtk::glib;
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
+    use std::thread::sleep;
+    use crate::messages::constants::config::LOCALSERVER;
+
+
+    #[test]
+    fn test_handle_incoming_nodes(){
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
+
+        let config = Config::from_file(config_path).unwrap();
+        let network_controller =
+            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        network_controller.listen_for_nodes().expect("TODO: panic message");
+
+
+        let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
+
+
+        let version = Version::default();
+        let mut version_buffer = vec![0_u8; version.serialize().unwrap().len()];
+        let verack = VerAck::new();
+        let mut verack_buffer = vec![0_u8;verack.serialize().unwrap().len()];
+
+        socket.write_all(&version.serialize().unwrap()).unwrap();
+        socket.flush().unwrap();
+
+        println!("Stream content is: {:?}",socket.read_to_end(&mut vec![]).unwrap());
+
+        //socket.read_exact(&mut version_buffer).unwrap();
+        //let version_read = Version::deserialize(version_buffer.as_slice()).unwrap();
+
+/*
+        socket.read_exact(&mut verack_buffer).unwrap();
+        let verack_read = VerAck::deserialize(verack_buffer.as_slice()).unwrap();
+        println!("Verack: {:?}", verack_read);
+
+        socket.write_all(&verack.serialize().unwrap()).unwrap();
+        socket.flush().unwrap();
+
+        println!("Version: {:?}", version_read);
+
+*/
+
+    }
+
     #[test]
     fn test_handle_getheaders_message_genesis() {
         // Create a test NetworkController instance

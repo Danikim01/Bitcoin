@@ -8,7 +8,7 @@ use crate::utility::to_io_err;
 use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
-use std::thread::{self, JoinHandle};
+use std::thread::{self, JoinHandle, sleep};
 use std::time::Duration;
 // gtk imports
 use crate::interface::GtkMessage;
@@ -158,7 +158,7 @@ impl Node {
         })
     }
 
-    fn spawn(
+    pub fn spawn(
         stream: TcpStream,
         writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
         ui_sender: SyncSender<GtkMessage>,
@@ -201,7 +201,7 @@ impl Node {
         Ok((node.address, node))
     }
 
-    fn handshake(stream: &mut TcpStream) -> io::Result<()> {
+    pub fn handshake(stream: &mut TcpStream) -> io::Result<()> {
         // send message
         let msg_version = Version::default_for_trans_addr(stream.peer_addr()?);
         let payload = msg_version.serialize()?;
@@ -229,6 +229,48 @@ impl Node {
         let payload = VerAck::new().serialize()?;
         stream.write_all(&payload)?; // send verack
         stream.flush()?;
+        Ok(())
+    }
+
+    pub fn inverse_handshake(stream: &mut TcpStream) -> io::Result<()>{
+        let message_header = MessageHeader::from_stream(stream)?;
+        let payload_data = message_header.read_payload(stream)?;
+
+        println!("inverse_handshake: {:?}", message_header.command_name);
+
+        let version_message = match Version::deserialize(&payload_data)? {
+            Message::Version(version_message) => version_message,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Expected Version message",
+                ));
+            }
+        };
+
+
+        println!("inverse_handshake: {:?}", version_message);
+        // send message
+        let msg_version = Version::default_for_trans_addr(stream.peer_addr()?);
+        let payload = msg_version.serialize()?;
+        stream.write_all(&payload)?;
+        stream.flush()?;
+
+        if !msg_version.accepts(version_message) {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Version not supported",
+            ));
+        }
+
+        /*
+        let payload = VerAck::new().serialize()?;
+        stream.write_all(&payload)?; // send verack
+        stream.flush()?;
+
+        VerAck::from_stream(stream)?; // receive verack
+        println!("inverse_handshake: done");
+        */
         Ok(())
     }
 
