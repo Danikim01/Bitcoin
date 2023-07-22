@@ -140,7 +140,7 @@ impl NetworkController {
         })
     }
 
-    fn handle_getdata_message(&self, getdata_message: GetData) -> Option<InventoryVector>{
+    fn handle_getdata_message(&self, getdata_message: GetData) -> Option<InventoryVector> {
         let mut blocks: Vec<Block> = Vec::new();
         for inventory in getdata_message.get_inventory() {
             match inventory.inv_type {
@@ -155,9 +155,8 @@ impl NetworkController {
             }
         }
 
-        Some(InventoryVector::from_inv(blocks.len(),blocks))
+        Some(InventoryVector::from_inv(blocks.len(), blocks))
     }
-
 
     fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
         _ = update_ui_progress_bar(&self.ui_sender, msg, progress);
@@ -502,34 +501,40 @@ impl NetworkController {
         Ok(())
     }
 
-    pub fn listen_for_nodes(&self, writer_channel: std::sync::mpsc::SyncSender<(SocketAddr, Message)>, config: Config) -> io::Result<()>{
-        let listener = TcpListener::bind(LOCALSERVER)?;
-        let ui_sender = self.ui_sender.clone();
-        thread::spawn(move || -> io::Result<()> {
-            println!("Listening on port {}", PORT);
-            println!("Listener: {:?}", listener);
-            for stream in listener.incoming() {
-                println!("Incoming connection");
-                println!("Stream: {:?}", stream);
-                match stream {
-                    Ok(mut stream) => {
-                        let ui_sender = ui_sender.clone();
-                        println!("New connectionn: {}", stream.peer_addr()?);
-                        Node::inverse_handshake(&mut stream).unwrap();
+    // DELETE ME
+    // pub fn listen_for_nodes(
+    //     &self,
+    //     writer_channel: std::sync::mpsc::SyncSender<(SocketAddr, Message)>,
+    //     config: Config,
+    // ) -> io::Result<()> {
+    //     let listener = TcpListener::bind(LOCALSERVER)?;
+    //     let ui_sender = self.ui_sender.clone();
+    //     thread::spawn(move || -> io::Result<()> {
+    //         println!("Listening on port {}", PORT);
+    //         println!("Listener: {:?}", listener);
+    //         for stream in listener.incoming() {
+    //             println!("Incoming connection");
+    //             println!("Stream: {:?}", stream);
+    //             match stream {
+    //                 Ok(mut stream) => {
+    //                     let ui_sender = ui_sender.clone();
+    //                     println!("New connectionn: {}", stream.peer_addr()?);
+    //                     Node::inverse_handshake(&mut stream).unwrap();
 
-                        let mut node = Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
-                        // Network Controller should add the new node
-                    }
-                     Err(e) => {
-                        println!("Error: {}", e);
-                    }
-                }
-            }
+    //                     let node =
+    //                         Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
+    //                     // Network Controller should add the new node
+    //                 }
+    //                 Err(e) => {
+    //                     println!("Error: {}", e);
+    //                 }
+    //             }
+    //         }
 
-            Ok(())
-        });
-        Ok(())
-    }
+    //         Ok(())
+    //     });
+    //     Ok(())
+    // }
 }
 
 /// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
@@ -551,7 +556,11 @@ impl OuterNetworkController {
             writer_end.clone(),
             config,
         )?));
-        Ok(Self { inner, ui_sender, writer_chanel: writer_end})
+        Ok(Self {
+            inner,
+            ui_sender,
+            writer_chanel: writer_end,
+        })
     }
 
     fn update_ui_data_periodically(&self) -> io::Result<()> {
@@ -775,19 +784,19 @@ impl OuterNetworkController {
 
     fn handle_get_headers_message(
         t_inner: Arc<RwLock<NetworkController>>,
-    getheaders: GetHeader,
-    peer_addr: SocketAddr,
-    config: &Config,
+        getheaders: GetHeader,
+        peer_addr: SocketAddr,
+        config: &Config,
     ) -> io::Result<()> {
-    let mut inner_write = t_inner.write().map_err(to_io_err)?;
-    if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
-    _ = inner_write.nodes.send_to_specific(
-    &peer_addr,
-    &getheaders_message.serialize()?,
-    config,
-    );
-    }
-    Ok(())
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
+            _ = inner_write.nodes.send_to_specific(
+                &peer_addr,
+                &getheaders_message.serialize()?,
+                config,
+            );
+        }
+        Ok(())
     }
 
     fn handle_get_data_message(
@@ -798,9 +807,11 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(inventory_message) = inner_write.handle_getdata_message(getdata) {
-            let _ = inner_write
-                .nodes
-                .send_to_specific(&peer_addr, &inventory_message.serialize()?, config);
+            let _ = inner_write.nodes.send_to_specific(
+                &peer_addr,
+                &inventory_message.serialize()?,
+                config,
+            );
         }
         Ok(())
     }
@@ -830,7 +841,9 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories, &config)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_address, Message::_GetData(GetData)) => Self::handle_get_data_message(t_inner, GetData, peer_address, &config),
+                    (peer_address, Message::_GetData(GetData)) => {
+                        Self::handle_get_data_message(t_inner, GetData, peer_address, &config)
+                    }
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
                     config.log(&format!("Received unhandled error: {:?}", result), QUIET);
@@ -841,16 +854,50 @@ impl OuterNetworkController {
         Ok(handle)
     }
 
-    fn sync(&self, config: Config) -> io::Result<()> {
+    fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let writer_chanel = self.writer_chanel.clone();
+        let listener = TcpListener::bind(LOCALSERVER)?;
+        let ui_sender = self.ui_sender.clone();
+        let writer_channel = self.writer_chanel.clone();
+
         thread::spawn(move || -> io::Result<()> {
-            inner.write().map_err(to_io_err)?.start_sync(&config);
-            inner.write().map_err(to_io_err)?.listen_for_nodes(writer_chanel.clone(), config.clone())
+            println!("Listening on port {}", PORT);
+            println!("Listener: {:?}", listener);
+            for stream in listener.incoming() {
+                println!("Incoming connection");
+                println!("Stream: {:?}", stream);
+                match stream {
+                    Ok(mut stream) => {
+                        let ui_sender = ui_sender.clone();
+                        println!("New connectionn: {}", stream.peer_addr()?);
+                        Node::inverse_handshake(&mut stream).unwrap();
+
+                        let node =
+                            Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
+                        // Network Controller should add the new node
+                        inner.write().map_err(to_io_err)?.nodes.add_node(node);
+                    }
+                    Err(e) => {
+                        println!("Error: {}", e);
+                    }
+                }
+            }
+
+            Ok(())
         });
         Ok(())
     }
 
+    fn sync(&self, config: Config) -> io::Result<()> {
+        let inner = self.inner.clone();
+        // let writer_chanel = self.writer_chanel.clone();
+        self.listen_for_nodes(config.clone())?;
+        thread::spawn(move || -> io::Result<()> {
+            inner.write().map_err(to_io_err)?.start_sync(&config)?;
+            Ok(())
+        });
+        Ok(())
+    }
 
     /// Starts the sync process and requests headers periodically.
     pub fn start_sync(
@@ -868,21 +915,20 @@ impl OuterNetworkController {
 
 #[cfg(test)]
 mod tests {
+    use crate::messages::version_message::Version;
+    use crate::messages::{block_header, VerAck};
     use std::io::{Read, Write};
     use std::net::TcpStream;
-    use crate::messages::{block_header, VerAck};
-    use crate::messages::version_message::Version;
 
     use super::*;
+    use crate::messages::constants::config::LOCALSERVER;
     use gtk::glib;
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
     use std::thread::sleep;
-    use crate::messages::constants::config::LOCALSERVER;
-
 
     #[test]
-    fn test_handle_incoming_nodes(){
+    fn test_handle_incoming_nodes() {
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
         let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
         let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
@@ -894,7 +940,9 @@ mod tests {
         let network_controller =
             NetworkController::new(ui_sender, writer_end.clone(), config.clone()).unwrap();
 
-        network_controller.listen_for_nodes(writer_end.clone(), config.clone()).expect("TODO: panic message");
+        network_controller
+            .listen_for_nodes(writer_end.clone(), config.clone())
+            .expect("TODO: panic message");
 
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
 
@@ -908,7 +956,7 @@ mod tests {
         let version_header = MessageHeader::from_stream(&mut socket).unwrap();
         //Leo el payload del version message
         let payload_data = version_header.read_payload(&mut socket).unwrap();
- 
+
         //Recibo un verack message
         let verack = VerAck::from_stream(&mut socket).unwrap();
         println!("Verack message: {:?}", verack);
@@ -917,8 +965,10 @@ mod tests {
         socket.write_all(&payload).unwrap();
         socket.flush().unwrap();
 
-        println!("Stream content is: {:?}",socket.read_to_end(&mut vec![]).unwrap());
-
+        println!(
+            "Stream content is: {:?}",
+            socket.read_to_end(&mut vec![]).unwrap()
+        );
     }
 
     #[test]
