@@ -504,8 +504,8 @@ impl NetworkController {
     }
 
     pub fn listen_for_nodes(&self) -> io::Result<()>{
+        let listener = TcpListener::bind(LOCALSERVER)?;
         thread::spawn(move || -> io::Result<()> {
-            let listener = TcpListener::bind(LOCALSERVER)?;
             println!("Listening on port {}", PORT);
             println!("Listener: {:?}", listener);
             for stream in listener.incoming() {
@@ -514,7 +514,7 @@ impl NetworkController {
                 match stream {
                     Ok(mut stream) => {
                         println!("New connectionn: {}", stream.peer_addr()?);
-                        Node::inverse_handshake(&mut stream)?;
+                        Node::inverse_handshake(&mut stream).unwrap();
                         println!("New connection: {}", stream.peer_addr()?);
                         //let mut node = Node::spawn(stream, writer_channel, self.ui_sender, config)?;
                         //node.start();
@@ -907,7 +907,7 @@ mod tests {
  
         //Recibo un verack message
         let verack = VerAck::from_stream(&mut socket).unwrap();
-        
+        println!("Verack message: {:?}", verack);
         //Envio un verack message
         let payload = VerAck::new().serialize().unwrap();
         socket.write_all(&payload).unwrap();

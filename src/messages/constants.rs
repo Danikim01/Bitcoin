@@ -52,7 +52,7 @@ pub mod config {
     pub const TCP_TIMEOUT: u64 = 30;
     pub const START_TIMESTAMP: u32 = 1681095600;
     pub const LOCALHOST: &str = "127.0.0.1";
-    pub const LOCALSERVER: &str = "127.0.0.1:8333";
-    pub const PORT: u16 = 8333;
+    pub const LOCALSERVER: &str = "127.0.0.1:18333";
+    pub const PORT: u16 = 18333;
     pub const MAGIC: [u8; 4] = [0x0b, 0x11, 0x09, 0x07];
 }

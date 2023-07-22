@@ -1,5 +1,5 @@
 use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
-use crate::messages::utility::{read_from_varint, StreamRead};
+use crate::messages::utility::{read_from_varint, StreamRead, to_varint};
 use crate::messages::{Message, Serialize, Services};
 use crate::utility::actual_timestamp_or_default;
 use std::io::{self, Cursor, Read};
@@ -118,7 +118,12 @@ impl Version {
         payload.extend(&self.addr_recv_services.to_le_bytes());
         payload.extend(&self.addr_trans_ip.octets());
         payload.extend(&self.addr_trans_port.to_be_bytes());
+        payload.extend(to_varint(self.nonce.to_le_bytes().len() as u64));
         payload.extend(&self.nonce.to_le_bytes());
+        payload.extend(self._user_agent.as_bytes());
+        payload.extend(&self._start_height.to_le_bytes());
+        payload.extend(&(self._relay as u8).to_le_bytes());
+
         Ok(payload)
     }
 
@@ -139,19 +144,19 @@ impl Serialize for Version {
         let mut cursor = Cursor::new(bytes);
 
         let version = Version::new(
-            i32::from_le_stream(&mut cursor)?,
-            Services::new(u64::from_le_stream(&mut cursor)?),
-            i64::from_le_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?,
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
-            u16::from_be_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?, // not used
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
-            u16::from_be_stream(&mut cursor)?,
-            u64::from_le_stream(&mut cursor)?,
-            deser_user_agent(&mut cursor)?,
-            i32::from_le_stream(&mut cursor)?,
-            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
+            i32::from_le_stream(&mut cursor).unwrap(),
+            Services::new(u64::from_le_stream(&mut cursor).unwrap()),
+            i64::from_le_stream(&mut cursor).unwrap(),
+            u64::from_le_stream(&mut cursor).unwrap(),
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor).unwrap()),
+            u16::from_be_stream(&mut cursor).unwrap(),
+            u64::from_le_stream(&mut cursor).unwrap(), // not used
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor).unwrap()),
+            u16::from_be_stream(&mut cursor).unwrap(),
+            u64::from_le_stream(&mut cursor).unwrap(),
+            deser_user_agent(&mut cursor).unwrap(),
+            i32::from_le_stream(&mut cursor).unwrap(),
+            u8::from_le_stream(&mut cursor).unwrap() != 0, // pending: this field should be optional
         );
         Ok(Message::Version(version))
     }

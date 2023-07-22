@@ -238,9 +238,10 @@ impl Node {
 
         println!("inverse_handshake: {:?}", message_header.command_name);
 
-        let version_message = match Version::deserialize(&payload_data)? {
+        let version_message = match Version::deserialize(&payload_data).unwrap() {
             Message::Version(version_message) => version_message,
             _ => {
+                println!("Juanma >:c");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "Expected Version message",
