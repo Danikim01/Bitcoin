@@ -499,12 +499,12 @@ impl NetworkController {
         }
         self.request_blocks(Headers::new(missing_blocks.len(), missing_blocks), config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
-        self.listen_for_nodes()?;
         Ok(())
     }
 
-    pub fn listen_for_nodes(&self) -> io::Result<()>{
+    pub fn listen_for_nodes(&self, writer_channel: std::sync::mpsc::SyncSender<(SocketAddr, Message)>, config: Config) -> io::Result<()>{
         let listener = TcpListener::bind(LOCALSERVER)?;
+        let ui_sender = self.ui_sender.clone();
         thread::spawn(move || -> io::Result<()> {
             println!("Listening on port {}", PORT);
             println!("Listener: {:?}", listener);
@@ -513,13 +513,14 @@ impl NetworkController {
                 println!("Stream: {:?}", stream);
                 match stream {
                     Ok(mut stream) => {
+                        let ui_sender = ui_sender.clone();
                         println!("New connectionn: {}", stream.peer_addr()?);
                         Node::inverse_handshake(&mut stream).unwrap();
-                        println!("New connection: {}", stream.peer_addr()?);
-                        //let mut node = Node::spawn(stream, writer_channel, self.ui_sender, config)?;
-                        //node.start();
+
+                        let mut node = Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
+                        // Network Controller should add the new node
                     }
-                    Err(e) => {
+                     Err(e) => {
                         println!("Error: {}", e);
                     }
                 }
@@ -535,6 +536,7 @@ impl NetworkController {
 pub struct OuterNetworkController {
     inner: Arc<RwLock<NetworkController>>,
     ui_sender: SyncSender<GtkMessage>,
+    writer_chanel: mpsc::SyncSender<(SocketAddr, Message)>,
 }
 
 impl OuterNetworkController {
@@ -546,10 +548,10 @@ impl OuterNetworkController {
     ) -> Result<Self, io::Error> {
         let inner = Arc::new(RwLock::new(NetworkController::new(
             ui_sender.clone(),
-            writer_end,
+            writer_end.clone(),
             config,
         )?));
-        Ok(Self { inner, ui_sender })
+        Ok(Self { inner, ui_sender, writer_chanel: writer_end})
     }
 
     fn update_ui_data_periodically(&self) -> io::Result<()> {
@@ -841,8 +843,10 @@ impl OuterNetworkController {
 
     fn sync(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
+        let writer_chanel = self.writer_chanel.clone();
         thread::spawn(move || -> io::Result<()> {
-            inner.write().map_err(to_io_err)?.start_sync(&config)
+            inner.write().map_err(to_io_err)?.start_sync(&config);
+            inner.write().map_err(to_io_err)?.listen_for_nodes(writer_chanel.clone(), config.clone())
         });
         Ok(())
     }
@@ -888,9 +892,9 @@ mod tests {
 
         let config = Config::from_file(config_path).unwrap();
         let network_controller =
-            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.listen_for_nodes().expect("TODO: panic message");
+            NetworkController::new(ui_sender, writer_end.clone(), config.clone()).unwrap();
 
+        network_controller.listen_for_nodes(writer_end.clone(), config.clone()).expect("TODO: panic message");
 
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
 

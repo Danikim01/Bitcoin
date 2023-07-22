@@ -46,6 +46,10 @@ impl NodeController {
         Ok(Self { nodes })
     }
 
+    pub fn add_node(&mut self, node: Node) {
+        self.nodes.insert(node.address, node);
+    }
+
     /// Kills a node and removes it from the list of nodes given its peer address.
     pub fn kill_node(&mut self, socket_addr: SocketAddr) -> io::Result<()> {
         self.nodes.remove(&socket_addr);
