@@ -875,6 +875,7 @@ impl OuterNetworkController {
                         let node =
                             Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
                         // Network Controller should add the new node
+                        println!("adding node: {:?}", node);
                         inner.write().map_err(to_io_err)?.nodes.add_node(node);
                     }
                     Err(e) => {
@@ -922,11 +923,66 @@ mod tests {
 
     use super::*;
     use crate::messages::constants::config::LOCALSERVER;
+    use gtk::gio::ffi::g_data_output_stream_get_byte_order;
     use gtk::glib;
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
     use std::thread::sleep;
 
+    #[test]
+    fn test_handle_getheaders_nodes(){
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let (writer_end, node_receiver) = mpsc::sync_channel(100);
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
+
+        let config = Config::from_file(config_path).unwrap();
+
+        let outer_controller =
+        OuterNetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+  
+        //outer_controller.recv_node_messages(node_receiver, config.clone()).unwrap();
+        outer_controller.listen_for_nodes(config.clone()).unwrap();
+
+        //first handshake
+        let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
+        //Envio un version
+        let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());
+        let payload = msg_version.serialize().unwrap();
+        socket.write_all(&payload).unwrap();
+        socket.flush().unwrap();
+
+        //Leo el header del version message
+        let version_header = MessageHeader::from_stream(&mut socket).unwrap();
+        //Leo el payload del version message
+        let payload_data = version_header.read_payload(&mut socket).unwrap();
+
+        //Recibo un verack message
+        let verack = VerAck::from_stream(&mut socket).unwrap();
+        println!("Verack message: {:?}", verack);
+        //Envio un verack message
+        let payload = VerAck::new().serialize().unwrap();
+        socket.write_all(&payload).unwrap();
+        socket.flush().unwrap();
+
+
+        //sending getheaders from genesis message to the server and see what the response is
+        let getheaders_message = GetHeader::from_last_header(config.get_genesis());
+        let payload = getheaders_message.serialize().unwrap();
+        socket.write_all(&payload).unwrap();
+        socket.flush().unwrap();
+
+        //read the response of the getheaders message
+        //let getheaders_header = MessageHeader::from_stream(&mut socket).unwrap();
+        //println!("getheaders header: {:?}", getheaders_header);
+        //let payload_data = getheaders_header.read_payload(&mut socket).unwrap();
+
+
+    }
+    
+    
     #[test]
     fn test_handle_incoming_nodes() {
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
@@ -937,12 +993,9 @@ mod tests {
         let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
 
         let config = Config::from_file(config_path).unwrap();
-        let network_controller =
-            NetworkController::new(ui_sender, writer_end.clone(), config.clone()).unwrap();
-
-        network_controller
-            .listen_for_nodes(writer_end.clone(), config.clone())
-            .expect("TODO: panic message");
+        let outer_controller =
+        OuterNetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        outer_controller.listen_for_nodes(config).unwrap();
 
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
 
@@ -965,10 +1018,6 @@ mod tests {
         socket.write_all(&payload).unwrap();
         socket.flush().unwrap();
 
-        println!(
-            "Stream content is: {:?}",
-            socket.read_to_end(&mut vec![]).unwrap()
-        );
     }
 
     #[test]
