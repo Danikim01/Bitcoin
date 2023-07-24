@@ -118,6 +118,8 @@ impl Listener {
             match self.process_message_payload(&message_header.command_name, payload) {
                 Ok(Message::Ignore) => continue,
                 Ok(m) => {
+                    println!("Message received: {:?}", m);
+                    println!("Sending to writer channel");
                     self.writer_channel
                         .send((self.socket_addr, m))
                         .map_err(to_io_err)?;

@@ -88,6 +88,7 @@ impl NetworkController {
     }
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
+        println!("GetHeaders received in handle get headers: {:?}", getheaders_message);
         let mut headers: Vec<BlockHeader> = Vec::new();
         let last_known_hash = match getheaders_message.block_header_hashes.first() {
             Some(hash) => hash.clone(),
@@ -95,6 +96,7 @@ impl NetworkController {
         };
         // if next block header is None, return empty Headers message
         if self.headers.get_next_header(&last_known_hash).is_none() {
+            println!("next header is none");
             return Some(Headers {
                 count: 0,
                 block_headers: headers,
@@ -782,7 +784,7 @@ impl OuterNetworkController {
         t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
-    fn handle_get_headers_message(
+    pub fn handle_get_headers_message(
         t_inner: Arc<RwLock<NetworkController>>,
         getheaders: GetHeader,
         peer_addr: SocketAddr,
@@ -790,6 +792,7 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
+            println!("Sending getheaders message to peer addr {:?}", peer_addr);
             _ = inner_write.nodes.send_to_specific(
                 &peer_addr,
                 &getheaders_message.serialize()?,
@@ -831,7 +834,7 @@ impl OuterNetworkController {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
                     (peer_addr, Message::_GetHeader(get_headers)) => {
-                        println!("Received getheaders message: {:?}", get_headers);
+                        //println!("Received getheaders message: {:?}", get_headers);
                         Self::handle_get_headers_message(t_inner, get_headers, peer_addr, &config)
                     }
                     (_, Message::Block(block)) => {
@@ -894,6 +897,7 @@ impl OuterNetworkController {
         // let writer_chanel = self.writer_chanel.clone();
         self.listen_for_nodes(config.clone())?;
         thread::spawn(move || -> io::Result<()> {
+            println!("Starting sync");
             inner.write().map_err(to_io_err)?.start_sync(&config)?;
             Ok(())
         });
@@ -928,11 +932,11 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
     use std::thread::sleep;
+    use std::sync::{Arc, RwLock};
 
     #[test]
     fn test_handle_getheaders_nodes(){
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
-        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
         let (writer_end, node_receiver) = mpsc::sync_channel(100);
 
         let config_file = "node.conf";
@@ -940,14 +944,12 @@ mod tests {
 
         let config = Config::from_file(config_path).unwrap();
 
-        let outer_controller =
-        OuterNetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-  
-        //outer_controller.recv_node_messages(node_receiver, config.clone()).unwrap();
-        outer_controller.listen_for_nodes(config.clone()).unwrap();
+        let outer_controller = OuterNetworkController::new(ui_sender.clone(), writer_end.clone(), config.clone()).unwrap();
+        outer_controller.sync(config.clone());
 
         //first handshake
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
+
         //Envio un version
         let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());
         let payload = msg_version.serialize().unwrap();
@@ -969,16 +971,26 @@ mod tests {
 
 
         //sending getheaders from genesis message to the server and see what the response is
-        let getheaders_message = GetHeader::from_last_header(config.get_genesis());
+        let block_header_hashes = vec![config.get_genesis()];
+        let getheaders_message = GetHeader {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes,
+            stop_hash: HashId { hash: [0u8; 32] },
+        };
         let payload = getheaders_message.serialize().unwrap();
         socket.write_all(&payload).unwrap();
-        socket.flush().unwrap();
+        socket.flush().unwrap(); 
 
-        //read the response of the getheaders message
-        //let getheaders_header = MessageHeader::from_stream(&mut socket).unwrap();
-        //println!("getheaders header: {:?}", getheaders_header);
-        //let payload_data = getheaders_header.read_payload(&mut socket).unwrap();
+        let local_addr: SocketAddr = socket.local_addr().unwrap();
+        let mut  nc = outer_controller.inner.clone();
+        OuterNetworkController::handle_get_headers_message(nc,getheaders_message,local_addr,&config.clone()).unwrap();
 
+        //read the response
+        // let get_header = MessageHeader::from_stream(&mut socket).unwrap();
+        // let payload_data = get_header.read_payload(&mut socket).unwrap();
+
+        // println!("getheaders response: {:?}", payload_data);
 
     }
     
@@ -1046,6 +1058,8 @@ mod tests {
         let headers = network_controller
             .handle_getheaders_message(getheaders_message)
             .unwrap();
+
+        println!("headers: {:?}", headers);
 
         assert_eq!(headers.count, 2000);
     }
