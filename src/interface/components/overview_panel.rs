@@ -8,16 +8,19 @@ use std::io;
 
 use crate::raw_transaction::TransactionOrigin;
 
-use super::utils::append_to_limited_container;
+use super::utils::redraw_container;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum TransactionRole {
     Receiver,
     Sender,
 }
 
 /// Struct that holds the information to be displayed in the transaction list in the UI
+#[derive(Debug, Clone, PartialEq)]
 pub struct TransactionDisplayInfo {
     pub role: TransactionRole,
+    pub origin: TransactionOrigin,
     pub date: String,
     pub amount: i64,
     pub hash: HashId,
@@ -31,7 +34,7 @@ fn try_remove_pending_transaction(overview_transaction_container: &gtk::Box, tx_
                     inner_box.foreach(|widget: &gtk::Widget| {
                         if let Some(hash_label) = widget.downcast_ref::<gtk::Label>() {
                             if hash_label.text() == tx_hash {
-                                println!("removing pending transaction from overview");
+                                // println!("removing pending transaction from overview");
                                 overview_transaction_container.remove(overview_tx);
                             }
                         }
@@ -42,30 +45,7 @@ fn try_remove_pending_transaction(overview_transaction_container: &gtk::Box, tx_
     });
 }
 
-fn already_added(overview_transaction_container: &gtk::Box, tx_hash: &str) -> bool {
-    let mut already_added = false;
-    overview_transaction_container.foreach(|transaction| {
-        if let Some(overview_tx) = transaction.downcast_ref::<gtk::Box>() {
-            overview_tx.foreach(|widget: &gtk::Widget| {
-                if let Some(inner_box) = widget.downcast_ref::<gtk::Box>() {
-                    inner_box.foreach(|widget: &gtk::Widget| {
-                        if let Some(hash_label) = widget.downcast_ref::<gtk::Label>() {
-                            if hash_label.text() == tx_hash {
-                                already_added = true;
-                            }
-                        }
-                    });
-                }
-            });
-        }
-    });
-    already_added
-}
-
-fn get_transaction_widget(
-    transaction: TransactionDisplayInfo,
-    origin: TransactionOrigin,
-) -> Result<gtk::Widget, String> {
+fn get_transaction_widget(transaction: TransactionDisplayInfo) -> Result<gtk::Widget, String> {
     let glade_src = include_str!("../res/ui.glade");
     let inner_builder = gtk::Builder::from_string(glade_src);
 
@@ -93,7 +73,7 @@ fn get_transaction_widget(
         .object("overview_transaction_template_img")
         .ok_or("Could not find origin image")?;
 
-    match origin {
+    match transaction.origin {
         TransactionOrigin::Block => {
             origin_img.set_file(Some("./src/interface/res/mined.png"));
         }
@@ -108,31 +88,23 @@ fn get_transaction_widget(
 /// Updates the overview component with recent transactions and the origin of the transaction.
 pub fn update_overview_transactions(
     builder: gtk::Builder,
-    transaction: TransactionDisplayInfo,
-    origin: TransactionOrigin,
+    transactions: Vec<TransactionDisplayInfo>,
 ) -> Result<(), String> {
     let overview_transaction_container: gtk::Box = builder
         .object("overview_transactions_container")
         .ok_or("Could not find overview transaction container")?;
 
-    if origin == TransactionOrigin::Block {
-        try_remove_pending_transaction(
-            &overview_transaction_container,
-            &transaction.hash.to_string(),
-        );
+    let mut tx_widgets = Vec::new();
+    for tx in transactions {
+        if tx.origin == TransactionOrigin::Block {
+            try_remove_pending_transaction(&overview_transaction_container, &tx.hash.to_string());
+        }
+
+        let tx_widget = get_transaction_widget(tx)?;
+        tx_widgets.push(tx_widget);
     }
 
-    if already_added(
-        &overview_transaction_container,
-        &transaction.hash.to_string(),
-    ) {
-        return Ok(());
-    }
-
-    let tx_widget = get_transaction_widget(transaction, origin)?;
-
-    append_to_limited_container(&overview_transaction_container, &tx_widget, 10);
-
+    redraw_container(&overview_transaction_container, tx_widgets);
     Ok(())
 }
 

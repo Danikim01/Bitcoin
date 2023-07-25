@@ -1,12 +1,10 @@
 use crate::config::Config;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::{GtkMessage, ModelRequest};
-use crate::messages::constants::{
-    commands::TX,
-    config::{MAGIC, QUIET, VERBOSE},
-};
+use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::{
     Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
-    MessageHeader, Serialize,
+    Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
@@ -14,23 +12,20 @@ use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use chrono::Utc;
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::net::SocketAddr;
 use std::sync::{
     mpsc::{self, Receiver},
-    Arc, Mutex,
+    Arc, RwLock, RwLockReadGuard,
 };
 use std::thread::{self, JoinHandle};
 
 use crate::interface::components::table::{
     table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
 };
-use crate::interface::{
-    components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
-    update_ui_progress_bar,
-};
+use crate::interface::{components::send_panel::TransactionInfo, update_ui_progress_bar};
 pub type BlockSet = HashMap<HashId, Block>;
 
 /// Structs of the network controller (main controller of the program)
@@ -42,29 +37,21 @@ pub struct NetworkController {
     pending_blocks: HashMap<HashId, Vec<HashId>>, // blocks which haven't arrived, and the blocks which come immediately after them
     utxo_set: UtxoSet,
     nodes: NodeController,
-    ui_sender: Sender<GtkMessage>,
-    wallet: Wallet,
+    ui_sender: SyncSender<GtkMessage>,
+    active_wallet: String,
+    wallets: HashMap<String, Wallet>, // key is address of the wallet
     tx_read: HashMap<HashId, ()>,
 }
 
 impl NetworkController {
     /// Creates a new network controller from the given sender and writer
     pub fn new(
-        ui_sender: Sender<GtkMessage>,
-        writer_end: mpsc::Sender<(SocketAddr, Message)>,
+        ui_sender: SyncSender<GtkMessage>,
+        writer_end: mpsc::SyncSender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
-        let wallet = match config.get_wallet() {
-            Some(w) => w,
-            None => {
-                let new_wallet = Wallet::new();
-                //utils::create_notification_window(gtk::MessageType::Info, title, message);
-                eprintln!("Since a secret key was not provided through the configuration file, a new wallet has been created. {{Secret key: {}, Address: {}}}", new_wallet.secret_key.display_secret(), new_wallet.address);
-                new_wallet
-            }
-        };
-        Wallet::display_in_ui(&wallet, Some(&ui_sender));
+        let (active_wallet, wallets) = Wallet::init_all(&config, Some(&ui_sender))?;
         Ok(Self {
             headers: HashMap::from([(genesis_header.hash(), genesis_header)]),
             tallest_header: genesis_header,
@@ -73,7 +60,8 @@ impl NetworkController {
             pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config)?,
-            wallet,
+            active_wallet,
+            wallets,
             ui_sender,
             tx_read: HashMap::new(),
         })
@@ -90,26 +78,11 @@ impl NetworkController {
 
         Ok(())
     }
-    
 
     fn update_ui_balance(&self) -> io::Result<()> {
-        let (balance, pending) = self.read_wallet_balance()?;
+        let (balance, pending) = self.read_active_wallet_balance()?;
         self.ui_sender
             .send(GtkMessage::UpdateBalance((balance, pending)))
-            .map_err(to_io_err)
-    }
-
-    fn update_ui_overview(&mut self, transaction: &RawTransaction) -> io::Result<()> {
-        let transaction_info: TransactionDisplayInfo = transaction.transaction_info_for(
-            &self.wallet.address,
-            Utc::now().timestamp() as u32,
-            &mut self.utxo_set,
-        );
-        self.ui_sender
-            .send(GtkMessage::UpdateOverviewTransactions((
-                transaction_info,
-                TransactionOrigin::Pending,
-            )))
             .map_err(to_io_err)
     }
 
@@ -123,11 +96,11 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    fn read_wallet_balance(&self) -> io::Result<(u64, u64)> {
-        let balance = self.utxo_set.get_wallet_balance(&self.wallet.address);
+    fn read_active_wallet_balance(&self) -> io::Result<(u64, u64)> {
+        let balance = self.utxo_set.get_wallet_balance(&self.active_wallet);
         let pending_balance = self
             .utxo_set
-            .get_pending_wallet_balance(&self.wallet.address);
+            .get_pending_wallet_balance(&self.active_wallet);
 
         Ok((balance, pending_balance))
     }
@@ -169,52 +142,21 @@ impl NetworkController {
         }
     }
 
-    fn read_incoming_block(&mut self, mut block: Block, config: &Config) -> io::Result<()> {
-        if self.validate_block(&block).is_err() {
-            return Ok(()); // ignore invalid or duplicate blocks
-        }
-
-        block.save_to_file(config.get_blocks_file())?;
-        if let Some(previous_block) = self.valid_blocks.get(&block.header.prev_block_hash) {
-            block.header.height = previous_block.header.height + 1;
-            if let Vacant(entry) = self.headers.entry(block.hash()) {
-                entry.insert(block.header);
-            }
-            let hash = block.hash();
-            self.blocks_on_hold.insert(hash, block);
-            self.add_to_valid_blocks(hash);
-        } else {
-            self.put_block_on_hold(block);
-        }
-        Ok(())
-    }
-
-    fn validate_block(&mut self, block: &Block) -> io::Result<()> {
-        if self.valid_blocks.contains_key(&block.hash())
-            || self.blocks_on_hold.contains_key(&block.hash())
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                "This block has already been received before",
-            ));
-        }
-        block.validate()?;
-        Ok(())
-    }
-
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
+        // change this for wallets
         let _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
-            Some(&self.wallet.address),
+            &mut self.wallets,
+            Some(&self.active_wallet),
         );
 
         let _ = self.update_ui_balance();
 
         // get real height of the block
-        block.header.height = match self.headers.get(&block.hash()) {
-            Some(header) => header.height,
-            None => 0,
+        block.header.height = match self.valid_blocks.get(&block.header.prev_block_hash) {
+            Some(prev_block) => prev_block.header.height + 1,
+            _ => self.tallest_header.height + 1,
         };
 
         // update progress bar
@@ -223,7 +165,8 @@ impl NetworkController {
         if progress == 0.0 {
             progress = 1.0;
         }
-        _ = update_ui_progress_bar(&self.ui_sender, None, progress);
+        let msg = format!("Received block {}", block.header.height);
+        _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
         self.valid_blocks.insert(block.hash(), block);
     }
@@ -311,7 +254,7 @@ impl NetworkController {
         config.log(
             &format!(
                 "Read backup headers. New header count: {:?}",
-                self.headers.len()
+                self.headers.len() - 1
             ),
             VERBOSE,
         );
@@ -345,41 +288,6 @@ impl NetworkController {
         self.request_blocks(headers, config)
     }
 
-    fn read_headers(&mut self, headers: Headers, config: &Config) -> io::Result<()> {
-        let prev_header_count = self.headers.len();
-        // save new headers to hashmap and backup file
-        let mut new_headers: Vec<BlockHeader> = vec![];
-        for mut header in headers.block_headers {
-            match self.headers.get(&header.prev_block_hash) {
-                Some(parent_header) => {
-                    header.height = parent_header.height + 1;
-                }
-                None => continue, // ignore header if prev_header is unknown
-            }
-            let hash = header.hash();
-            if let Vacant(entry) = self.headers.entry(hash) {
-                header.save_to_file(config.get_headers_file())?;
-                new_headers.push(header);
-                entry.insert(header);
-                if header.height > self.tallest_header.height {
-                    self.tallest_header = header
-                }
-            }
-        }
-        if prev_header_count == self.headers.len() {
-            return Ok(());
-        }
-        config.log(
-            &format!("Read headers. New header count: {:?}", self.headers.len()),
-            VERBOSE,
-        );
-        let msg = format!("Read headers. New header count: {:?}", self.headers.len());
-        self.update_ui_progress(Some(&msg), 0.0);
-        // request blocks mined after given date
-        let headers = Headers::new(new_headers.len(), new_headers);
-        self.try_request_trimmed_blocks(headers, config)
-    }
-
     fn request_headers(&mut self, header_hash: HashId, config: &Config) -> io::Result<()> {
         let getheader_message = GetHeader::from_last_header(header_hash);
         self.nodes
@@ -387,57 +295,34 @@ impl NetworkController {
         Ok(())
     }
 
-    /// read inv message from peer, if it contains tx invs, request txs to same peer
-    fn read_inventories(
-        &mut self,
-        peer: SocketAddr,
-        inventories: Vec<Inventory>,
-        config: &Config,
-    ) -> io::Result<()> {
-        let mut filtered_inv: Vec<Inventory> = Vec::new();
-        for inventory in inventories {
-            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
-                filtered_inv.push(inventory);
-            }
-        }
-
-        if filtered_inv.is_empty() {
-            return Ok(());
-        }
-
-        let getdata_message = GetData::new(filtered_inv.len(), filtered_inv);
-        // ignore inv and error if target node is not reachable
-        let _ = self
-            .nodes
-            .send_to_specific(&peer, &getdata_message.serialize()?, config);
-        Ok(())
-    }
-
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
-        // get data from tx and update ui
         let tx_hash: HashId = transaction.get_hash();
         if self.tx_read.contains_key(&tx_hash) {
             return Ok(());
         }
 
-        if transaction.address_is_involved(&self.wallet.address) {
-            transaction.generate_utxo(
-                &mut self.utxo_set,
-                TransactionOrigin::Pending,
-                Some(&self.ui_sender),
-                Some(&self.wallet.address),
-            )?;
+        transaction.generate_utxo(
+            &mut self.utxo_set,
+            TransactionOrigin::Pending,
+            Some(&self.ui_sender),
+            Some(&self.active_wallet),
+        )?;
 
-            // get wallet balance and update UI
-            self.update_ui_balance()?;
-
-            // add transaction to overview
-            self.update_ui_overview(&transaction)?;
-        }
-
-        // if self.tx_read
         let data = table_data_from_tx(&transaction);
         self.update_ui_table(GtkTable::Transactions, data)?;
+
+        // have to check for each wallet separately
+        for w in self.wallets.iter_mut() {
+            let (address, wallet) = w;
+            if transaction.address_is_involved(address) {
+                let tx_info = transaction.transaction_info_for_pending(
+                    address,
+                    Utc::now().timestamp() as u32,
+                    &mut self.utxo_set,
+                );
+                wallet.update_history(tx_info);
+            }
+        }
 
         self.tx_read.insert(tx_hash, ());
         Ok(())
@@ -449,28 +334,20 @@ impl NetworkController {
         details: TransactionInfo,
         config: &Config,
     ) -> io::Result<()> {
-        let tx = self
-            .wallet
-            .generate_transaction(&mut self.utxo_set, details);
+        let wallet = match self.wallets.get_mut(&self.active_wallet) {
+            Some(w) => w,
+            None => return Err(io::Error::new(io::ErrorKind::Other, "Wallet not found")),
+        };
+
+        let tx = wallet.generate_transaction(&mut self.utxo_set, details);
 
         match tx {
             Ok(tx) => {
                 let tx_hash = double_hash(&tx.serialize());
-
-                let payload = tx.serialize();
-                let mut bytes = MessageHeader::new(
-                    MAGIC,
-                    TX.to_string(),
-                    payload.len() as u32,
-                    [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
-                )
-                .serialize()?;
-
-                bytes.extend(payload);
-
-                // send bytes to all
+                let bytes = tx.build_message()?;
                 self.nodes.send_to_all(&bytes, config)?;
 
+                self.read_pending_tx(tx)?;
                 self.notify_ui_message(
                     gtk::MessageType::Info,
                     "Transaction broadcasted",
@@ -519,30 +396,128 @@ impl NetworkController {
     }
 }
 
-/// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
+/// OuterNetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
 pub struct OuterNetworkController {
-    inner: Arc<Mutex<NetworkController>>,
+    inner: Arc<RwLock<NetworkController>>,
+    ui_sender: SyncSender<GtkMessage>,
 }
 
 impl OuterNetworkController {
     /// Creates a new OuterNetworkController given a ui_sender and a writer
     pub fn new(
-        ui_sender: Sender<GtkMessage>,
-        writer_end: mpsc::Sender<(SocketAddr, Message)>,
+        ui_sender: SyncSender<GtkMessage>,
+        writer_end: mpsc::SyncSender<(SocketAddr, Message)>,
         config: Config,
     ) -> Result<Self, io::Error> {
-        let inner = Arc::new(Mutex::new(NetworkController::new(
-            ui_sender, writer_end, config,
+        let inner = Arc::new(RwLock::new(NetworkController::new(
+            ui_sender.clone(),
+            writer_end,
+            config,
         )?));
-        Ok(Self { inner })
+        Ok(Self { inner, ui_sender })
+    }
+
+    fn update_ui_headers_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        tallest_header_hash: &mut HashId,
+        headers: Vec<&BlockHeader>,
+    ) {
+        if inner.tallest_header.hash() != *tallest_header_hash {
+            *tallest_header_hash = inner.tallest_header.hash();
+            let data = table_data_from_headers(headers.clone());
+            _ = ui_sender
+                .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
+                .map_err(to_io_err);
+        }
+    }
+
+    fn update_ui_blocks_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        block_count: &mut usize,
+        headers: Vec<&BlockHeader>,
+    ) {
+        let curr_block_count = inner.valid_blocks.len();
+        if curr_block_count > *block_count {
+            let blocks = inner.get_best_blocks(headers);
+            let data = table_data_from_blocks(blocks);
+            _ = ui_sender
+                .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
+                .map_err(to_io_err);
+
+            *block_count = curr_block_count;
+        }
+    }
+
+    fn update_ui_overview_tx_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        txs_on_overview: &mut Vec<TransactionDisplayInfo>,
+    ) {
+        let curr_active_wallet = inner.active_wallet.clone();
+        _ = inner.update_ui_balance();
+        if let Some(wallet) = inner.wallets.get(&curr_active_wallet) {
+            let transactions = wallet.get_last_n_transactions(20);
+            if transactions != *txs_on_overview {
+                *txs_on_overview = transactions.clone();
+                _ = ui_sender.send(GtkMessage::UpdateOverviewTransactions(transactions));
+            }
+        }
+    }
+
+    fn update_ui_data_periodically(&self) -> io::Result<()> {
+        let inner = self.inner.clone();
+        let ui_sender: SyncSender<GtkMessage> = self.ui_sender.clone();
+        thread::spawn(move || -> io::Result<()> {
+            let mut tallest_header_hash = HashId::default();
+            let mut block_count = 0;
+            let mut txs_on_overview: Vec<TransactionDisplayInfo> = Vec::new();
+            loop {
+                thread::sleep(std::time::Duration::from_secs(10));
+                let inner: RwLockReadGuard<'_, NetworkController> =
+                    inner.read().map_err(to_io_err)?;
+                let headers: Vec<&BlockHeader> = inner.get_best_headers(100);
+
+                Self::update_ui_headers_periodically(
+                    &inner,
+                    &ui_sender,
+                    &mut tallest_header_hash,
+                    headers.clone(),
+                );
+                Self::update_ui_blocks_periodically(&inner, &ui_sender, &mut block_count, headers);
+                Self::update_ui_overview_tx_periodically(&inner, &ui_sender, &mut txs_on_overview)
+            }
+        });
+        Ok(())
+    }
+
+    fn handle_ui_change_active_wallet(
+        t_inner: Arc<RwLock<NetworkController>>,
+        wallet: String,
+    ) -> io::Result<()> {
+        let mut inner_lock = t_inner.write().map_err(to_io_err)?;
+        inner_lock.active_wallet = wallet;
+
+        let curr_active_wallet = inner_lock.active_wallet.clone();
+        inner_lock.update_ui_balance()?;
+
+        if let Some(wallet) = inner_lock.wallets.get(&curr_active_wallet) {
+            let transactions = wallet.get_last_n_transactions(20);
+            _ = inner_lock
+                .ui_sender
+                .send(GtkMessage::UpdateOverviewTransactions(transactions));
+        }
+
+        Ok(())
     }
 
     fn handle_ui_generate_transaction(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         transaction_info: TransactionInfo,
         config: Config,
     ) -> io::Result<()> {
-        let mut inner_lock = t_inner.lock().map_err(to_io_err)?;
+        let mut inner_lock = t_inner.write().map_err(to_io_err)?;
         inner_lock.generate_transaction(transaction_info, &config)
     }
 
@@ -554,7 +529,7 @@ impl OuterNetworkController {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
             loop {
-                let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
+                let t_inner: Arc<RwLock<NetworkController>> = inner.clone();
                 match ui_receiver.recv().map_err(to_io_err)? {
                     ModelRequest::GenerateTransaction(transaction_info) => {
                         Self::handle_ui_generate_transaction(
@@ -563,6 +538,9 @@ impl OuterNetworkController {
                             config.clone(),
                         )
                     }
+                    ModelRequest::ChangeActiveWallet(wallet) => {
+                        Self::handle_ui_change_active_wallet(t_inner, wallet)
+                    }
                 }?;
             }
         });
@@ -570,44 +548,153 @@ impl OuterNetworkController {
     }
 
     fn handle_node_block_message(
-        t_inner: Arc<Mutex<NetworkController>>,
-        block: Block,
+        t_inner: Arc<RwLock<NetworkController>>,
+        mut block: Block,
         config: &Config,
     ) -> io::Result<()> {
-        t_inner
-            .lock()
-            .map_err(to_io_err)?
-            .read_incoming_block(block, config)
+        let inner_read = t_inner.read().map_err(to_io_err)?;
+        if inner_read.valid_blocks.contains_key(&block.hash())
+            || inner_read.blocks_on_hold.contains_key(&block.hash())
+        {
+            return Ok(());
+        }
+        if block.validate().is_err() {
+            return Ok(());
+        }
+        block.save_to_file(config.get_blocks_file())?;
+
+        drop(inner_read);
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        if let Some(previous_block) = inner_write.valid_blocks.get(&block.header.prev_block_hash) {
+            block.header.height = previous_block.header.height + 1;
+            if let Vacant(entry) = inner_write.headers.entry(block.hash()) {
+                entry.insert(block.header);
+            }
+            let hash = block.hash();
+            let block_header = block.header;
+            inner_write.blocks_on_hold.insert(hash, block);
+
+            if block_header.prev_block_hash == inner_write.tallest_header.hash() {
+                inner_write.headers.insert(hash, block_header);
+                inner_write.tallest_header = block_header;
+            }
+
+            inner_write.add_to_valid_blocks(hash);
+        } else {
+            inner_write.put_block_on_hold(block);
+        }
+        Ok(())
+    }
+
+    fn handle_headers_message_info(
+        config: &Config,
+        inner_read: RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+    ) -> io::Result<()> {
+        config.log(
+            &format!(
+                "Read headers. New header count: {:?}",
+                inner_read.headers.len()
+            ),
+            VERBOSE,
+        );
+
+        let msg = format!(
+            "Read headers. New header count: {:?}",
+            inner_read.headers.len()
+        );
+        let most_recent_timestamp = inner_read.tallest_header.timestamp;
+
+        // the closer the timestamp is to the current time, the more progress we have made
+        let diff = (Utc::now().timestamp() - most_recent_timestamp as i64) as f64 / 1000000000.0;
+        let progress = 1.0 - diff;
+
+        _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
+        Ok(())
+    }
+
+    fn try_request_trimmed_blocks(
+        t_inner: Arc<RwLock<NetworkController>>,
+        new_headers: Vec<BlockHeader>,
+        config: &Config,
+    ) -> io::Result<()> {
+        let headers = Headers::new(new_headers.len(), new_headers);
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        inner_write.try_request_trimmed_blocks(headers, config)
     }
 
     fn handle_node_headers_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         headers: Headers,
         config: &Config,
+        ui_sender: &SyncSender<GtkMessage>,
     ) -> io::Result<()> {
-        t_inner
-            .lock()
-            .map_err(to_io_err)?
-            .read_headers(headers, config)
+        let mut inner_read: RwLockReadGuard<'_, NetworkController> =
+            t_inner.read().map_err(to_io_err)?;
+        let prev_header_count = inner_read.headers.len();
+        // save new headers to hashmap and backup file
+        let mut new_headers: Vec<BlockHeader> = vec![];
+        for mut header in headers.block_headers {
+            match inner_read.headers.get(&header.prev_block_hash) {
+                Some(parent_header) => {
+                    header.height = parent_header.height + 1;
+                }
+                None => continue, // ignore header if prev_header is unknown
+            }
+            let hash = header.hash();
+            drop(inner_read);
+            let mut inner_write = t_inner.write().map_err(to_io_err)?;
+            if let Vacant(entry) = inner_write.headers.entry(hash) {
+                header.save_to_file(config.get_headers_file())?;
+                new_headers.push(header);
+                entry.insert(header);
+                if header.height > inner_write.tallest_header.height {
+                    inner_write.tallest_header = header
+                }
+            }
+            drop(inner_write);
+            inner_read = t_inner.read().map_err(to_io_err)?;
+        }
+        if prev_header_count == inner_read.headers.len() {
+            return Ok(());
+        }
+
+        Self::handle_headers_message_info(config, inner_read, ui_sender)?;
+
+        // request blocks mined after given date
+        Self::try_request_trimmed_blocks(t_inner, new_headers, config)
     }
 
     fn handle_node_inv_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
         inventories: Vec<Inventory>,
         config: &Config,
     ) -> io::Result<()> {
-        t_inner
-            .lock()
-            .map_err(to_io_err)?
-            .read_inventories(peer_addr, inventories, config)
+        let mut filtered_inv: Vec<Inventory> = Vec::new();
+        for inventory in inventories {
+            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
+                filtered_inv.push(inventory);
+            }
+        }
+
+        if filtered_inv.is_empty() {
+            return Ok(());
+        }
+
+        let getdata_message = GetData::new(filtered_inv.len(), filtered_inv);
+        let mut nc = t_inner.write().map_err(to_io_err)?;
+        _ = nc
+            .nodes
+            .send_to_specific(&peer_addr, &getdata_message.serialize()?, config);
+        Ok(())
     }
 
     fn handle_node_tx_message(
-        t_inner: Arc<Mutex<NetworkController>>,
+        t_inner: Arc<RwLock<NetworkController>>,
         tx: RawTransaction,
     ) -> io::Result<()> {
-        t_inner.lock().map_err(to_io_err)?.read_pending_tx(tx)
+        t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
     fn recv_node_messages(
@@ -616,12 +703,13 @@ impl OuterNetworkController {
         config: Config,
     ) -> io::Result<JoinHandle<io::Result<()>>> {
         let inner = self.inner.clone();
+        let ui_sender = self.ui_sender.clone();
         let handle = thread::spawn(move || -> io::Result<()> {
             loop {
-                let t_inner: Arc<Mutex<NetworkController>> = inner.clone();
+                let t_inner: Arc<RwLock<NetworkController>> = inner.clone();
                 if let Err(result) = match node_receiver.recv().map_err(to_io_err)? {
                     (_, Message::Headers(headers)) => {
-                        Self::handle_node_headers_message(t_inner, headers, &config)
+                        Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
@@ -640,34 +728,10 @@ impl OuterNetworkController {
         Ok(handle)
     }
 
-    fn update_ui_data_periodically(&self) -> io::Result<()> {
-        let inner = self.inner.clone();
-        thread::spawn(move || -> io::Result<()> {
-            let mut tallest_header_hash = HashId::default();
-            loop {
-                thread::sleep(std::time::Duration::from_secs(3));
-                let controller = inner.lock().map_err(to_io_err)?;
-                if controller.tallest_header.hash() != tallest_header_hash {
-                    tallest_header_hash = controller.tallest_header.hash();
-                    // update ui with last 100 headers
-                    let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
-                    let data = table_data_from_headers(headers.clone());
-                    controller.update_ui_table(GtkTable::Headers, data)?;
-
-                    // update ui with last 100 blocks
-                    let blocks = controller.get_best_blocks(headers);
-                    let data = table_data_from_blocks(blocks);
-                    controller.update_ui_table(GtkTable::Blocks, data)?;
-                }
-            }
-        });
-        Ok(())
-    }
-
     fn sync(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
         thread::spawn(move || -> io::Result<()> {
-            inner.lock().map_err(to_io_err)?.start_sync(&config)
+            inner.write().map_err(to_io_err)?.start_sync(&config)
         });
         Ok(())
     }
@@ -681,7 +745,7 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
-        self.sync(config)?;
-        self.update_ui_data_periodically()
+        self.update_ui_data_periodically()?;
+        self.sync(config)
     }
 }

@@ -100,6 +100,7 @@ impl MessageHeader {
             ADDR,
             INV,
             TX,
+            NOTFOUND,
         ];
         if commands.contains(&self.command_name.as_str()) {
             return Ok(());

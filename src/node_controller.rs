@@ -8,7 +8,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::mpsc;
 // gtk imports
 use crate::interface::GtkMessage;
-use gtk::glib::Sender;
+use gtk::glib::SyncSender;
 
 /// The NodeController struct is responsible for managing all the nodes and sending messages to them.
 pub struct NodeController {
@@ -23,8 +23,8 @@ fn find_nodes(config: &Config) -> Result<std::vec::IntoIter<SocketAddr>, io::Err
 impl NodeController {
     /// Creates a new NodeController and connects to the peers.
     pub fn connect_to_peers(
-        writer_end: mpsc::Sender<(SocketAddr, Message)>,
-        sender: Sender<GtkMessage>,
+        writer_end: mpsc::SyncSender<(SocketAddr, Message)>,
+        sender: SyncSender<GtkMessage>,
         config: Config,
     ) -> Result<Self, io::Error> {
         let node_addresses = find_nodes(&config)?;
