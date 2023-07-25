@@ -943,11 +943,13 @@ mod tests {
         let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
 
         let config = Config::from_file(config_path).unwrap();
+        let config_copy = config.clone();
 
 
-        //mover esto a un thread aparte para que no se bloquee por el start sync
-        let outer_controller = OuterNetworkController::new(ui_sender.clone(), writer_end.clone(), config.clone()).unwrap();
-        outer_controller.start_sync(node_receiver, receiver_aux, config.clone()).unwrap();
+        let outer_controller = OuterNetworkController::new(ui_sender.clone(), writer_end.clone(), config_copy.clone()).unwrap();
+        outer_controller.start_sync(node_receiver, receiver_aux, config_copy.clone()).unwrap();
+        outer_controller.listen_for_nodes(config_copy.clone()).unwrap();
+
 
         //first handshake
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
