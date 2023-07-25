@@ -68,11 +68,16 @@ pub fn init(builder: gtk::Builder) -> io::Result<()> {
         )
     })?;
 
+    let poi_btn: gtk::Button = builder
+        .object("poi_btn")
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get poi_btn object"))?;
+
     register_btn_panel_changer(builder.clone(), overview_btn, "overview_panel")?;
     register_btn_panel_changer(builder.clone(), send_btn, "send_panel")?;
     register_btn_panel_changer(builder.clone(), headers_btn, "headers_panel")?;
     register_btn_panel_changer(builder.clone(), blocks_btn, "blocks_panel")?;
     register_btn_panel_changer(builder.clone(), transactions_btn, "transactions_panel")?;
+    register_btn_panel_changer(builder.clone(), poi_btn, "poi_panel")?;
 
     set_default_panel(builder, "overview_panel")?;
 
