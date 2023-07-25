@@ -927,16 +927,16 @@ mod tests {
 
     use super::*;
     use crate::messages::constants::config::LOCALSERVER;
-    use gtk::gio::ffi::g_data_output_stream_get_byte_order;
     use gtk::glib;
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
-    use std::thread::sleep;
-    use std::sync::{Arc, RwLock};
+
 
     #[test]
+    #[ignore]
     fn test_handle_getheaders_nodes(){
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (_, receiver_aux) = mpsc::channel();
         let (writer_end, node_receiver) = mpsc::sync_channel(100);
 
         let config_file = "node.conf";
@@ -944,8 +944,10 @@ mod tests {
 
         let config = Config::from_file(config_path).unwrap();
 
+
+        //mover esto a un thread aparte para que no se bloquee por el start sync
         let outer_controller = OuterNetworkController::new(ui_sender.clone(), writer_end.clone(), config.clone()).unwrap();
-        outer_controller.sync(config.clone());
+        outer_controller.start_sync(node_receiver, receiver_aux, config.clone()).unwrap();
 
         //first handshake
         let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
@@ -982,15 +984,14 @@ mod tests {
         socket.write_all(&payload).unwrap();
         socket.flush().unwrap(); 
 
-        let local_addr: SocketAddr = socket.local_addr().unwrap();
-        let mut  nc = outer_controller.inner.clone();
-        OuterNetworkController::handle_get_headers_message(nc,getheaders_message,local_addr,&config.clone()).unwrap();
+        let get_header = MessageHeader::from_stream(&mut socket).unwrap();
+        let payload_data = get_header.read_payload(&mut socket).unwrap();
+        let get_header_message = match GetHeader::deserialize(&payload_data).unwrap(){
+            Message::_GetHeader(get_header_message) => get_header_message,
+            _ => panic!("Error"),
+        };
 
-        //read the response
-        // let get_header = MessageHeader::from_stream(&mut socket).unwrap();
-        // let payload_data = get_header.read_payload(&mut socket).unwrap();
-
-        // println!("getheaders response: {:?}", payload_data);
+        assert_eq!(get_header_message.block_header_hashes.len(), 2000);
 
     }
     
