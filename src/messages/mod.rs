@@ -64,7 +64,7 @@ impl HashId {
         let mut bytes = hex_string.as_bytes().to_owned();
         bytes.reverse();
         for (i, chunk) in bytes.chunks(2).enumerate() {
-            let mut byte = chunk.clone().to_owned();
+            let mut byte = <&[u8]>::clone(&chunk).to_owned();
             byte.reverse();
             let byte_str = ::std::str::from_utf8(&byte)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid UTF-8"))?;

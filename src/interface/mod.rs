@@ -88,6 +88,15 @@ fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
     }
 }
 
+fn update_progress_bar(builder: gtk::Builder, new_status: Option<&str>, fraction: f64) {
+    if let Some(progress_bar) = builder.object::<gtk::ProgressBar>("progress_bar") {
+        progress_bar.set_fraction(fraction);
+        if let Some(new_status) = new_status {
+            progress_bar.set_text(Some(new_status));
+        }
+    }
+}
+
 fn update_poi_result(builder: gtk::Builder, result: String) {
     if let Some(poi_result) = builder.object::<gtk::TextView>("poi_result") {
         if let Some(buffer) = poi_result.buffer() {
@@ -114,12 +123,7 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 let _res = table_append_data(builder_aux, table, data);
             }
             GtkMessage::UpdateProgressBar((new_status, fraction)) => {
-                if let Some(progress_bar) = builder_aux.object::<gtk::ProgressBar>("progress_bar") {
-                    progress_bar.set_fraction(fraction);
-                    if let Some(new_status) = new_status {
-                        progress_bar.set_text(Some(new_status.as_str()));
-                    }
-                }
+                update_progress_bar(builder_aux, new_status.as_deref(), fraction);
             }
             GtkMessage::AddWalletEntry(wallet, is_main_wallet) => {
                 append_wallet(builder_aux, wallet, is_main_wallet);
