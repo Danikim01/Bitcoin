@@ -9,7 +9,7 @@ use crate::messages::{
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{decode_hex, double_hash, to_io_err};
+use crate::utility::{decode_hex, double_hash, reverse_hex_str, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
 use bitcoin_hashes::{sha256, Hash};
@@ -70,9 +70,12 @@ impl NetworkController {
     }
 
     fn update_ui_poi_result(&self, proof: MerkleProof, root_from_proof: sha256::Hash) {
+        let root_from_proof_str = format!("{:?}", root_from_proof);
+
         let result_str = format!(
             "{:?}\n\nMerkle root generated from poi: {:?}",
-            proof, root_from_proof
+            proof,
+            &reverse_hex_str(&root_from_proof_str)[..root_from_proof_str.len() - 2]
         );
 
         _ = self.ui_sender.send(GtkMessage::UpdatePoiResult(result_str));
@@ -398,7 +401,7 @@ impl NetworkController {
 
         let block_tx_hashes = block.hash_transactions();
         let merkle_tree = MerkleTree::generate_from_hashes(block_tx_hashes);
-        let dhx = decode_hex(&tx_hash).map_err(to_io_err)?;
+        let dhx = decode_hex(&reverse_hex_str(&tx_hash)).map_err(to_io_err)?;
         let tx_hashed = sha256::Hash::from_slice(&dhx).map_err(to_io_err)?;
         let proof = merkle_tree.generate_proof(tx_hashed)?;
         let root_from_proof = proof.generate_merkle_root();

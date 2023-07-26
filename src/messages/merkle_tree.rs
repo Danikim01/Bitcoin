@@ -187,6 +187,10 @@ impl MerkleTree {
 
 #[cfg(test)]
 mod tests {
+    use bitcoin_hashes::Hash;
+
+    use crate::{raw_transaction::RawTransaction, utility::decode_hex};
+
     use super::*;
 
     #[test]
@@ -433,5 +437,75 @@ mod tests {
         let alien_proof = actual_tree.generate_proof(alien_transaction).unwrap();
         let bad_merkle_root = alien_proof.generate_merkle_root();
         assert_ne!(bad_merkle_root, abcd_hash);
+    }
+
+    #[test]
+    fn test_merkle_tree_from_raw_transactions() {
+        let tx1_bytes = decode_hex("020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff2303aba925044428c1644d65726d6169646572204654572101000023f5cb010000000000ffffffff02ce80250000000000160014c035e789d9efffa10aa92e93f48f29b8cfb224c20000000000000000266a24aa21a9ed8e2fa0dcf35a1c3853030613ab9fe45ff77255df36484815fd2899d8675e3d180120000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let mut cursor = std::io::Cursor::new(&tx1_bytes[..]);
+        let tx1 = RawTransaction::from_bytes(&mut cursor).unwrap();
+        let tx1_hash = double_hash(&tx1.serialize());
+
+        let tx2_bytes = decode_hex("02000000000101fad25ca83a41395a00dec1a6bc20ee52ec413984358157d697fc09d53091c2e50100000017160014038e5730357e5631b6a5626df15a244ab0a7d9e8fdffffff0260b0d7c50e0000001600143c898dff9dd73d780d846a61a65a7cbfa871a81d30420500000000001600144cf6537ae378d52ab13c4fe5a0d52808dbfc75ef02473044022011fc8d6b5b350ae40b44093e4ca7aa0e19a60fb835362da365c86636df6d1e3902205278495b8c7cf237bf12561665b6858715c57e1bdb65a0525c018ee054d3960d012103cc957cab76d1677ae3547e7654096f392d3b3784acb29075830fdd72d1361a0baaa92500").unwrap();
+        let mut cursor = std::io::Cursor::new(&tx2_bytes[..]);
+        let tx2 = RawTransaction::from_bytes(&mut cursor).unwrap();
+        let tx2_hash = double_hash(&tx2.serialize());
+
+        let hash_tx_vec = vec![tx1_hash, tx2_hash];
+        let merkle_tree = MerkleTree::generate_from_hashes(hash_tx_vec);
+
+        let merkle_root = merkle_tree.get_root();
+        let mut expected =
+            decode_hex("a3b3097e67e3d002c36400e685575f41bb0a3215b7ca92f0a79b8a4f5d38075f").unwrap();
+        expected.reverse();
+        let expected_sha256 = sha256::Hash::from_slice(&expected).unwrap();
+        assert_eq!(expected_sha256, merkle_root);
+    }
+
+    fn reverse_hex_str(hex: &str) -> String {
+        let mut reversed_hex = String::new();
+        let chars = hex.chars().collect::<Vec<char>>();
+        for i in (0..chars.len()).step_by(2) {
+            let mut byte = String::new();
+            byte.push(chars[i]);
+            byte.push(chars[i + 1]);
+            reversed_hex = format!("{}{}", byte, reversed_hex);
+        }
+        reversed_hex
+    }
+
+    #[test]
+    fn test_merkle_root_valid_poi() {
+        let tx1_bytes = decode_hex("020000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff2303aba925044428c1644d65726d6169646572204654572101000023f5cb010000000000ffffffff02ce80250000000000160014c035e789d9efffa10aa92e93f48f29b8cfb224c20000000000000000266a24aa21a9ed8e2fa0dcf35a1c3853030613ab9fe45ff77255df36484815fd2899d8675e3d180120000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let mut cursor = std::io::Cursor::new(&tx1_bytes[..]);
+        let tx1 = RawTransaction::from_bytes(&mut cursor).unwrap();
+        let tx1_hash = double_hash(&tx1.serialize());
+
+        let tx2_bytes = decode_hex("02000000000101fad25ca83a41395a00dec1a6bc20ee52ec413984358157d697fc09d53091c2e50100000017160014038e5730357e5631b6a5626df15a244ab0a7d9e8fdffffff0260b0d7c50e0000001600143c898dff9dd73d780d846a61a65a7cbfa871a81d30420500000000001600144cf6537ae378d52ab13c4fe5a0d52808dbfc75ef02473044022011fc8d6b5b350ae40b44093e4ca7aa0e19a60fb835362da365c86636df6d1e3902205278495b8c7cf237bf12561665b6858715c57e1bdb65a0525c018ee054d3960d012103cc957cab76d1677ae3547e7654096f392d3b3784acb29075830fdd72d1361a0baaa92500").unwrap();
+        let mut cursor = std::io::Cursor::new(&tx2_bytes[..]);
+        let tx2 = RawTransaction::from_bytes(&mut cursor).unwrap();
+        let tx2_hash = double_hash(&tx2.serialize());
+
+        let hash_tx_vec = vec![tx1_hash, tx2_hash];
+        let merkle_tree = MerkleTree::generate_from_hashes(hash_tx_vec);
+
+        let mut expected =
+            decode_hex("a3b3097e67e3d002c36400e685575f41bb0a3215b7ca92f0a79b8a4f5d38075f").unwrap();
+        expected.reverse();
+        let expected_sha256 = sha256::Hash::from_slice(&expected).unwrap();
+
+        let tx1_hash_str =
+            reverse_hex_str("3412733ebdff59c8b28fed2b18b2a4fd60332fb08a5ca4b2ecfaea4e241fc081");
+        let tx1_hash = tx1_hash_str.parse().unwrap();
+        let proof_from_tx1 = merkle_tree.generate_proof(tx1_hash).unwrap();
+        let merkle_root_from_tx1 = proof_from_tx1.generate_merkle_root();
+        assert_eq!(expected_sha256, merkle_root_from_tx1);
+
+        let tx2_hash_str =
+            reverse_hex_str("3412733ebdff59c8b28fed2b18b2a4fd60332fb08a5ca4b2ecfaea4e241fc081");
+        let tx2_hash = tx2_hash_str.parse().unwrap();
+        let proof_from_tx2 = merkle_tree.generate_proof(tx2_hash).unwrap();
+        let merkle_root_from_tx2 = proof_from_tx2.generate_merkle_root();
+        assert_eq!(expected_sha256, merkle_root_from_tx2);
     }
 }
