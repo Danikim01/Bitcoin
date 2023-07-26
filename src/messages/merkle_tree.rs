@@ -3,20 +3,20 @@ use bitcoin_hashes::sha256;
 use std::io::Error;
 
 /// Enum that represents the direction of a node in a merkle tree
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Direction {
-    _Left,
-    _Right,
+    Left,
+    Right,
 }
 
 /// Struct that represents a merkle proof
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MerkleProof {
     pub proof: Vec<(sha256::Hash, Direction)>,
 }
 
 impl MerkleProof {
-    fn _find_root(&self, hash: sha256::Hash, index: usize) -> sha256::Hash {
+    fn find_root(&self, hash: sha256::Hash, index: usize) -> sha256::Hash {
         if index > self.proof.len() - 1 {
             return hash;
         }
@@ -24,24 +24,24 @@ impl MerkleProof {
         let (hash2, direction2) = self.proof[index].clone();
 
         match direction2 {
-            Direction::_Right => {
+            Direction::Right => {
                 let combined_hash = double_hash(&[&hash[..], &hash2[..]].concat());
-                self._find_root(combined_hash, index + 1)
+                self.find_root(combined_hash, index + 1)
             }
-            Direction::_Left => {
+            Direction::Left => {
                 let combined_hash = double_hash(&[&hash2[..], &hash[..]].concat());
-                self._find_root(combined_hash, index + 1)
+                self.find_root(combined_hash, index + 1)
             }
         }
     }
 
-    pub fn _generate_merkle_root(&self) -> sha256::Hash {
+    pub fn generate_merkle_root(&self) -> sha256::Hash {
         if self.proof.is_empty() {
             return double_hash(b"foo");
         }
 
         let (h, _) = self.proof[0].clone();
-        self._find_root(h, 1)
+        self.find_root(h, 1)
     }
 }
 
@@ -54,7 +54,7 @@ pub struct MerkleTree {
 // Doc: https://developer.bitcoin.org/reference/block_chain.html#merkle-trees
 // Reference: https://medium.com/coinmonks/merkle-tree-a-simple-explanation-and-implementation-48903442bc08
 impl MerkleTree {
-    fn _get_leaf_node_direction(&self, hash_leaf: sha256::Hash) -> Direction {
+    fn get_leaf_node_direction(&self, hash_leaf: sha256::Hash) -> Direction {
         let mut hash_index = 0;
         for hash in self.tree[0].iter() {
             if hash == &hash_leaf {
@@ -64,9 +64,9 @@ impl MerkleTree {
         }
 
         if hash_index % 2 == 0 {
-            return Direction::_Left;
+            return Direction::Left;
         }
-        Direction::_Right
+        Direction::Right
         // this function does not contemplate the chance that the hash is not in the tree
         // yet it is not needed as the generated proof will fail later on
     }
@@ -105,9 +105,9 @@ impl MerkleTree {
         let hashes = Self::_ensure_even(hashes);
         let mut combined_hashes: Vec<sha256::Hash> = Vec::new();
         for i in (0..hashes.len()).step_by(2) {
-            let _left_hash = hashes[i];
-            let _right_hash = hashes[i + 1];
-            let combined_hash = double_hash(&[&_left_hash[..], &_right_hash[..]].concat());
+            let left_hash = hashes[i];
+            let right_hash = hashes[i + 1];
+            let combined_hash = double_hash(&[&left_hash[..], &right_hash[..]].concat());
             combined_hashes.push(combined_hash);
         }
 
@@ -131,9 +131,9 @@ impl MerkleTree {
             let hashes = MerkleTree::_ensure_even(hashes);
             let mut combined_hashes: Vec<sha256::Hash> = Vec::new();
             for i in (0..hashes.len()).step_by(2) {
-                let _left_hash = hashes[i];
-                let _right_hash = hashes[i + 1];
-                let combined_hash = double_hash(&[&_left_hash[..], &_right_hash[..]].concat());
+                let left_hash = hashes[i];
+                let right_hash = hashes[i + 1];
+                let combined_hash = double_hash(&[&left_hash[..], &right_hash[..]].concat());
                 combined_hashes.push(combined_hash);
             }
             tree.push(combined_hashes.clone());
@@ -144,9 +144,9 @@ impl MerkleTree {
     }
 
     /// Generates a Merkle proof for a given hash
-    pub fn _generate_proof(&self, hash: sha256::Hash) -> Result<MerkleProof, Error> {
+    pub fn generate_proof(&self, hash: sha256::Hash) -> Result<MerkleProof, Error> {
         let mut proof: Vec<(sha256::Hash, Direction)> = Vec::new();
-        proof.push((hash, self._get_leaf_node_direction(hash)));
+        proof.push((hash, self.get_leaf_node_direction(hash)));
 
         let mut hash_index = 0;
         for h in self.tree[0].iter() {
@@ -159,9 +159,9 @@ impl MerkleTree {
         for level in 0..(self.tree.len() - 1) {
             let is_left_child = hash_index % 2 == 0;
             let sibling_direction = if is_left_child {
-                Direction::_Right
+                Direction::Right
             } else {
-                Direction::_Left
+                Direction::Left
             };
 
             let mut sibling_index = if is_left_child {
@@ -423,15 +423,15 @@ mod tests {
 
         // iterate all elements in the tree and validate their proof
         for transaction in txid_hashes {
-            let proof = actual_tree._generate_proof(transaction).unwrap();
-            let merkle_root = proof._generate_merkle_root();
+            let proof = actual_tree.generate_proof(transaction).unwrap();
+            let merkle_root = proof.generate_merkle_root();
             assert_eq!(merkle_root, abcd_hash);
         }
 
         // alien transaction should fail to generate correct proof
         let alien_transaction = double_hash(b"alien");
-        let alien_proof = actual_tree._generate_proof(alien_transaction).unwrap();
-        let bad_merkle_root = alien_proof._generate_merkle_root();
+        let alien_proof = actual_tree.generate_proof(alien_transaction).unwrap();
+        let bad_merkle_root = alien_proof.generate_merkle_root();
         assert_ne!(bad_merkle_root, abcd_hash);
     }
 }

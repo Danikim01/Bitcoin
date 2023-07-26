@@ -9,7 +9,7 @@ mod getdata_message;
 mod getheader_message;
 mod headers;
 mod headers_message;
-mod merkle_tree;
+pub mod merkle_tree;
 mod ping_message;
 pub mod utility;
 mod verack_message;

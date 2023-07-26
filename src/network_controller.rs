@@ -2,15 +2,17 @@ use crate::config::Config;
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::{GtkMessage, ModelRequest};
 use crate::messages::constants::config::{QUIET, VERBOSE};
+use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
-    Serialize,
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
+    MerkleTree, Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{double_hash, to_io_err};
+use crate::utility::{decode_hex, double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::{sha256, Hash};
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -65,6 +67,15 @@ impl NetworkController {
             ui_sender,
             tx_read: HashMap::new(),
         })
+    }
+
+    fn update_ui_poi_result(&self, proof: MerkleProof, root_from_proof: sha256::Hash) {
+        let result_str = format!(
+            "{:?}\n\nMerkle root generated from poi: {:?}",
+            proof, root_from_proof
+        );
+
+        println!("{}", result_str);
     }
 
     fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
@@ -364,8 +375,16 @@ impl NetworkController {
 
     /// Gets the proof of inclusion for a transaction given the block hash and transaction hash
     pub fn get_proof_of_inclusion(&self, block_hash: String, tx_hash: String) -> io::Result<()> {
-        // get block
-        let block_hashid: HashId = block_hash.parse()?;
+        let block_hashid: HashId = match block_hash.parse() {
+            Ok(hash) => hash,
+            Err(_) => {
+                return self.notify_ui_message(
+                    gtk::MessageType::Error,
+                    "Invalid block hash",
+                    "Invalid block hash.",
+                )
+            }
+        };
         let block = match self.valid_blocks.get(&block_hashid) {
             Some(block) => block,
             None => {
@@ -377,10 +396,15 @@ impl NetworkController {
             }
         };
 
-        println!(
-            "Get poi called, block hash: {}, tx hash: {}",
-            block_hash, tx_hash
-        );
+        let block_tx_hashes = block.hash_transactions();
+        let merkle_tree = MerkleTree::generate_from_hashes(block_tx_hashes);
+        let dhx = decode_hex(&tx_hash).map_err(to_io_err)?;
+        let tx_hashed = sha256::Hash::from_slice(&dhx).map_err(to_io_err)?;
+        let proof = merkle_tree.generate_proof(tx_hashed)?;
+        let root_from_proof = proof.generate_merkle_root();
+
+        self.update_ui_poi_result(proof, root_from_proof);
+
         Ok(())
     }
 
@@ -573,7 +597,8 @@ impl OuterNetworkController {
                         Self::handle_ui_change_active_wallet(t_inner, wallet)
                     }
                     ModelRequest::GetPoi(block_hash, tx_hash) => {
-                        Self::handle_ui_get_poi(t_inner, block_hash, tx_hash)
+                        _ = Self::handle_ui_get_poi(t_inner, block_hash, tx_hash);
+                        Ok(())
                     }
                 }?;
             }
