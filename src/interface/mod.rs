@@ -26,6 +26,8 @@ pub enum GtkMessage {
     UpdateProgressBar((Option<String>, f64)),
     /// wallet address, is main wallet
     AddWalletEntry(String, bool),
+    /// updates poi result
+    UpdatePoiResult(String),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -86,6 +88,14 @@ fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
     }
 }
 
+fn update_poi_result(builder: gtk::Builder, result: String) {
+    if let Some(poi_result) = builder.object::<gtk::TextView>("poi_result") {
+        if let Some(buffer) = poi_result.buffer() {
+            buffer.set_text(result.as_str());
+        }
+    }
+}
+
 /// Receiver that listen from messages from the model
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
@@ -113,6 +123,9 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
             }
             GtkMessage::AddWalletEntry(wallet, is_main_wallet) => {
                 append_wallet(builder_aux, wallet, is_main_wallet);
+            }
+            GtkMessage::UpdatePoiResult(result) => {
+                update_poi_result(builder_aux, result);
             }
         }
 

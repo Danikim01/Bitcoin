@@ -75,7 +75,7 @@ impl NetworkController {
             proof, root_from_proof
         );
 
-        println!("{}", result_str);
+        _ = self.ui_sender.send(GtkMessage::UpdatePoiResult(result_str));
     }
 
     fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
