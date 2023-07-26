@@ -34,6 +34,8 @@ pub type RecipientDetails = (String, String, u64); // (address, label, value)
 pub enum ModelRequest {
     GenerateTransaction(TransactionInfo),
     ChangeActiveWallet(String), // wallet address
+    /// block hash, transaction hash
+    GetPoi(String, String),
 }
 
 /// called from the model, to update the status bar in the ui

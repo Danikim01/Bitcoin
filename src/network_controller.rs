@@ -362,6 +362,28 @@ impl NetworkController {
         }
     }
 
+    /// Gets the proof of inclusion for a transaction given the block hash and transaction hash
+    pub fn get_proof_of_inclusion(&self, block_hash: String, tx_hash: String) -> io::Result<()> {
+        // get block
+        let block_hashid: HashId = block_hash.parse()?;
+        let block = match self.valid_blocks.get(&block_hashid) {
+            Some(block) => block,
+            None => {
+                return self.notify_ui_message(
+                    gtk::MessageType::Error,
+                    "Block not found",
+                    "Block not found in blockchain.",
+                )
+            }
+        };
+
+        println!(
+            "Get poi called, block hash: {}, tx hash: {}",
+            block_hash, tx_hash
+        );
+        Ok(())
+    }
+
     /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
@@ -521,6 +543,15 @@ impl OuterNetworkController {
         inner_lock.generate_transaction(transaction_info, &config)
     }
 
+    fn handle_ui_get_poi(
+        t_inner: Arc<RwLock<NetworkController>>,
+        block_hash: String,
+        tx_hash: String,
+    ) -> io::Result<()> {
+        let inner_lock = t_inner.read().map_err(to_io_err)?;
+        inner_lock.get_proof_of_inclusion(block_hash, tx_hash)
+    }
+
     fn recv_ui_messages(
         &self,
         ui_receiver: Receiver<ModelRequest>,
@@ -540,6 +571,9 @@ impl OuterNetworkController {
                     }
                     ModelRequest::ChangeActiveWallet(wallet) => {
                         Self::handle_ui_change_active_wallet(t_inner, wallet)
+                    }
+                    ModelRequest::GetPoi(block_hash, tx_hash) => {
+                        Self::handle_ui_get_poi(t_inner, block_hash, tx_hash)
                     }
                 }?;
             }
