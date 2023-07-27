@@ -1016,9 +1016,6 @@ mod tests {
             Ok(())
         });
 
-        // Esperar un breve tiempo para asegurarse de que el servidor esté listo para recibir conexiones
-        thread::sleep(Duration::from_millis(500));
-
         // Ejecutar el cliente y enviar el getheaders al servidor (utiliza la función run_client_getheaders que definiste antes)
         let response = run_client_getheaders(&config_clone).unwrap();
 
