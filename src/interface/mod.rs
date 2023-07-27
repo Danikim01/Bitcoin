@@ -26,6 +26,8 @@ pub enum GtkMessage {
     UpdateProgressBar((Option<String>, f64)),
     /// wallet address, is main wallet
     AddWalletEntry(String, bool),
+    /// updates poi result
+    UpdatePoiResult(String),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -34,6 +36,8 @@ pub type RecipientDetails = (String, String, u64); // (address, label, value)
 pub enum ModelRequest {
     GenerateTransaction(TransactionInfo),
     ChangeActiveWallet(String), // wallet address
+    /// block hash, transaction hash
+    GetPoi(String, String),
 }
 
 /// called from the model, to update the status bar in the ui
@@ -84,6 +88,23 @@ fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
     }
 }
 
+fn update_progress_bar(builder: gtk::Builder, new_status: Option<&str>, fraction: f64) {
+    if let Some(progress_bar) = builder.object::<gtk::ProgressBar>("progress_bar") {
+        progress_bar.set_fraction(fraction);
+        if let Some(new_status) = new_status {
+            progress_bar.set_text(Some(new_status));
+        }
+    }
+}
+
+fn update_poi_result(builder: gtk::Builder, result: String) {
+    if let Some(poi_result) = builder.object::<gtk::TextView>("poi_result") {
+        if let Some(buffer) = poi_result.buffer() {
+            buffer.set_text(result.as_str());
+        }
+    }
+}
+
 /// Receiver that listen from messages from the model
 fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
@@ -102,15 +123,13 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 let _res = table_append_data(builder_aux, table, data);
             }
             GtkMessage::UpdateProgressBar((new_status, fraction)) => {
-                if let Some(progress_bar) = builder_aux.object::<gtk::ProgressBar>("progress_bar") {
-                    progress_bar.set_fraction(fraction);
-                    if let Some(new_status) = new_status {
-                        progress_bar.set_text(Some(new_status.as_str()));
-                    }
-                }
+                update_progress_bar(builder_aux, new_status.as_deref(), fraction);
             }
             GtkMessage::AddWalletEntry(wallet, is_main_wallet) => {
                 append_wallet(builder_aux, wallet, is_main_wallet);
+            }
+            GtkMessage::UpdatePoiResult(result) => {
+                update_poi_result(builder_aux, result);
             }
         }
 

@@ -28,7 +28,19 @@ pub fn double_hash(bytes: &[u8]) -> sha256::Hash {
     sha256::Hash::hash(&hash[..])
 }
 
-pub fn _decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+pub fn reverse_hex_str(hex: &str) -> String {
+    let mut reversed_hex = String::new();
+    let chars = hex.chars().collect::<Vec<char>>();
+    for i in (0..chars.len()).step_by(2) {
+        let mut byte = String::new();
+        byte.push(chars[i]);
+        byte.push(chars[i + 1]);
+        reversed_hex = format!("{}{}", byte, reversed_hex);
+    }
+    reversed_hex
+}
+
+pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
     (0..s.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16))

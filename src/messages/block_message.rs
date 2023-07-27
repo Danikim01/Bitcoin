@@ -33,7 +33,7 @@ impl Block {
         }
     }
 
-    fn hash_transactions(&self) -> Vec<sha256::Hash> {
+    pub fn hash_transactions(&self) -> Vec<sha256::Hash> {
         let mut txn_hashes: Vec<sha256::Hash> = vec![];
         self.txns.iter().for_each(|txn| {
             let txn_bytes = txn.serialize();

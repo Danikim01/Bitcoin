@@ -2,15 +2,17 @@ use crate::config::Config;
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::{GtkMessage, ModelRequest};
 use crate::messages::constants::config::{QUIET, VERBOSE};
+use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
-    Serialize,
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
+    MerkleTree, Message, Serialize,
 };
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{double_hash, to_io_err};
+use crate::utility::{decode_hex, double_hash, reverse_hex_str, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::{sha256, Hash};
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -65,6 +67,18 @@ impl NetworkController {
             ui_sender,
             tx_read: HashMap::new(),
         })
+    }
+
+    fn update_ui_poi_result(&self, proof: MerkleProof, root_from_proof: sha256::Hash) {
+        let root_from_proof_str = format!("{:?}", root_from_proof);
+
+        let result_str = format!(
+            "{:?}\n\nMerkle root generated from poi: {:?}",
+            proof,
+            &reverse_hex_str(&root_from_proof_str)[..root_from_proof_str.len() - 2]
+        );
+
+        _ = self.ui_sender.send(GtkMessage::UpdatePoiResult(result_str));
     }
 
     fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
@@ -362,6 +376,41 @@ impl NetworkController {
         }
     }
 
+    /// Gets the proof of inclusion for a transaction given the block hash and transaction hash
+    pub fn get_proof_of_inclusion(&self, block_hash: String, tx_hash: String) -> io::Result<()> {
+        let block_hashid: HashId = match block_hash.parse() {
+            Ok(hash) => hash,
+            Err(_) => {
+                return self.notify_ui_message(
+                    gtk::MessageType::Error,
+                    "Invalid block hash",
+                    "Invalid block hash.",
+                )
+            }
+        };
+        let block = match self.valid_blocks.get(&block_hashid) {
+            Some(block) => block,
+            None => {
+                return self.notify_ui_message(
+                    gtk::MessageType::Error,
+                    "Block not found",
+                    "Block not found in blockchain.",
+                )
+            }
+        };
+
+        let block_tx_hashes = block.hash_transactions();
+        let merkle_tree = MerkleTree::generate_from_hashes(block_tx_hashes);
+        let dhx = decode_hex(&reverse_hex_str(&tx_hash)).map_err(to_io_err)?;
+        let tx_hashed = sha256::Hash::from_slice(&dhx).map_err(to_io_err)?;
+        let proof = merkle_tree.generate_proof(tx_hashed)?;
+        let root_from_proof = proof.generate_merkle_root();
+
+        self.update_ui_poi_result(proof, root_from_proof);
+
+        Ok(())
+    }
+
     /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
@@ -521,6 +570,15 @@ impl OuterNetworkController {
         inner_lock.generate_transaction(transaction_info, &config)
     }
 
+    fn handle_ui_get_poi(
+        t_inner: Arc<RwLock<NetworkController>>,
+        block_hash: String,
+        tx_hash: String,
+    ) -> io::Result<()> {
+        let inner_lock = t_inner.read().map_err(to_io_err)?;
+        inner_lock.get_proof_of_inclusion(block_hash, tx_hash)
+    }
+
     fn recv_ui_messages(
         &self,
         ui_receiver: Receiver<ModelRequest>,
@@ -540,6 +598,10 @@ impl OuterNetworkController {
                     }
                     ModelRequest::ChangeActiveWallet(wallet) => {
                         Self::handle_ui_change_active_wallet(t_inner, wallet)
+                    }
+                    ModelRequest::GetPoi(block_hash, tx_hash) => {
+                        _ = Self::handle_ui_get_poi(t_inner, block_hash, tx_hash);
+                        Ok(())
                     }
                 }?;
             }
