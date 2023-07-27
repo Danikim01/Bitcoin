@@ -13,6 +13,9 @@ use std::time::Duration;
 // gtk imports
 use crate::interface::GtkMessage;
 use gtk::glib::SyncSender;
+// Define the TEST_DONE flag
+use std::sync::atomic::{AtomicBool, Ordering};
+static TEST_DONE: AtomicBool = AtomicBool::new(false);
 
 /// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
 pub struct Listener {
@@ -105,6 +108,10 @@ impl Listener {
 
     fn listen(&mut self) -> io::Result<()> {
         loop {
+            if TEST_DONE.load(Ordering::Relaxed) {
+                println!("TEST_DONE is true");
+                break Ok(()); // Exit the loop and terminate the thread if the test is done
+            }
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             if message_header.validate_header().is_err() {
                 eprintln!(

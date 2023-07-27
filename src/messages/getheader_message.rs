@@ -59,8 +59,6 @@ impl GetHeader {
             stop_hash: stop_hash,
         };
 
-        println!("GetHeader received: {:?}", get_header);
-
         Ok(Message::_GetHeader(get_header))
     }
 }

@@ -3,7 +3,7 @@ use crate::messages::utility::{read_from_varint, to_varint};
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use std::fs;
 use std::io::{self, Cursor};
-
+use crate::messages::constants::commands::HEADERS;
 /// Struct that contains a list of block headers and the number of headers
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
@@ -66,24 +66,31 @@ impl Headers {
 }
 
 impl Serialize for Headers {
-    fn serialize(&self) -> io::Result<Vec<u8>> {
-        let mut bytes = Vec::new();
-        bytes.extend(to_varint(self.count as u64));
+    fn serialize(&self) -> std::io::Result<Vec<u8>> {
+        let mut payload = Vec::new();
+        payload.extend(to_varint(self.count as u64));
         for header in &self.block_headers {
-            bytes.extend(header.serialize());
-            bytes.extend([0_u8; 1]);
+            payload.extend(header.serialize());
+            payload.extend([0_u8; 1]);
         }
-        Ok(bytes)
+ 
+        let message = self.build_message(HEADERS, Some(payload))?;
+        Ok(message)
     }
 
     fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
         let mut cursor = Cursor::new(bytes);
         let count = read_from_varint(&mut cursor)? as usize;
+        println!("count: {}", count);
         let mut block_headers: Vec<BlockHeader> = vec![];
         for _block_num in 0..count {
             block_headers.push(BlockHeader::deserialize(&mut cursor)?);
         }
         let headers = Self::new(count, block_headers);
+        //print the height of the block header
+        println!("Height: {}", headers.block_headers[0].height);
         Ok(Message::Headers(headers))
     }
 }
+
+
