@@ -47,7 +47,6 @@ impl NodeController {
     }
 
     pub fn add_node(&mut self, node: Node) {
-        println!("the node address is {:?}", node.address);
         self.nodes.insert(node.address, node);
     }
 

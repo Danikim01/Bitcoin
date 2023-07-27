@@ -81,14 +81,11 @@ impl Serialize for Headers {
     fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
         let mut cursor = Cursor::new(bytes);
         let count = read_from_varint(&mut cursor)? as usize;
-        println!("count: {}", count);
         let mut block_headers: Vec<BlockHeader> = vec![];
         for _block_num in 0..count {
             block_headers.push(BlockHeader::deserialize(&mut cursor)?);
         }
         let headers = Self::new(count, block_headers);
-        //print the height of the block header
-        println!("Height: {}", headers.block_headers[0].height);
         Ok(Message::Headers(headers))
     }
 }

@@ -15,7 +15,6 @@ use crate::interface::GtkMessage;
 use gtk::glib::SyncSender;
 // Define the TEST_DONE flag
 use std::sync::atomic::{AtomicBool, Ordering};
-static TEST_DONE: AtomicBool = AtomicBool::new(false);
 
 /// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
 pub struct Listener {
@@ -108,10 +107,6 @@ impl Listener {
 
     fn listen(&mut self) -> io::Result<()> {
         loop {
-            if TEST_DONE.load(Ordering::Relaxed) {
-                println!("TEST_DONE is true");
-                break Ok(()); // Exit the loop and terminate the thread if the test is done
-            }
             let message_header = MessageHeader::from_stream(&mut self.stream)?;
             if message_header.validate_header().is_err() {
                 eprintln!(
@@ -125,8 +120,6 @@ impl Listener {
             match self.process_message_payload(&message_header.command_name, payload) {
                 Ok(Message::Ignore) => continue,
                 Ok(m) => {
-                    println!("Message received: {:?}", m);
-                    println!("Sending to writer channel");
                     self.writer_channel
                         .send((self.socket_addr, m))
                         .map_err(to_io_err)?;
@@ -245,12 +238,9 @@ impl Node {
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
 
-        println!("inverse_handshake: {:?}", message_header.command_name);
-
         let version_message = match Version::deserialize(&payload_data).unwrap() {
             Message::Version(version_message) => version_message,
             _ => {
-                println!("Juanma >:c");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "Expected Version message",
@@ -258,8 +248,6 @@ impl Node {
             }
         };
 
-
-        println!("inverse_handshake: {:?}", version_message);
         // send message
         let msg_version = Version::default_for_trans_addr(stream.peer_addr()?);
         let payload = msg_version.serialize()?;
@@ -278,7 +266,7 @@ impl Node {
         stream.flush()?;
 
         VerAck::from_stream(stream)?; // receive verack
-        println!("inverse_handshake: done");
+
         
         Ok(())
     }

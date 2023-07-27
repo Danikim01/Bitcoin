@@ -88,10 +88,6 @@ impl NetworkController {
     }
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
-        println!(
-            "GetHeaders received in handle get headers: {:?}",
-            getheaders_message
-        );
         let mut headers: Vec<BlockHeader> = Vec::new();
         let last_known_hash = match getheaders_message.block_header_hashes.first() {
             Some(hash) => hash.clone(),
@@ -99,7 +95,7 @@ impl NetworkController {
         };
         // if next block header is None, return empty Headers message
         if self.headers.get_next_header(&last_known_hash).is_none() {
-            println!("next header is none");
+            println!("[handle_getheaders_message] next header is none");
             return Some(Headers {
                 count: 0,
                 block_headers: headers,
@@ -139,11 +135,6 @@ impl NetworkController {
             count += 1;
         }
 
-        //print the height of the last block header
-        println!(
-            "Last block header height: {}",
-            headers.last().unwrap().height
-        );
         Some(Headers {
             count: headers.len(),
             block_headers: headers,
@@ -800,8 +791,6 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
-            println!("Sending getheaders message to peer addr {:?}", peer_addr);
-            //send message header and payload to peer
             _ = inner_write.nodes.send_to_specific(
                 &peer_addr,
                 &getheaders_message.serialize()?,
@@ -958,7 +947,6 @@ mod tests {
 
         //Recibo un verack message
         let verack = VerAck::from_stream(&mut socket).unwrap();
-        println!("Verack message: {:?}", verack);
         //Envio un verack message
         let payload = VerAck::new().serialize().unwrap();
         socket.write_all(&payload).unwrap();
@@ -977,13 +965,8 @@ mod tests {
         socket.flush()?;
 
         let headers_message = MessageHeader::from_stream(&mut socket)?;
-        print!(
-            "Headers message header received from server: {:?}",
-            headers_message
-        );
         let payload = headers_message.read_payload(&mut socket)?;
         let headers_message: Message = Headers::deserialize(&payload)?;
-        //println!("Headers message: {:?}", headers_message);
         Ok(headers_message)
     }
 
@@ -1013,13 +996,10 @@ mod tests {
             let connection = listener.accept()?;
             let mut socket: TcpStream = connection.0;
 
-            println!("New connectionn: {}", socket.peer_addr()?);
             Node::inverse_handshake(&mut socket).unwrap();
 
             let message_header_fromstream = MessageHeader::from_stream(&mut socket).unwrap();
-            println!("Message header: {:?}", message_header_fromstream);
             let payload_fromstream = message_header_fromstream.read_payload(&mut socket).unwrap();
-            println!("Payload: {:?}", payload_fromstream);
 
             //construct getheaders message received from stream
             let getheaders_message = match GetHeader::deserialize(&payload_fromstream)? {
@@ -1031,7 +1011,6 @@ mod tests {
                 .handle_getheaders_message(getheaders_message)
                 .unwrap();
             let payload = getheaders_response.serialize().unwrap();
-            println!("the Headers count is {:?}", getheaders_response.count);
             socket.write_all(&payload).unwrap();
             socket.flush().unwrap();
             Ok(())
@@ -1045,74 +1024,14 @@ mod tests {
 
         // Esperar a que termine la prueba
         server_handle.join().unwrap();
-    }
 
-    #[test]
-    fn test_handle_getheaders_nodes() {
-        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
-        let (writer_end, node_receiver) = mpsc::sync_channel(100);
-
-        let config_file = "node.conf";
-        let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
-
-        let config = Config::from_file(config_path).unwrap();
-        let config_copy = config.clone();
-
-        let outer_controller =
-            OuterNetworkController::new(ui_sender.clone(), writer_end.clone(), config_copy.clone())
-                .unwrap();
-        outer_controller.sync(config.clone()).unwrap();
-
-        //first handshake
-        let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
-
-        //Envio un version
-        let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());
-        let payload = msg_version.serialize().unwrap();
-        socket.write_all(&payload).unwrap();
-        socket.flush().unwrap();
-
-        //Leo el header del version message
-        let version_header = MessageHeader::from_stream(&mut socket).unwrap();
-        //Leo el payload del version message
-        let payload_data = version_header.read_payload(&mut socket).unwrap();
-
-        //Recibo un verack message
-        let verack = VerAck::from_stream(&mut socket).unwrap();
-        println!("Verack message: {:?}", verack);
-        //Envio un verack message
-        let payload = VerAck::new().serialize().unwrap();
-        socket.write_all(&payload).unwrap();
-        socket.flush().unwrap();
-
-        //sending getheaders from genesis message to the server and see what the response is
-        let block_header_hashes = vec![config.get_genesis()];
-        let getheaders_message = GetHeader {
-            version: 70015,
-            hash_count: 1,
-            block_header_hashes,
-            stop_hash: HashId { hash: [0u8; 32] },
-        };
-        let payload = getheaders_message.serialize().unwrap();
-        socket.write_all(&payload).unwrap();
-        socket.flush().unwrap();
-
-        OuterNetworkController::handle_get_headers_message(
-            outer_controller.inner,
-            getheaders_message,
-            socket.local_addr().unwrap(),
-            &config,
-        )
-        .unwrap();
-
-        let get_header = MessageHeader::from_stream(&mut socket).unwrap();
-        let payload_data = get_header.read_payload(&mut socket).unwrap();
-        let get_header_message = match GetHeader::deserialize(&payload_data).unwrap() {
-            Message::_GetHeader(get_header_message) => get_header_message,
+        //read the content of response enum
+        let headers = match response {
+            Message::Headers(headers) => {
+                assert_eq!(headers.count,2000);
+            }
             _ => panic!("Error"),
         };
-
-        assert_eq!(get_header_message.block_header_hashes.len(), 2000);
     }
 
     #[test]
