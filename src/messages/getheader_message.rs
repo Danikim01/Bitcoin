@@ -7,6 +7,8 @@ use crate::messages::{
     Block, GetData, Headers, Message, MessageHeader, Ping, VerAck, Version,
 };
 use std::io::Cursor;
+use std::fmt::{Display,self};
+
 
 /// Struct that represents the data GetHeader message
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +73,13 @@ impl Serialize for GetHeader {
     }
 }
 
+impl Display for GetHeader{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "GetHeader {{ version: {}, hash_count: {}, tallest block_header_hash: {}, stop_hash: {} }}", self.version, self.hash_count, self.block_header_hashes[0], self.stop_hash)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
 
@@ -112,3 +121,4 @@ mod tests {
         }
     }
 }
+

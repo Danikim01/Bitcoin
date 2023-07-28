@@ -838,7 +838,7 @@ impl OuterNetworkController {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
                     (peer_addr, Message::_GetHeader(get_headers)) => {
-                        //println!("Received getheaders message: {:?}", get_headers);
+                        println!("Received getheaders message: {:?}", get_headers);
                         Self::handle_get_headers_message(t_inner, get_headers, peer_addr, &config)
                     }
                     (_, Message::Block(block)) => {
@@ -863,7 +863,14 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener = TcpListener::bind(LOCALSERVER)?;
+        let listener = match TcpListener::bind(LOCALSERVER){
+            Ok(listener) => listener,
+            Err(e) => {
+                println!("Ignoring Error: {:?}", e);
+                return Ok(());
+            }
+        };
+        
         let ui_sender = self.ui_sender.clone();
         let writer_channel = self.writer_chanel.clone();
 
@@ -1224,7 +1231,7 @@ mod tests {
         let nc_tallest_header = &network_controller.tallest_header;
         let tallest_header = headers.block_headers.last().unwrap();
 
-        //println!("tallest_header: {:?}", tallest_header.hash);
+        println!("tallest_header: {}", tallest_header.hash);
 
         assert_eq!(nc_tallest_header.hash, tallest_header.hash);
     }
