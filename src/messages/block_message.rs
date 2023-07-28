@@ -13,6 +13,7 @@ use gtk::glib::SyncSender;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
+use crate::messages::constants::commands::BLOCK;
 
 pub type BlockSet = HashMap<HashId, Block>;
 
@@ -31,6 +32,12 @@ impl Block {
             txn_count,
             txns,
         }
+    }
+
+    pub fn serialize_message(&self) -> io::Result<Vec<u8>> {
+        let payload = self.serialize()?;
+        let message = self.build_message(BLOCK, Some(payload))?;
+        Ok(message)
     }
 
     fn hash_transactions(&self) -> Vec<sha256::Hash> {

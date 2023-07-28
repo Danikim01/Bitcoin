@@ -757,22 +757,28 @@ impl OuterNetworkController {
         inventories: Vec<Inventory>,
         config: &Config,
     ) -> io::Result<()> {
-        let mut filtered_inv: Vec<Inventory> = Vec::new();
+
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        let mut blocks: Vec<Block> = Vec::new();
         for inventory in inventories {
-            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
-                filtered_inv.push(inventory);
+            if inventory.inv_type == InvType::MSGBlock {
+                let block = match inner_write.valid_blocks.get(&inventory.hash) {
+                    Some(block) => block.clone(),
+                    None => continue,
+                };
+                blocks.push(block);
             }
         }
 
-        if filtered_inv.is_empty() {
+        if blocks.is_empty() {
             return Ok(());
         }
 
-        let getdata_message = GetData::new(filtered_inv.len(), filtered_inv);
-        let mut nc = t_inner.write().map_err(to_io_err)?;
-        _ = nc
-            .nodes
-            .send_to_specific(&peer_addr, &getdata_message.serialize()?, config);
+        for block in blocks{
+            println!("Sending block to peer {:?}, block hash: {:?}", peer_addr, block.hash());
+            let serialized_block = block.serialize_message()?;
+            inner_write.nodes.send_to_specific(&peer_addr, &serialized_block, config)?;
+        }
         Ok(())
     }
 
