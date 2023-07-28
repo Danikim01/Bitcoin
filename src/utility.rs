@@ -3,6 +3,7 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::io;
 use std::num::ParseIntError;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Displays a error
@@ -41,6 +42,14 @@ pub fn _encode_hex(bytes: &[u8]) -> String {
         write!(&mut s, "{:02x}", b).unwrap();
     }
     s
+}
+
+pub fn get_parent_path(mut path: PathBuf) -> String {
+    path.pop();
+    match path.to_str(){
+        Some(path_str) => String::from("./") + path_str,
+        None => "".to_string(),
+    }
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::PathBuf;
+use crate::utility::get_parent_path;
 
 #[derive(Clone)]
 pub struct Config {
@@ -109,6 +110,10 @@ impl Config {
                 values.insert(key.to_owned(), value.to_owned());
             }
         }
+
+        let path = PathBuf::from(&values["log_file"]);
+        fs::create_dir_all(get_parent_path(path))?;
+
         Config::from_hashmap(values)
     }
 
