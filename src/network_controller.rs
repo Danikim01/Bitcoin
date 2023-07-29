@@ -1,20 +1,20 @@
 use crate::config::Config;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::{GtkMessage, ModelRequest};
 use crate::messages::block_header::HeaderSet;
-use crate::messages::constants::{
-    commands::TX,
-    config::{MAGIC, QUIET, VERBOSE},
-};
+use crate::messages::constants::config::{QUIET, VERBOSE};
+use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory, Message,
-    MessageHeader, Serialize,
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
+    MerkleTree, Message, Serialize,
 };
 
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
-use crate::utility::{double_hash, to_io_err};
+use crate::utility::{decode_hex, double_hash, reverse_hex_str, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
+use bitcoin_hashes::{sha256, Hash};
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
@@ -29,10 +29,7 @@ use std::thread::{self, JoinHandle};
 use crate::interface::components::table::{
     table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
 };
-use crate::interface::{
-    components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
-    update_ui_progress_bar,
-};
+use crate::interface::{components::send_panel::TransactionInfo, update_ui_progress_bar};
 use crate::messages::constants::config::LOCALHOST;
 use crate::node::Node;
 
@@ -48,7 +45,8 @@ pub struct NetworkController {
     utxo_set: UtxoSet,
     nodes: NodeController,
     ui_sender: SyncSender<GtkMessage>,
-    wallet: Wallet,
+    active_wallet: String,
+    wallets: HashMap<String, Wallet>, // key is address of the wallet
     tx_read: HashMap<HashId, ()>,
 }
 
@@ -60,16 +58,7 @@ impl NetworkController {
         config: Config,
     ) -> Result<Self, io::Error> {
         let genesis_header = BlockHeader::genesis(config.get_genesis());
-        let wallet = match config.get_wallet() {
-            Some(w) => w,
-            None => {
-                let new_wallet = Wallet::new();
-                //utils::create_notification_window(gtk::MessageType::Info, title, message);
-                eprintln!("Since a secret key was not provided through the configuration file, a new wallet has been created. {{Secret key: {}, Address: {}}}", new_wallet.secret_key.display_secret(), new_wallet.address);
-                new_wallet
-            }
-        };
-        Wallet::display_in_ui(&wallet, Some(&ui_sender));
+        let (active_wallet, wallets) = Wallet::init_all(&config, Some(&ui_sender))?;
         Ok(Self {
             headers: HeaderSet::with(genesis_header.hash, genesis_header),
             tallest_header: genesis_header,
@@ -78,10 +67,23 @@ impl NetworkController {
             pending_blocks: HashMap::new(),
             utxo_set: UtxoSet::new(),
             nodes: NodeController::connect_to_peers(writer_end, ui_sender.clone(), config)?,
-            wallet,
+            active_wallet,
+            wallets,
             ui_sender,
             tx_read: HashMap::new(),
         })
+    }
+
+    fn update_ui_poi_result(&self, proof: MerkleProof, root_from_proof: sha256::Hash) {
+        let root_from_proof_str = format!("{:?}", root_from_proof);
+
+        let result_str = format!(
+            "{:?}\n\nMerkle root generated from poi: {:?}",
+            proof,
+            &reverse_hex_str(&root_from_proof_str)[..root_from_proof_str.len() - 2]
+        );
+
+        _ = self.ui_sender.send(GtkMessage::UpdatePoiResult(result_str));
     }
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
@@ -122,23 +124,9 @@ impl NetworkController {
     }
 
     fn update_ui_balance(&self) -> io::Result<()> {
-        let (balance, pending) = self.read_wallet_balance()?;
+        let (balance, pending) = self.read_active_wallet_balance()?;
         self.ui_sender
             .send(GtkMessage::UpdateBalance((balance, pending)))
-            .map_err(to_io_err)
-    }
-
-    fn update_ui_overview(&mut self, transaction: &RawTransaction) -> io::Result<()> {
-        let transaction_info: TransactionDisplayInfo = transaction.transaction_info_for(
-            &self.wallet.address,
-            Utc::now().timestamp() as u32,
-            &mut self.utxo_set,
-        );
-        self.ui_sender
-            .send(GtkMessage::UpdateOverviewTransactions((
-                transaction_info,
-                TransactionOrigin::Pending,
-            )))
             .map_err(to_io_err)
     }
 
@@ -152,11 +140,11 @@ impl NetworkController {
             .map_err(to_io_err)
     }
 
-    fn read_wallet_balance(&self) -> io::Result<(u64, u64)> {
-        let balance = self.utxo_set.get_wallet_balance(&self.wallet.address);
+    fn read_active_wallet_balance(&self) -> io::Result<(u64, u64)> {
+        let balance = self.utxo_set.get_wallet_balance(&self.active_wallet);
         let pending_balance = self
             .utxo_set
-            .get_pending_wallet_balance(&self.wallet.address);
+            .get_pending_wallet_balance(&self.active_wallet);
 
         Ok((balance, pending_balance))
     }
@@ -199,10 +187,12 @@ impl NetworkController {
     }
 
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
+        // change this for wallets
         let _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
-            Some(&self.wallet.address),
+            &mut self.wallets,
+            Some(&self.active_wallet),
         );
 
         let _ = self.update_ui_balance();
@@ -219,7 +209,7 @@ impl NetworkController {
         if progress == 0.0 {
             progress = 1.0;
         }
-        let msg = format!("Reading block {}", block.header.height);
+        let msg = format!("Received block {}", block.header.height);
         _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
         self.valid_blocks.insert(block.hash(), block);
@@ -350,30 +340,33 @@ impl NetworkController {
     }
 
     fn read_pending_tx(&mut self, transaction: RawTransaction) -> io::Result<()> {
-        // get data from tx and update ui
         let tx_hash: HashId = transaction.get_hash();
         if self.tx_read.contains_key(&tx_hash) {
             return Ok(());
         }
 
-        if transaction.address_is_involved(&self.wallet.address) {
-            transaction.generate_utxo(
-                &mut self.utxo_set,
-                TransactionOrigin::Pending,
-                Some(&self.ui_sender),
-                Some(&self.wallet.address),
-            )?;
+        transaction.generate_utxo(
+            &mut self.utxo_set,
+            TransactionOrigin::Pending,
+            Some(&self.ui_sender),
+            Some(&self.active_wallet),
+        )?;
 
-            // get wallet balance and update UI
-            self.update_ui_balance()?;
-
-            // add transaction to overview
-            self.update_ui_overview(&transaction)?;
-        }
-
-        // if self.tx_read
         let data = table_data_from_tx(&transaction);
         self.update_ui_table(GtkTable::Transactions, data)?;
+
+        // have to check for each wallet separately
+        for w in self.wallets.iter_mut() {
+            let (address, wallet) = w;
+            if transaction.address_is_involved(address) {
+                let tx_info = transaction.transaction_info_for_pending(
+                    address,
+                    Utc::now().timestamp() as u32,
+                    &mut self.utxo_set,
+                );
+                wallet.update_history(tx_info);
+            }
+        }
 
         self.tx_read.insert(tx_hash, ());
         Ok(())
@@ -385,28 +378,20 @@ impl NetworkController {
         details: TransactionInfo,
         config: &Config,
     ) -> io::Result<()> {
-        let tx = self
-            .wallet
-            .generate_transaction(&mut self.utxo_set, details);
+        let wallet = match self.wallets.get_mut(&self.active_wallet) {
+            Some(w) => w,
+            None => return Err(io::Error::new(io::ErrorKind::Other, "Wallet not found")),
+        };
+
+        let tx = wallet.generate_transaction(&mut self.utxo_set, details);
 
         match tx {
             Ok(tx) => {
                 let tx_hash = double_hash(&tx.serialize());
-
-                let payload = tx.serialize();
-                let mut bytes = MessageHeader::new(
-                    MAGIC,
-                    TX.to_string(),
-                    payload.len() as u32,
-                    [tx_hash[0], tx_hash[1], tx_hash[2], tx_hash[3]],
-                )
-                .serialize()?;
-
-                bytes.extend(payload);
-
-                // send bytes to all
+                let bytes = tx.build_message()?;
                 self.nodes.send_to_all(&bytes, config)?;
 
+                self.read_pending_tx(tx)?;
                 self.notify_ui_message(
                     gtk::MessageType::Info,
                     "Transaction broadcasted",
@@ -419,6 +404,41 @@ impl NetworkController {
                 &format!("{}", e),
             ),
         }
+    }
+
+    /// Gets the proof of inclusion for a transaction given the block hash and transaction hash
+    pub fn get_proof_of_inclusion(&self, block_hash: String, tx_hash: String) -> io::Result<()> {
+        let block_hashid: HashId = match block_hash.parse() {
+            Ok(hash) => hash,
+            Err(_) => {
+                return self.notify_ui_message(
+                    gtk::MessageType::Error,
+                    "Invalid block hash",
+                    "Invalid block hash.",
+                )
+            }
+        };
+        let block = match self.valid_blocks.get(&block_hashid) {
+            Some(block) => block,
+            None => {
+                return self.notify_ui_message(
+                    gtk::MessageType::Error,
+                    "Block not found",
+                    "Block not found in blockchain.",
+                )
+            }
+        };
+
+        let block_tx_hashes = block.hash_transactions();
+        let merkle_tree = MerkleTree::generate_from_hashes(block_tx_hashes);
+        let dhx = decode_hex(&reverse_hex_str(&tx_hash)).map_err(to_io_err)?;
+        let tx_hashed = sha256::Hash::from_slice(&dhx).map_err(to_io_err)?;
+        let proof = merkle_tree.generate_proof(tx_hashed)?;
+        let root_from_proof = proof.generate_merkle_root();
+
+        self.update_ui_poi_result(proof, root_from_proof);
+
+        Ok(())
     }
 
     fn update_best_header_chain(&mut self) {
@@ -480,7 +500,7 @@ impl NetworkController {
     }
 }
 
-/// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
+/// OuterNetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
 pub struct OuterNetworkController {
     inner: Arc<RwLock<NetworkController>>,
     ui_sender: SyncSender<GtkMessage>,
@@ -506,39 +526,98 @@ impl OuterNetworkController {
         })
     }
 
+    fn update_ui_headers_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        tallest_header_hash: &mut HashId,
+        headers: Vec<&BlockHeader>,
+    ) {
+        if inner.tallest_header.hash() != *tallest_header_hash {
+            *tallest_header_hash = inner.tallest_header.hash();
+            let data = table_data_from_headers(headers.clone());
+            _ = ui_sender
+                .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
+                .map_err(to_io_err);
+        }
+    }
+
+    fn update_ui_blocks_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        block_count: &mut usize,
+        headers: Vec<&BlockHeader>,
+    ) {
+        let curr_block_count = inner.valid_blocks.len();
+        if curr_block_count > *block_count {
+            let blocks = inner.get_best_blocks(headers);
+            let data = table_data_from_blocks(blocks);
+            _ = ui_sender
+                .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
+                .map_err(to_io_err);
+
+            *block_count = curr_block_count;
+        }
+    }
+
+    fn update_ui_overview_tx_periodically(
+        inner: &RwLockReadGuard<'_, NetworkController>,
+        ui_sender: &SyncSender<GtkMessage>,
+        txs_on_overview: &mut Vec<TransactionDisplayInfo>,
+    ) {
+        let curr_active_wallet = inner.active_wallet.clone();
+        _ = inner.update_ui_balance();
+        if let Some(wallet) = inner.wallets.get(&curr_active_wallet) {
+            let transactions = wallet.get_last_n_transactions(20);
+            if transactions != *txs_on_overview {
+                *txs_on_overview = transactions.clone();
+                _ = ui_sender.send(GtkMessage::UpdateOverviewTransactions(transactions));
+            }
+        }
+    }
+
     fn update_ui_data_periodically(&self) -> io::Result<()> {
         let inner = self.inner.clone();
-        let ui_sender = self.ui_sender.clone();
+        let ui_sender: SyncSender<GtkMessage> = self.ui_sender.clone();
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
             let mut block_count = 0;
+            let mut txs_on_overview: Vec<TransactionDisplayInfo> = Vec::new();
             loop {
                 thread::sleep(std::time::Duration::from_secs(10));
-                let controller = inner.read().map_err(to_io_err)?;
-                let headers: Vec<&BlockHeader> = controller.get_best_headers(100);
+                let inner: RwLockReadGuard<'_, NetworkController> =
+                    inner.read().map_err(to_io_err)?;
+                let headers: Vec<&BlockHeader> = inner.get_best_headers(100);
 
-                if controller.tallest_header.hash() != tallest_header_hash {
-                    tallest_header_hash = controller.tallest_header.hash();
-                    // update ui with last 100 headers
-                    let data = table_data_from_headers(headers.clone());
-                    ui_sender
-                        .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
-                        .map_err(to_io_err)?;
-                }
-
-                let curr_block_count = controller.valid_blocks.len();
-                if curr_block_count > block_count {
-                    // update ui with last best blocks
-                    let blocks = controller.get_best_blocks(headers);
-                    let data = table_data_from_blocks(blocks);
-                    ui_sender
-                        .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
-                        .map_err(to_io_err)?;
-
-                    block_count = curr_block_count;
-                }
+                Self::update_ui_headers_periodically(
+                    &inner,
+                    &ui_sender,
+                    &mut tallest_header_hash,
+                    headers.clone(),
+                );
+                Self::update_ui_blocks_periodically(&inner, &ui_sender, &mut block_count, headers);
+                Self::update_ui_overview_tx_periodically(&inner, &ui_sender, &mut txs_on_overview)
             }
         });
+        Ok(())
+    }
+
+    fn handle_ui_change_active_wallet(
+        t_inner: Arc<RwLock<NetworkController>>,
+        wallet: String,
+    ) -> io::Result<()> {
+        let mut inner_lock = t_inner.write().map_err(to_io_err)?;
+        inner_lock.active_wallet = wallet;
+
+        let curr_active_wallet = inner_lock.active_wallet.clone();
+        inner_lock.update_ui_balance()?;
+
+        if let Some(wallet) = inner_lock.wallets.get(&curr_active_wallet) {
+            let transactions = wallet.get_last_n_transactions(20);
+            _ = inner_lock
+                .ui_sender
+                .send(GtkMessage::UpdateOverviewTransactions(transactions));
+        }
+
         Ok(())
     }
 
@@ -549,6 +628,15 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         let mut inner_lock = t_inner.write().map_err(to_io_err)?;
         inner_lock.generate_transaction(transaction_info, &config)
+    }
+
+    fn handle_ui_get_poi(
+        t_inner: Arc<RwLock<NetworkController>>,
+        block_hash: String,
+        tx_hash: String,
+    ) -> io::Result<()> {
+        let inner_lock = t_inner.read().map_err(to_io_err)?;
+        inner_lock.get_proof_of_inclusion(block_hash, tx_hash)
     }
 
     fn recv_ui_messages(
@@ -567,6 +655,13 @@ impl OuterNetworkController {
                             transaction_info,
                             config.clone(),
                         )
+                    }
+                    ModelRequest::ChangeActiveWallet(wallet) => {
+                        Self::handle_ui_change_active_wallet(t_inner, wallet)
+                    }
+                    ModelRequest::GetPoi(block_hash, tx_hash) => {
+                        _ = Self::handle_ui_get_poi(t_inner, block_hash, tx_hash);
+                        Ok(())
                     }
                 }?;
             }
@@ -835,8 +930,8 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         self.recv_ui_messages(ui_receiver, config.clone())?;
         self.recv_node_messages(node_receiver, config.clone())?;
-        self.sync(config)?;
-        self.update_ui_data_periodically()
+        self.update_ui_data_periodically()?;
+        self.sync(config)
     }
 }
 
@@ -845,7 +940,7 @@ mod tests {
     use super::*;
     use crate::messages::constants::config::PORT;
     use crate::messages::version_message::Version;
-    use crate::messages::VerAck;
+    use crate::messages::{MessageHeader, VerAck};
     use gtk::glib;
     use std::io::Write;
     use std::net::TcpStream;

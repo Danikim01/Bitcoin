@@ -558,6 +558,20 @@
                   </packing>
                 </child>
                 <child>
+                  <object class="GtkButton" id="blocks_btn">
+                    <property name="label" translatable="yes">Blocks</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="padding">2</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+                <child>
                   <object class="GtkBox" id="wallet_selector">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
@@ -593,26 +607,24 @@
                         <property name="position">1</property>
                       </packing>
                     </child>
+                    <child>
+                      <object class="GtkComboBoxText" id="wallet_entries">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="margin-end">4</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">2</property>
+                      </packing>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">True</property>
                     <property name="fill">True</property>
                     <property name="pack-type">end</property>
                     <property name="position">3</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkButton" id="blocks_btn">
-                    <property name="label" translatable="yes">Blocks</property>
-                    <property name="visible">True</property>
-                    <property name="can-focus">True</property>
-                    <property name="receives-default">True</property>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="padding">2</property>
-                    <property name="position">4</property>
                   </packing>
                 </child>
                 <child>
@@ -627,6 +639,20 @@
                     <property name="fill">True</property>
                     <property name="padding">2</property>
                     <property name="position">5</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="poi_btn">
+                    <property name="label" translatable="yes">POI</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="padding">2</property>
+                    <property name="position">6</property>
                   </packing>
                 </child>
               </object>
@@ -1056,6 +1082,114 @@
         <property name="fill">True</property>
         <property name="padding">8</property>
         <property name="position">1</property>
+      </packing>
+    </child>
+  </object>
+  <!-- n-columns=1 n-rows=7 -->
+  <object class="GtkGrid" id="poi_panel">
+    <property name="width-request">1300</property>
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="hexpand">True</property>
+    <property name="column-homogeneous">True</property>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-top">10</property>
+        <property name="label" translatable="yes">Block hash</property>
+        <attributes>
+          <attribute name="weight" value="bold"/>
+          <attribute name="scale" value="1.5"/>
+        </attributes>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-top">10</property>
+        <property name="label" translatable="yes">Transaction hash</property>
+        <attributes>
+          <attribute name="weight" value="bold"/>
+          <attribute name="scale" value="1.5"/>
+        </attributes>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">2</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkEntry" id="poi_block_hash">
+        <property name="visible">True</property>
+        <property name="can-focus">True</property>
+        <property name="margin-start">40</property>
+        <property name="margin-end">40</property>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkEntry" id="poi_tx_hash">
+        <property name="visible">True</property>
+        <property name="can-focus">True</property>
+        <property name="margin-start">40</property>
+        <property name="margin-end">40</property>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">3</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-top">60</property>
+        <property name="label" translatable="yes">Proof of Inclusion:</property>
+        <attributes>
+          <attribute name="weight" value="bold"/>
+          <attribute name="scale" value="1.5"/>
+        </attributes>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">5</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkTextView" id="poi_result">
+        <property name="visible">True</property>
+        <property name="can-focus">True</property>
+        <property name="margin-start">40</property>
+        <property name="margin-end">40</property>
+        <property name="vexpand">True</property>
+        <property name="wrap-mode">char</property>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">6</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkButton" id="get_poi_btn">
+        <property name="label" translatable="yes">get proof</property>
+        <property name="visible">True</property>
+        <property name="can-focus">True</property>
+        <property name="receives-default">True</property>
+        <property name="halign">center</property>
+        <property name="margin-top">20</property>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="top-attach">4</property>
       </packing>
     </child>
   </object>

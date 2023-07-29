@@ -221,7 +221,7 @@ impl CoinBaseInput {
 mod tests {
 
     use super::*;
-    use crate::{raw_transaction::RawTransaction, utility::_decode_hex};
+    use crate::{raw_transaction::RawTransaction, utility::decode_hex};
 
     #[test]
     fn test_coinbase_input_deserialization() {
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_txin_destined_from() {
-        let txin_bytes = _decode_hex("881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff").unwrap();
+        let txin_bytes = decode_hex("881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff").unwrap();
         let txin = TxInput::from_bytes(&mut Cursor::new(&txin_bytes)).unwrap();
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
         assert!(txin.destined_from(address));

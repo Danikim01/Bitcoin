@@ -1,6 +1,9 @@
+use crate::config::Config;
+use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::GtkMessage;
 use crate::messages::HashId;
+use crate::raw_transaction::TransactionOrigin;
 use crate::raw_transaction::{
     tx_input::{Outpoint, TxInput, TxInputType},
     tx_output::TxOutput,
@@ -12,7 +15,9 @@ use bitcoin_hashes::{hash160, Hash};
 use gtk::glib::SyncSender;
 use rand::rngs::OsRng;
 use secp256k1::{Secp256k1, SecretKey};
-use std::io;
+use std::collections::HashMap;
+use std::fs::DirEntry;
+use std::io::{self, Write};
 use std::str::FromStr;
 
 fn hash_address(address: &str) -> io::Result<Vec<u8>> {
@@ -41,9 +46,32 @@ fn build_p2pkh_script(hashed_pk: Vec<u8>) -> io::Result<Vec<u8>> {
 pub struct Wallet {
     pub secret_key: SecretKey,
     pub address: String,
+    pub history: Vec<TransactionDisplayInfo>,
 }
 
 impl Wallet {
+    pub fn get_last_n_transactions(&self, n: usize) -> Vec<TransactionDisplayInfo> {
+        let mut history = self.history.clone();
+        history.reverse();
+        history.truncate(n);
+        history.reverse();
+        history
+    }
+
+    pub fn update_history(&mut self, transaction_info: TransactionDisplayInfo) {
+        if transaction_info.origin == TransactionOrigin::Block {
+            // try to remove the pending transaction from the history
+            // completely not optimal as it could be a hashmap
+            for (i, tx) in self.history.iter_mut().enumerate() {
+                if tx.hash == transaction_info.hash {
+                    self.history[i].origin = TransactionOrigin::Block;
+                    return;
+                }
+            }
+        }
+        self.history.push(transaction_info);
+    }
+
     fn get_address_from_secret_key(secret_key: &SecretKey) -> String {
         let secp = Secp256k1::new();
         let pubkey = secret_key.public_key(&secp).serialize();
@@ -55,18 +83,6 @@ impl Wallet {
         bs58::encode(input).into_string()
     }
 
-    /// Show wallet address in the UI
-    pub fn display_in_ui(wallet: &Wallet, ui_sender: Option<&SyncSender<GtkMessage>>) {
-        if let Some(sender) = ui_sender {
-            let _ = sender
-                .send(GtkMessage::UpdateLabel((
-                    "active_address_label".to_string(),
-                    wallet.address.clone(),
-                )))
-                .map_err(to_io_err);
-        }
-    }
-
     /// Creates a new Wallet with a random secret key and address.
     pub fn new() -> Self {
         let secp = Secp256k1::new();
@@ -74,7 +90,112 @@ impl Wallet {
         Self {
             secret_key: sk,
             address: Self::get_address_from_secret_key(&sk),
+            history: Vec::new(),
         }
+    }
+
+    /// Saves a wallet to a file in the wallets directory.
+    fn save_to_disk(&self, config: &Config) -> io::Result<()> {
+        let wallets_dir = config.get_wallets_dir();
+        let file_name = format!("{}.raw", self.address);
+        let file_path = format!("{}/{}", wallets_dir, file_name);
+        let file = std::fs::File::create(file_path)?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        let secret_key = self.secret_key.display_secret().to_string();
+        writer.write_all(secret_key.as_bytes())
+    }
+
+    fn create_and_save(
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+    ) -> io::Result<Self> {
+        let wallet = Wallet::new();
+        if let Some(sender) = ui_sender {
+            _ = sender.send(GtkMessage::CreateNotification((
+                    gtk::MessageType::Info,
+                    "New wallet created".to_string(),
+                    format!(
+                        "No wallet found, created new wallet of address: {}\nStored on wallets directory",
+                        wallet.address
+                    ),
+                )));
+            Self::update_ui_wallet_entry(sender, &wallet.address, true)
+        }
+        wallet.save_to_disk(config)?;
+        Ok(wallet)
+    }
+
+    pub fn update_ui_wallet_entry(
+        sender: &SyncSender<GtkMessage>,
+        address: &str,
+        is_main_wallet: bool,
+    ) {
+        let _ = sender
+            .send(GtkMessage::AddWalletEntry(
+                address.to_string(),
+                is_main_wallet,
+            ))
+            .map_err(to_io_err);
+    }
+
+    fn from_dir_entry(
+        file: DirEntry,
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+        wallets: &mut HashMap<String, Wallet>,
+        active_wallet: &mut String,
+    ) -> io::Result<()> {
+        let path_string = match file.path().to_str() {
+            Some(p) => p.to_string(),
+            None => return Ok(()),
+        };
+        let wallet = Config::wallet_from_file(path_string)?;
+        if let Some(w) = wallet {
+            let mut is_main_wallet = false;
+            if w.address == config.get_default_wallet_addr() || wallets.is_empty() {
+                *active_wallet = w.address.clone();
+                is_main_wallet = true;
+            }
+
+            if let Some(sender) = ui_sender {
+                Self::update_ui_wallet_entry(sender, &w.address, is_main_wallet)
+            }
+            wallets.insert(w.address.clone(), w);
+        }
+        Ok(())
+    }
+
+    /// Iterates all files in the wallet directory
+    /// returns the hashmap of wallets with their addresses as keys
+    /// and the first wallet as the default wallet
+    pub fn init_all(
+        config: &Config,
+        ui_sender: Option<&SyncSender<GtkMessage>>,
+    ) -> io::Result<(String, HashMap<String, Wallet>)> {
+        let mut wallets: HashMap<String, Wallet> = HashMap::new();
+        let mut active_wallet: String = String::default();
+
+        let wallets_dir = config.get_wallets_dir();
+        let dir = std::fs::read_dir(wallets_dir)?;
+        for file in dir.flatten() {
+            Self::from_dir_entry(file, config, ui_sender, &mut wallets, &mut active_wallet)?;
+        }
+
+        if wallets.is_empty() {
+            let wallet = Self::create_and_save(config, ui_sender)?;
+            active_wallet = wallet.address.clone();
+            wallets.insert(wallet.address.clone(), wallet);
+        } else if active_wallet == String::default() {
+            if let Some(first_wallet) = wallets.keys().next() {
+                active_wallet = first_wallet.clone();
+                if let Some(sender) = ui_sender {
+                    Self::update_ui_wallet_entry(sender, first_wallet, true)
+                }
+            }
+        }
+
+        Ok((active_wallet, wallets))
     }
 
     fn fill_needed(
@@ -210,6 +331,7 @@ impl TryFrom<&str> for Wallet {
         Ok(Self {
             secret_key: key,
             address: Self::get_address_from_secret_key(&key),
+            history: Vec::new(),
         })
     }
 }
@@ -217,8 +339,9 @@ impl TryFrom<&str> for Wallet {
 #[cfg(test)]
 mod tests {
     use crate::{
+        interface::components::overview_panel::TransactionRole,
         raw_transaction::{RawTransaction, TransactionOrigin},
-        utility::{_decode_hex, _encode_hex},
+        utility::{_encode_hex, decode_hex},
     };
 
     use super::*;
@@ -242,7 +365,7 @@ mod tests {
         let address = "myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX";
 
         let res = hash_address(address).unwrap();
-        let expected = _decode_hex("6fc9bc003bf72ebdc53a9572f7ea792ef49a2858d78fc12f84").unwrap();
+        let expected = decode_hex("6fc9bc003bf72ebdc53a9572f7ea792ef49a2858d78fc12f84").unwrap();
         assert_eq!(res, expected);
     }
 
@@ -253,7 +376,7 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let transaction_bytes = _decode_hex(
+        let transaction_bytes = decode_hex(
             "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
         ).unwrap();
         let transaction = RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes)).unwrap();
@@ -272,7 +395,7 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let transaction_1_bytes = _decode_hex(
+        let transaction_1_bytes = decode_hex(
             "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
         ).unwrap();
         let transaction_1 =
@@ -281,7 +404,7 @@ mod tests {
             .generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
             .unwrap();
 
-        let transaction_2_bytes = _decode_hex(
+        let transaction_2_bytes = decode_hex(
             "02000000000101536d525880fd48a734fddd39d46d8f800ebf255102768d8d890603683a7af0b90000000000fdffffff0249def687010000001976a914799b0bc4ad97fff4c2e030443e4594ad374fa12788acb7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac02473044022053e5d615cad3ad5efe972e891d401a19b8659687f00cac8df2b140ec1e4b5ad802200fe1e8c05a32b3f5e26fd5b956948817d07f9e753002162f97c76ccee7c7eb36012103084f5b365524916f2974248f0430bf26d223dd3a5422bc6ce04d0c8b4af71563a3302500"
         ).unwrap();
         let transaction_2 =
@@ -290,7 +413,7 @@ mod tests {
             .generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
             .unwrap();
 
-        let transaction_3_bytes = _decode_hex(
+        let transaction_3_bytes = decode_hex(
             "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
         ).unwrap();
         let transaction_3 =
@@ -311,7 +434,7 @@ mod tests {
         let mut utxo_set: UtxoSet = UtxoSet::new();
 
         // this transactions should give enough balance to send 1 tBTC
-        let transaction_bytes = _decode_hex(
+        let transaction_bytes = decode_hex(
             "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
         ).unwrap();
         let transaction = RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes)).unwrap();
@@ -347,7 +470,7 @@ mod tests {
             .unwrap();
         let mut utxo_set: UtxoSet = UtxoSet::new();
 
-        let transaction_bytes = _decode_hex(
+        let transaction_bytes = decode_hex(
             "01000000011ecd55d9f67f16ffdc7b572a1c8baa2b4acb5c45c672f74e498b792d09f856a4010000006b483045022100bb0a409aa0b0a276b5ec4473f5aa9d526eb2e9835916f6754f7f5a89725b7f0c02204d3b3b3fe8f8af9e8de983301dd6bb5637e03038d94cba670b40b1e9ca221b29012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac54121d00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
         ).unwrap();
         let transaction = RawTransaction::from_bytes(&mut Cursor::new(&transaction_bytes)).unwrap();
@@ -357,5 +480,31 @@ mod tests {
 
         let balance = utxo_set.get_wallet_balance(&wallet.address);
         assert_eq!(balance, 1905236 + 10000);
+    }
+
+    #[test]
+    fn test_update_transaction_history_from_pending() {
+        let mut wallet = Wallet {
+            secret_key: SecretKey::new(&mut OsRng),
+            address: "bar".to_string(),
+            history: Vec::new(),
+        };
+
+        let mut transaction_info = TransactionDisplayInfo {
+            role: TransactionRole::Sender,
+            origin: TransactionOrigin::Pending,
+            date: "date".to_string(),
+            amount: 10,
+            hash: HashId::new([0_u8; 32]),
+        };
+
+        wallet.update_history(transaction_info.clone());
+        assert_eq!(wallet.history.len(), 1);
+        assert_eq!(wallet.history[0].origin, TransactionOrigin::Pending);
+
+        transaction_info.origin = TransactionOrigin::Block;
+        wallet.update_history(transaction_info.clone());
+        assert_eq!(wallet.history.len(), 1);
+        assert_eq!(wallet.history[0].origin, TransactionOrigin::Block);
     }
 }

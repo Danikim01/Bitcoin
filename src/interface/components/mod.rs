@@ -5,11 +5,13 @@ use std::sync::mpsc::Sender;
 mod blocks_panel;
 mod headers_panel;
 pub mod overview_panel;
+mod poi_panel;
 pub mod send_panel;
 pub mod table;
 mod top_bar;
 mod transactions_panel;
 pub mod utils;
+pub mod wallet_switcher;
 
 use crate::interface::ModelRequest;
 
@@ -19,8 +21,10 @@ pub fn init(builder: gtk::Builder, sender: Sender<ModelRequest>) -> io::Result<g
         .object("main_window")
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to initialize window"))?;
     top_bar::init(builder.clone())?;
+    wallet_switcher::init(builder.clone(), sender.clone())?;
     overview_panel::init(builder.clone())?;
-    send_panel::init(builder, sender)?;
+    send_panel::init(builder.clone(), sender.clone())?;
+    poi_panel::init(builder, sender)?;
 
     Ok(window)
 }

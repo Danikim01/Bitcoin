@@ -10,7 +10,7 @@ mod getheader_message;
 mod headers;
 mod headers_message;
 pub(crate) mod invblock_message;
-mod merkle_tree;
+pub mod merkle_tree;
 mod ping_message;
 pub mod utility;
 mod verack_message;
@@ -52,6 +52,29 @@ impl HashId {
             inner: self.hash.iter(),
         }
     }
+
+    pub fn from_hex_string(hex_string: &str) -> Result<Self, io::Error> {
+        let mut hash = [0u8; 32];
+        if hex_string.len() != 64 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Invalid hexadecimal string length. It should be 64 characters.",
+            ));
+        }
+
+        let mut bytes = hex_string.as_bytes().to_owned();
+        bytes.reverse();
+        for (i, chunk) in bytes.chunks(2).enumerate() {
+            let mut byte = <&[u8]>::clone(&chunk).to_owned();
+            byte.reverse();
+            let byte_str = ::std::str::from_utf8(&byte)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid UTF-8"))?;
+            hash[i] = u8::from_str_radix(byte_str, 16)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid hexadecimal"))?;
+        }
+
+        Ok(HashId { hash })
+    }
 }
 
 impl std::fmt::Display for HashId {
@@ -66,6 +89,14 @@ impl std::fmt::Display for HashId {
                 .collect::<Vec<String>>()
                 .join("")
         )
+    }
+}
+
+impl std::str::FromStr for HashId {
+    type Err = io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        HashId::from_hex_string(s)
     }
 }
 

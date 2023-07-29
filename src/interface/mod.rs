@@ -2,7 +2,6 @@ use crate::interface::components::overview_panel::update_overview_transactions;
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::components::send_panel::TransactionInfo;
 use crate::interface::components::utils::create_notification_window;
-use crate::raw_transaction::TransactionOrigin;
 use crate::utility::to_io_err;
 use gtk::glib;
 use gtk::glib::{Receiver as GtkReceiver, SyncSender as GtkSender};
@@ -12,19 +11,23 @@ use std::sync::mpsc::Sender;
 
 use self::components::table::table_append_data;
 use self::components::table::{GtkTable, GtkTableData};
+use self::components::wallet_switcher::append_wallet;
 pub mod components;
 
 /// Enum with messages from the model to the interface
 pub enum GtkMessage {
     /// label, text
-    UpdateLabel((String, String)),
     UpdateBalance((u64, u64)),
-    UpdateOverviewTransactions((TransactionDisplayInfo, TransactionOrigin)),
+    UpdateOverviewTransactions(Vec<TransactionDisplayInfo>),
     /// type, notification title, notification message
     CreateNotification((gtk::MessageType, String, String)),
     UpdateTable((GtkTable, GtkTableData)),
     /// optional new status, fraction
     UpdateProgressBar((Option<String>, f64)),
+    /// wallet address, is main wallet
+    AddWalletEntry(String, bool),
+    /// updates poi result
+    UpdatePoiResult(String),
 }
 
 pub type RecipientDetails = (String, String, u64); // (address, label, value)
@@ -32,6 +35,9 @@ pub type RecipientDetails = (String, String, u64); // (address, label, value)
 /// Enum with requests from the interface to the model
 pub enum ModelRequest {
     GenerateTransaction(TransactionInfo),
+    ChangeActiveWallet(String), // wallet address
+    /// block hash, transaction hash
+    GetPoi(String, String),
 }
 
 /// called from the model, to update the status bar in the ui
@@ -82,9 +88,20 @@ fn update_balance(builder: gtk::Builder, balance: u64, pending: u64) {
     }
 }
 
-fn update_label(builder: gtk::Builder, label: String, text: String) {
-    if let Some(label) = builder.object::<gtk::Label>(label.as_str()) {
-        label.set_text(text.as_str());
+fn update_progress_bar(builder: gtk::Builder, new_status: Option<&str>, fraction: f64) {
+    if let Some(progress_bar) = builder.object::<gtk::ProgressBar>("progress_bar") {
+        progress_bar.set_fraction(fraction);
+        if let Some(new_status) = new_status {
+            progress_bar.set_text(Some(new_status));
+        }
+    }
+}
+
+fn update_poi_result(builder: gtk::Builder, result: String) {
+    if let Some(poi_result) = builder.object::<gtk::TextView>("poi_result") {
+        if let Some(buffer) = poi_result.buffer() {
+            buffer.set_text(result.as_str());
+        }
     }
 }
 
@@ -93,14 +110,11 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
     receiver.attach(None, move |msg| {
         let builder_aux = builder.clone();
         match msg {
-            GtkMessage::UpdateLabel((label, text)) => {
-                update_label(builder_aux, label, text);
-            }
             GtkMessage::UpdateBalance((balance, pending)) => {
                 update_balance(builder_aux, balance, pending);
             }
-            GtkMessage::UpdateOverviewTransactions((transaction, origin)) => {
-                _ = update_overview_transactions(builder_aux, transaction, origin);
+            GtkMessage::UpdateOverviewTransactions(transactions) => {
+                _ = update_overview_transactions(builder_aux, transactions);
             }
             GtkMessage::CreateNotification((t, title, msg)) => {
                 _ = create_notification_window(t, &title, &msg);
@@ -109,12 +123,13 @@ fn attach_rcv(receiver: GtkReceiver<GtkMessage>, builder: gtk::Builder) {
                 let _res = table_append_data(builder_aux, table, data);
             }
             GtkMessage::UpdateProgressBar((new_status, fraction)) => {
-                if let Some(progress_bar) = builder_aux.object::<gtk::ProgressBar>("progress_bar") {
-                    progress_bar.set_fraction(fraction);
-                    if let Some(new_status) = new_status {
-                        progress_bar.set_text(Some(new_status.as_str()));
-                    }
-                }
+                update_progress_bar(builder_aux, new_status.as_deref(), fraction);
+            }
+            GtkMessage::AddWalletEntry(wallet, is_main_wallet) => {
+                append_wallet(builder_aux, wallet, is_main_wallet);
+            }
+            GtkMessage::UpdatePoiResult(result) => {
+                update_poi_result(builder_aux, result);
             }
         }
 
