@@ -1,6 +1,6 @@
 use crate::logger::{Log, Logger};
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, VERBOSE,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, VERBOSE, PORT
 };
 use crate::messages::HashId;
 use crate::wallet::Wallet;
@@ -13,6 +13,7 @@ use crate::utility::get_parent_path;
 #[derive(Clone)]
 pub struct Config {
     seed: String,
+    port: u16,
     start_timestamp: u32,
     headers_file: String,
     blocks_file: String,
@@ -55,6 +56,10 @@ impl Config {
         self.genesis_hash
     }
 
+    pub fn get_listening_port(&self) -> u16 {
+        self.port
+    }
+
     pub fn get_wallet(&self) -> Option<Wallet> {
         self.wallet.clone()
     }
@@ -76,6 +81,7 @@ impl Config {
     fn from_hashmap(mut values: HashMap<String, String>) -> io::Result<Config> {
         Ok(Config {
             seed: Config::remove_or(&mut values, "seed", ""),
+            port: u16::from_str_radix(&Config::remove_or(&mut values, "listening_port", ""), 10).unwrap_or(PORT),
             start_timestamp: Config::remove_or(&mut values, "start_timestamp", "")
                 .parse()
                 .unwrap_or(START_TIMESTAMP),

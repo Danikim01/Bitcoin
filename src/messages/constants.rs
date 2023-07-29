@@ -42,6 +42,8 @@ pub mod version_constants {
 
 /// Constants with all config parameters
 pub mod config {
+    use std::net::Ipv4Addr;
+
     // set possible values for log verbosity level
     pub const QUIET: &str = "QUIET";
     pub const VERBOSE: &str = "VERBOSE";
@@ -51,8 +53,7 @@ pub mod config {
     pub const BLOCKS_FILE: &str = "tmp/blocks_backup.dat";
     pub const TCP_TIMEOUT: u64 = 30;
     pub const START_TIMESTAMP: u32 = 1681095600;
-    pub const LOCALHOST: &str = "127.0.0.1";
-    pub const LOCALSERVER: &str = "127.0.0.1:18333";
+    pub const LOCALHOST: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
     pub const PORT: u16 = 18333;
     pub const MAGIC: [u8; 4] = [0x0b, 0x11, 0x09, 0x07];
 }

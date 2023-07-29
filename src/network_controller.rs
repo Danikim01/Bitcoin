@@ -20,7 +20,7 @@ use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
-use std::net::{SocketAddr, TcpListener};
+use std::net::{SocketAddr, SocketAddrV4, TcpListener};
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, RwLock, RwLockReadGuard,
@@ -34,7 +34,7 @@ use crate::interface::{
     components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
     update_ui_progress_bar,
 };
-use crate::messages::constants::config::{LOCALSERVER, PORT};
+use crate::messages::constants::config::{LOCALHOST, PORT};
 use crate::node::Node;
 
 pub type BlockSet = HashMap<HashId, Block>;
@@ -72,7 +72,7 @@ impl NetworkController {
         };
         Wallet::display_in_ui(&wallet, Some(&ui_sender));
         Ok(Self {
-            headers: HeaderSet::with(genesis_header.hash(), genesis_header),
+            headers: HeaderSet::with(genesis_header.hash, genesis_header),
             tallest_header: genesis_header,
             valid_blocks: BlockSet::new(),
             blocks_on_hold: BlockSet::new(),
@@ -90,75 +90,28 @@ impl NetworkController {
             "[handle_getheaders_message] getheaders_message: {:?}",
             getheaders_message
         );
-        let mut headers: Vec<BlockHeader> = Vec::new();
         let last_known_hash = match getheaders_message.block_header_hashes.first() {
             Some(hash) => hash.clone(),
-            None => {
-                println!("[handle_getheaders_message] block_header_hashes is empty");
-                return None;
-            }
+            None => return None
         };
-
-        //let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
-        // let mut contador = 0;
-        // while next_block_header.hash != getheaders_message.stop_hash {
-        //     println!("contador {}",contador);
-        //     headers.push(next_block_header.clone());
-        //     next_block_header = match self.headers.get_next_header(&next_block_header.hash()) {
-        //         Some(header) => header,
-        //         None => {
-        //             println!("No se encontro un siguiente header al header con hash: {}", next_block_header.hash());
-        //             break;
-        //         },
-        //     };
-        //     contador += 1;
-        // }
-        // return Some(Headers {
-        //     count: headers.len(),
-        //     block_headers: headers,
-        // });
-        let stop_hash = HashId { hash: [0; 32] };
-        let mut count = 0;
-
-        // Si el stop_hash es igual a ceros, limitamos a 2000 bloques, de lo contrario, agregamos solo el siguiente bloque
-        let max_blocks = if getheaders_message.stop_hash == stop_hash {
-            2000
-        } else {
-            let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
-            while next_block_header.hash != getheaders_message.stop_hash {
-                headers.push(next_block_header.clone());
-                next_block_header = self.headers.get_next_header(&next_block_header.hash())?;
-                count += 1;
-                if count >= 2000 {
-                    break;
-                }
-            }
-            //push stop hash into headers
-            headers.push(next_block_header.clone());
-            return Some(Headers {
-                count: headers.len(),
-                block_headers: headers,
-            });
+        
+        let max_blocks = 2000;
+        let mut next_block_header = match self.headers.get_next_header(&last_known_hash) {
+            Some(header) => header.clone(),
+            None => return None
         };
-
-        let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
-
-        while count <= max_blocks {
-            headers.push(next_block_header.clone());
-            next_block_header = match self.headers.get_next_header(&next_block_header.hash()) {
-                Some(header) => header,
-                None => {
-                    println!("No se encontro un siguiente header");
-                    break;
-                }, // Manejar el caso en el que no se encuentre el siguiente encabezado
+        let mut headers: Vec<BlockHeader> = vec![next_block_header];
+        for _ in 1..max_blocks {
+            next_block_header = match self.headers.get_next_header(&next_block_header.hash) {
+                Some(header) => header.clone(),
+                None => break
             };
-            count += 1;
+            headers.push(next_block_header);
+            if next_block_header.hash == getheaders_message.stop_hash {
+                break;
+            }
         }
-
-        Some(Headers {
-            count: headers.len(),
-            block_headers: headers,
-        })
+        Some(Headers::new(headers.len(), headers))
     }
 
     fn handle_getdata_message(&self, getdata_message: GetData) -> Option<InventoryVector> {
@@ -731,7 +684,8 @@ impl OuterNetworkController {
                 Some(parent_header) => {
                     header.height = parent_header.height + 1;
                 }
-                None => continue, // ignore header if prev_header is unknown
+                None => {
+                    continue}, // ignore header if prev_header is unknown
             }
             let hash = header.hash();
             drop(inner_read);
@@ -874,7 +828,7 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener = match TcpListener::bind(LOCALSERVER) {
+        let listener = match TcpListener::bind(SocketAddrV4::new(LOCALHOST, config.get_listening_port())) {
             Ok(listener) => listener,
             Err(e) => {
                 println!("Ignoring Error: {:?}", e);
@@ -943,7 +897,6 @@ impl OuterNetworkController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::constants::config::LOCALSERVER;
     use crate::messages::version_message::Version;
     use crate::messages::VerAck;
     use gtk::glib;
@@ -955,7 +908,7 @@ mod tests {
     // La función que vamos a probar, que envía un getheaders al servidor
     fn run_client_getheaders(config: &Config) -> io::Result<Message> {
         // Realizar el handshake
-        let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
+        let mut socket = TcpStream::connect(SocketAddrV4::new(LOCALHOST, PORT)).unwrap();
 
         //Envio un version
         let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());
@@ -1014,7 +967,7 @@ mod tests {
 
         // Iniciar el servidor en un hilo separado
         let server_handle = thread::spawn(move || -> io::Result<()> {
-            let listener = TcpListener::bind(LOCALSERVER)?;
+            let listener = TcpListener::bind(SocketAddrV4::new(LOCALHOST, PORT))?;
 
             let connection = listener.accept()?;
             let mut socket: TcpStream = connection.0;
@@ -1068,7 +1021,7 @@ mod tests {
             OuterNetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
         outer_controller.listen_for_nodes(config).unwrap();
 
-        let mut socket = TcpStream::connect(LOCALSERVER).unwrap();
+        let mut socket = TcpStream::connect(SocketAddrV4::new(LOCALHOST, PORT)).unwrap();
 
         //Envio un version
         let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());
