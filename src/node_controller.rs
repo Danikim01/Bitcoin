@@ -11,6 +11,7 @@ use crate::interface::GtkMessage;
 use gtk::glib::SyncSender;
 
 /// The NodeController struct is responsible for managing all the nodes and sending messages to them.
+
 pub struct NodeController {
     nodes: HashMap<SocketAddr, Node>,
 }

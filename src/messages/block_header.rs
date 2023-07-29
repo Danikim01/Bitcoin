@@ -184,7 +184,7 @@ impl Hashable for BlockHeader {
         self.hash
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct HeaderSet{
     headers: HashMap<HashId, BlockHeader>
 }
@@ -194,6 +194,10 @@ impl HeaderSet{
         Self{
             headers: HashMap::new()
         }
+    }
+
+    pub fn values_mut(&mut self) -> std::collections::hash_map::ValuesMut<'_, HashId, BlockHeader> {
+        self.headers.values_mut()
     }
 
     pub fn with(hash: HashId,header: BlockHeader) -> Self{
@@ -206,9 +210,9 @@ impl HeaderSet{
     }
 
     pub fn insert(&mut self, hash: HashId,header: BlockHeader){
-        if let Some(prev_header) = self.headers.get_mut(&header.prev_block_hash){
-            prev_header.next_block_hash = Some(header.hash());
-        }
+        // if let Some(prev_header) = self.headers.get(&header.prev_block_hash){
+        //     prev_header.next_block_hash = Some(header.hash());
+        // }
         self.headers.insert(hash, header);
     }
 
@@ -221,10 +225,15 @@ impl HeaderSet{
         self.headers.get(hash)
     }
 
+    pub fn get_mut(&mut self, hash: &HashId) -> Option<&mut BlockHeader> {
+        self.headers.get_mut(hash)
+    }
 
     pub fn get_next_header(&self, hash: &HashId) -> Option<&BlockHeader> {
         if let Some(header) = self.headers.get(hash) {
+            println!("aca entraa");
             if let Some(next_hash) = header.next_block_hash {
+                println!("deberia entrar aca");
                 return self.headers.get(&next_hash);
             }
         }

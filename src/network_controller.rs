@@ -88,20 +88,37 @@ impl NetworkController {
     }
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
+        println!(
+            "[handle_getheaders_message] getheaders_message: {:?}",
+            getheaders_message
+        );
         let mut headers: Vec<BlockHeader> = Vec::new();
         let last_known_hash = match getheaders_message.block_header_hashes.first() {
             Some(hash) => hash.clone(),
-            None => return None, // No hay hashes disponibles, devolver None
+            None => {
+                println!("[handle_getheaders_message] block_header_hashes is empty");
+                return None;
+            }
         };
-        // if next block header is None, return empty Headers message
-        if self.headers.get_next_header(&last_known_hash).is_none() {
-            println!("[handle_getheaders_message] next header is none");
-            return Some(Headers {
-                count: 0,
-                block_headers: headers,
-            });
-        }
 
+        //let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
+        // let mut contador = 0;
+        // while next_block_header.hash != getheaders_message.stop_hash {
+        //     println!("contador {}",contador);
+        //     headers.push(next_block_header.clone());
+        //     next_block_header = match self.headers.get_next_header(&next_block_header.hash()) {
+        //         Some(header) => header,
+        //         None => {
+        //             println!("No se encontro un siguiente header al header con hash: {}", next_block_header.hash());
+        //             break;
+        //         },
+        //     };
+        //     contador += 1;
+        // }
+        // return Some(Headers {
+        //     count: headers.len(),
+        //     block_headers: headers,
+        // });
         let stop_hash = HashId { hash: [0; 32] };
         let mut count = 0;
 
@@ -118,6 +135,8 @@ impl NetworkController {
                     break;
                 }
             }
+            //push stop hash into headers
+            headers.push(next_block_header.clone());
             return Some(Headers {
                 count: headers.len(),
                 block_headers: headers,
@@ -126,11 +145,14 @@ impl NetworkController {
 
         let mut next_block_header = self.headers.get_next_header(&last_known_hash)?;
 
-        while count < max_blocks {
+        while count <= max_blocks {
             headers.push(next_block_header.clone());
             next_block_header = match self.headers.get_next_header(&next_block_header.hash()) {
                 Some(header) => header,
-                None => break, // Manejar el caso en el que no se encuentre el siguiente encabezado
+                None => {
+                    println!("No se encontro un siguiente header");
+                    break;
+                }, // Manejar el caso en el que no se encuentre el siguiente encabezado
             };
             count += 1;
         }
@@ -347,6 +369,7 @@ impl NetworkController {
                 None => continue, // ignore header if prev_header is unknown
             }
             self.headers.insert(header.hash(), header);
+            //self.set_next_block_hash_for_blockheaders();
             new_headers.push(header);
             if header.height > self.tallest_header.height {
                 self.tallest_header = header
@@ -469,6 +492,24 @@ impl NetworkController {
         }
     }
 
+    fn set_next_block_hash_for_blockheaders(&mut self) {
+        let mut next_block_hashes: HashMap<HashId, HashId> = HashMap::new();
+
+        // Compute the next_block_hash for each header and store it in next_block_hashes
+        for header in self.headers.values() {
+            if let Some(next_header) = self.headers.get(&header.prev_block_hash) {
+                next_block_hashes.insert(next_header.hash(), header.hash());
+            }
+        }
+
+        // Update the headers with the computed next_block_hashes
+        for header in self.headers.values_mut() {
+            if let Some(next_hash) = next_block_hashes.get(&header.hash()) {
+                header.next_block_hash = Some(*next_hash);
+            }
+        }
+    }
+
     /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
     /// If a backup file is found, it will read the blocks and headers from the backup file
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
@@ -497,6 +538,7 @@ impl NetworkController {
                 missing_blocks.push(header);
             }
         }
+        self.set_next_block_hash_for_blockheaders();
         self.request_blocks(Headers::new(missing_blocks.len(), missing_blocks), config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
         Ok(())
@@ -654,8 +696,11 @@ impl OuterNetworkController {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(previous_block) = inner_write.valid_blocks.get(&block.header.prev_block_hash) {
             block.header.height = previous_block.header.height + 1;
+            //update the next_block_hash field of the BlockHeader
             if let Vacant(entry) = inner_write.headers.entry(block.hash()) {
                 entry.insert(block.header);
+                //agregue estooo
+                //inner_write.headers.insert(block.header.hash, block.header);
             }
             let hash = block.hash();
             let block_header = block.header;
@@ -663,6 +708,7 @@ impl OuterNetworkController {
 
             if block_header.prev_block_hash == inner_write.tallest_header.hash() {
                 inner_write.headers.insert(hash, block_header);
+                inner_write.set_next_block_hash_for_blockheaders();
                 inner_write.tallest_header = block_header;
             }
 
@@ -732,6 +778,7 @@ impl OuterNetworkController {
             drop(inner_read);
             let mut inner_write = t_inner.write().map_err(to_io_err)?;
             inner_write.headers.insert(hash, header);
+            inner_write.set_next_block_hash_for_blockheaders();
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
             if header.height > inner_write.tallest_header.height {
@@ -757,7 +804,6 @@ impl OuterNetworkController {
         inventories: Vec<Inventory>,
         config: &Config,
     ) -> io::Result<()> {
-
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         let mut blocks: Vec<Block> = Vec::new();
         for inventory in inventories {
@@ -774,10 +820,16 @@ impl OuterNetworkController {
             return Ok(());
         }
 
-        for block in blocks{
-            println!("Sending block to peer {:?}, block hash: {:?}", peer_addr, block.hash());
+        for block in blocks {
+            // println!(
+            //     "Sending block to peer {:?}, block hash: {:?}",
+            //     peer_addr,
+            //     block.hash()
+            // );
             let serialized_block = block.serialize_message()?;
-            inner_write.nodes.send_to_specific(&peer_addr, &serialized_block, config)?;
+            inner_write
+                .nodes
+                .send_to_specific(&peer_addr, &serialized_block, config)?;
         }
         Ok(())
     }
@@ -838,7 +890,7 @@ impl OuterNetworkController {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
                     (peer_addr, Message::_GetHeader(get_headers)) => {
-                        println!("Received getheaders message: {:?}", get_headers);
+                        //println!("Received getheaders message: {:?}", get_headers);
                         Self::handle_get_headers_message(t_inner, get_headers, peer_addr, &config)
                     }
                     (_, Message::Block(block)) => {
@@ -863,14 +915,14 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener = match TcpListener::bind(LOCALSERVER){
+        let listener = match TcpListener::bind(LOCALSERVER) {
             Ok(listener) => listener,
             Err(e) => {
                 println!("Ignoring Error: {:?}", e);
                 return Ok(());
             }
         };
-        
+
         let ui_sender = self.ui_sender.clone();
         let writer_channel = self.writer_chanel.clone();
 
@@ -1038,7 +1090,7 @@ mod tests {
         //read the content of response enum
         let headers = match response {
             Message::Headers(headers) => {
-                assert_eq!(headers.count,2000);
+                assert_eq!(headers.count, 2000);
             }
             _ => panic!("Error"),
         };
@@ -1189,6 +1241,34 @@ mod tests {
     }
 
     #[test]
+    fn test_handle_getheaders_request_upto_tallest() {
+        let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
+        let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
+        let writer_end: SyncSender<(SocketAddr, Message)> = writer_end;
+
+        let config_file = "node.conf";
+        let config_path: PathBuf = config_file.into();
+
+        let config = Config::from_file(config_path).unwrap();
+        let mut network_controller =
+            NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
+        network_controller.start_sync(&config);
+
+        let block_header_hashes = vec![config.get_genesis()];
+        let mut getheaders_message = GetHeader {
+            version: 70015,
+            hash_count: 1,
+            block_header_hashes,
+            stop_hash: network_controller.tallest_header.hash,
+        };
+
+        let mut headers = network_controller
+            .handle_getheaders_message(getheaders_message)
+            .unwrap();
+        //assert_eq!(last_header_obtained, network_controller.tallest_header.hash);
+    }
+
+    #[test]
     fn test_handle_getheaders_message_tallesthash() {
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
         let (writer_end, _) = std::sync::mpsc::sync_channel::<(SocketAddr, Message)>(100);
@@ -1214,6 +1294,7 @@ mod tests {
             .handle_getheaders_message(getheaders_message.clone())
             .unwrap();
 
+        let mut contador = 0;
         while headers.count == 2000 {
             let last_header = headers.block_headers.last().unwrap();
             //let next_block_hash = last_header.next_block_hash.unwrap();
@@ -1226,12 +1307,14 @@ mod tests {
             headers = network_controller
                 .handle_getheaders_message(getheaders_message.clone())
                 .unwrap();
+            contador += 1;
         }
-
+        println!("contador: {}", contador);
         let nc_tallest_header = &network_controller.tallest_header;
         let tallest_header = headers.block_headers.last().unwrap();
 
-        println!("tallest_header: {}", tallest_header.hash);
+        println!("tallest_header impostor: {}", tallest_header.hash);
+        println!("tallest header posta: {}", nc_tallest_header.hash);
 
         assert_eq!(nc_tallest_header.hash, tallest_header.hash);
     }
