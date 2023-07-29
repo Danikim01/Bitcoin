@@ -9,7 +9,7 @@ pub struct InventoryBlock {
 
 impl InventoryBlock {
     /// Create a new inventory block
-    pub fn new(inv_type: InvType, block: Block) -> Self {
+    pub fn _new(inv_type: InvType, block: Block) -> Self {
         Self { inv_type, block }
     }
 
@@ -52,11 +52,6 @@ pub struct InventoryVector {
 }
 
 impl InventoryVector {
-    /// Create a new inventory message
-    pub fn new(count: usize, inventory: Vec<InventoryBlock>) -> Self {
-        Self { count, inventory }
-    }
-
     fn build_payload(&self) -> std::io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         let count_a_enviar = to_varint(self.count as u64);
@@ -67,15 +62,6 @@ impl InventoryVector {
             payload.extend(inv_a_enviar);
         }
         Ok(payload)
-    }
-
-    /// Create a new inventory message from a list of BlockHeaders using its hashes
-    pub fn from_inv(count: usize, blocks: Vec<Block>) -> Self {
-        let mut inventory_vector: Vec<InventoryBlock> = Vec::new();
-        for block in blocks {
-            inventory_vector.push(InventoryBlock::new(InvType::MSGBlock, block));
-        }
-        Self::new(count, inventory_vector)
     }
 }
 

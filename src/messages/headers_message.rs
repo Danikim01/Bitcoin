@@ -52,7 +52,6 @@ impl Headers {
         let bytes = fs::read(file_name)?;
         let file_size = bytes.len() as u64;
         let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
-        println!("holaaa");
         let mut headers = Headers::default();
         // while cursor has more data
         while cursor.position() < file_size {
@@ -61,7 +60,6 @@ impl Headers {
             headers.count += 1;
             headers.block_headers.push(block_header);
         }
-        println!("chauuu");
         Ok(headers)
     }
 }
