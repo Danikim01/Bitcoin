@@ -120,10 +120,12 @@ impl Config {
             }
         }
 
-        let path = PathBuf::from(&values["log_file"]);
-        fs::create_dir_all(get_parent_path(path))?;
-
-        Config::from_hashmap(values)
+        let log_path = PathBuf::from(&values["log_file"]);
+        let config = Config::from_hashmap(values)?;
+        let wallet_path = PathBuf::from(config.get_wallets_dir());
+        fs::create_dir_all(get_parent_path(log_path))?;
+        fs::create_dir_all(get_parent_path(wallet_path))?;
+        Ok(config)
     }
 
     fn hash_from_string(string: &str) -> io::Result<HashId> {
