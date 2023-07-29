@@ -1,14 +1,10 @@
 use super::utility::read_from_varint;
 use crate::messages::utility::read_hash;
 use crate::messages::utility::StreamRead;
+use crate::messages::Message;
 use crate::messages::{constants::commands::GETHEADERS, utility::to_varint, HashId, Serialize};
-use crate::messages::{
-    constants::{commands, config::VERBOSE},
-    Block, GetData, Headers, Message, MessageHeader, Ping, VerAck, Version,
-};
+use std::fmt::{self, Display};
 use std::io::Cursor;
-use std::fmt::{Display,self};
-
 
 /// Struct that represents the data GetHeader message
 #[derive(Debug, Clone, PartialEq)]
@@ -73,12 +69,11 @@ impl Serialize for GetHeader {
     }
 }
 
-impl Display for GetHeader{
+impl Display for GetHeader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "GetHeader {{ version: {}, hash_count: {}, tallest block_header_hash: {}, stop_hash: {} }}", self.version, self.hash_count, self.block_header_hashes[0], self.stop_hash)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -121,4 +116,3 @@ mod tests {
         }
     }
 }
-

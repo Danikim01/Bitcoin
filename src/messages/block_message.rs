@@ -2,6 +2,7 @@ use super::Message;
 use crate::interface::components::overview_panel::TransactionDisplayInfo;
 use crate::interface::GtkMessage;
 use crate::io::{self, Cursor};
+use crate::messages::constants::commands::BLOCK;
 use crate::messages::MerkleTree;
 use crate::messages::{utility::*, BlockHeader, HashId, Hashable, Serialize};
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
@@ -13,7 +14,6 @@ use gtk::glib::SyncSender;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use crate::messages::constants::commands::BLOCK;
 
 pub type BlockSet = HashMap<HashId, Block>;
 

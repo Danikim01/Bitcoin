@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 use crate::io::Cursor;
 use crate::messages::{utility::*, HashId, Hashable};
 use crate::utility::{double_hash, to_io_err};
+use std::collections::HashMap;
 use std::io::{self, ErrorKind::InvalidData, Write};
-use bitcoin_hashes::sha1::Hash;
-use gtk::Entry;
 
 /// Block header struct as defined in the Bitcoin documentation.
 //https://developer.bitcoin.org/reference/block_chain.html#block-headers
@@ -56,9 +54,6 @@ impl BlockHeader {
             height,
         }
     }
-
-
-
 
     pub fn genesis(hash: HashId) -> Self {
         // return Genesis block header
@@ -185,39 +180,26 @@ impl Hashable for BlockHeader {
     }
 }
 #[derive(Debug, Clone)]
-pub struct HeaderSet{
-    headers: HashMap<HashId, BlockHeader>
+pub struct HeaderSet {
+    headers: HashMap<HashId, BlockHeader>,
 }
 
-impl HeaderSet{
-    pub fn new() -> Self{
-        Self{
-            headers: HashMap::new()
-        }
-    }
-
-    pub fn values_mut(&mut self) -> std::collections::hash_map::ValuesMut<'_, HashId, BlockHeader> {
-        self.headers.values_mut()
-    }
-
-    pub fn with(hash: HashId,header: BlockHeader) -> Self{
+impl HeaderSet {
+    pub fn with(hash: HashId, header: BlockHeader) -> Self {
         let mut headers = HashMap::new();
         headers.insert(hash, header);
 
-        Self{
-            headers
-        }
+        Self { headers }
     }
 
-    pub fn insert(&mut self, hash: HashId,header: BlockHeader){
-        // if let Some(prev_header) = self.headers.get(&header.prev_block_hash){
-        //     prev_header.next_block_hash = Some(header.hash());
-        // }
+    pub fn insert(&mut self, hash: HashId, header: BlockHeader) {
         self.headers.insert(hash, header);
     }
 
-    pub fn entry(&mut self, hash: HashId) -> std::collections::hash_map::Entry<'_, HashId, BlockHeader> {
-
+    pub fn entry(
+        &mut self,
+        hash: HashId,
+    ) -> std::collections::hash_map::Entry<'_, HashId, BlockHeader> {
         self.headers.entry(hash)
     }
 
@@ -231,17 +213,11 @@ impl HeaderSet{
 
     pub fn get_next_header(&self, hash: &HashId) -> Option<&BlockHeader> {
         if let Some(header) = self.headers.get(hash) {
-            println!("aca entraa");
             if let Some(next_hash) = header.next_block_hash {
-                println!("deberia entrar aca");
                 return self.headers.get(&next_hash);
             }
         }
         None
-    }
-
-    pub fn values(&self) -> std::collections::hash_map::Values<'_, HashId, BlockHeader> {
-        self.headers.values()
     }
 
     pub fn len(&self) -> usize {
@@ -313,29 +289,35 @@ mod tests {
         assert_eq!(block_header.nonce, 1823431201);
     }
 
-
     #[test]
-    fn test_push_headers_to_headerset(){
-        let mut headerset = HeaderSet::new();
-        let child_header = BlockHeader::genesis(HashId::new([1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5]));
+    fn test_push_headers_to_headerset() {
+        let child_header = BlockHeader::genesis(HashId::default());
+        let mut headerset = HeaderSet::with(child_header.hash, child_header);
 
-        let parent_header = BlockHeader{
+        let parent_header = BlockHeader {
             version: 0_i32,
-            prev_block_hash: child_header.hash(),
-            next_block_hash: None,
+            prev_block_hash: HashId::default(),
+            next_block_hash: Some(child_header.hash),
             merkle_root_hash: HashId::default(),
             timestamp: 0_u32,
             nbits: 0_u32,
             nonce: 0_u32,
-            hash: HashId::new([1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,9]),
+            hash: HashId::new([
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1,
+                2, 3, 4, 5,
+            ]),
             height: 0,
         };
 
-        headerset.insert(child_header.hash,child_header);
-        headerset.insert(parent_header.hash,parent_header);
-
-        println!("My child block is: {:?}", headerset.get(&HashId::new([1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5,6,7,8,9,1,2,3,4,5])));
-
-        assert_eq!(headerset.headers.get(&child_header.hash()).unwrap().next_block_hash, Some(parent_header.hash()));
+        headerset.insert(child_header.hash, child_header);
+        headerset.insert(parent_header.hash, parent_header);
+        assert_eq!(
+            headerset
+                .headers
+                .get(&parent_header.hash)
+                .unwrap()
+                .next_block_hash,
+            Some(child_header.hash)
+        );
     }
 }

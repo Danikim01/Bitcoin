@@ -92,19 +92,19 @@ impl NetworkController {
         );
         let last_known_hash = match getheaders_message.block_header_hashes.first() {
             Some(hash) => hash.clone(),
-            None => return None
+            None => return None,
         };
-        
+
         let max_blocks = 2000;
         let mut next_block_header = match self.headers.get_next_header(&last_known_hash) {
             Some(header) => header.clone(),
-            None => return None
+            None => return None,
         };
         let mut headers: Vec<BlockHeader> = vec![next_block_header];
         for _ in 1..max_blocks {
             next_block_header = match self.headers.get_next_header(&next_block_header.hash) {
                 Some(header) => header.clone(),
-                None => break
+                None => break,
             };
             headers.push(next_block_header);
             if next_block_header.hash == getheaders_message.stop_hash {
@@ -450,20 +450,20 @@ impl NetworkController {
         loop {
             let previous_header = match self.headers.get_mut(&prev_header_hash) {
                 Some(previous_header) => previous_header,
-                None => return // this will only happen when the current header is the genesis
+                None => return, // this will only happen when the current header is the genesis
             };
-    
+
             // update previous in loop, until the previous' next is the current
             match previous_header.next_block_hash {
                 Some(next_hash) if next_hash == current_header_hash => break,
-                _ => previous_header.next_block_hash = Some(current_header_hash)
+                _ => previous_header.next_block_hash = Some(current_header_hash),
             }
 
             // set values for next iteration
             current_header_hash = prev_header_hash;
             let current_header = match self.headers.get(&prev_header_hash) {
                 Some(header) => header,
-                None => return // will never happen
+                None => return, // will never happen
             };
             prev_header_hash = current_header.prev_block_hash;
         }
@@ -684,8 +684,7 @@ impl OuterNetworkController {
                 Some(parent_header) => {
                     header.height = parent_header.height + 1;
                 }
-                None => {
-                    continue}, // ignore header if prev_header is unknown
+                None => continue, // ignore header if prev_header is unknown
             }
             let hash = header.hash();
             drop(inner_read);
@@ -828,13 +827,14 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener = match TcpListener::bind(SocketAddrV4::new(LOCALHOST, config.get_listening_port())) {
-            Ok(listener) => listener,
-            Err(e) => {
-                println!("Ignoring Error: {:?}", e);
-                return Ok(());
-            }
-        };
+        let listener =
+            match TcpListener::bind(SocketAddrV4::new(LOCALHOST, config.get_listening_port())) {
+                Ok(listener) => listener,
+                Err(e) => {
+                    println!("Ignoring Error: {:?}", e);
+                    return Ok(());
+                }
+            };
 
         let ui_sender = self.ui_sender.clone();
         let writer_channel = self.writer_chanel.clone();

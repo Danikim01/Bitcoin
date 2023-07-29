@@ -1,9 +1,9 @@
+use crate::messages::constants::commands::HEADERS;
 use crate::messages::constants::header_constants::MAX_HEADER;
 use crate::messages::utility::{read_from_varint, to_varint};
 use crate::messages::{BlockHeader, HashId, Hashable, Message, Serialize};
 use std::fs;
 use std::io::{self, Cursor};
-use crate::messages::constants::commands::HEADERS;
 /// Struct that contains a list of block headers and the number of headers
 //https://btcinformation.org/en/developer-reference#compactsize-unsigned-integers
 //https://developer.bitcoin.org/reference/p2p_networking.html#getheaders
@@ -73,7 +73,7 @@ impl Serialize for Headers {
             payload.extend(header.serialize());
             payload.extend([0_u8; 1]);
         }
- 
+
         let message = self.build_message(HEADERS, Some(payload))?;
         Ok(message)
     }
@@ -89,5 +89,3 @@ impl Serialize for Headers {
         Ok(Message::Headers(headers))
     }
 }
-
-

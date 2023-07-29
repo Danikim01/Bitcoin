@@ -1,5 +1,4 @@
-use gtk::prelude::InetAddressExtManual;
-use crate::messages::{Block, constants, Inventory, InvType, Serialize};
+use crate::messages::{constants, Block, InvType, Serialize};
 
 //ver https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
 #[derive(Debug, Clone)]
@@ -52,10 +51,9 @@ pub struct InventoryVector {
     inventory: Vec<InventoryBlock>,
 }
 
-
 impl InventoryVector {
     /// Create a new inventory message
-    pub fn new(count: usize, inventory: Vec<InventoryBlock>) -> Self{
+    pub fn new(count: usize, inventory: Vec<InventoryBlock>) -> Self {
         Self { count, inventory }
     }
 

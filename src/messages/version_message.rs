@@ -1,5 +1,5 @@
 use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
-use crate::messages::utility::{read_from_varint, StreamRead, to_varint};
+use crate::messages::utility::{read_from_varint, to_varint, StreamRead};
 use crate::messages::{Message, Serialize, Services};
 use crate::utility::actual_timestamp_or_default;
 use std::io::{self, Cursor, Read};

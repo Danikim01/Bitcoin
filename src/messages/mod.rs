@@ -9,12 +9,12 @@ mod getdata_message;
 mod getheader_message;
 mod headers;
 mod headers_message;
+pub(crate) mod invblock_message;
 mod merkle_tree;
 mod ping_message;
 pub mod utility;
 mod verack_message;
 pub(crate) mod version_message;
-pub(crate) mod invblock_message;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;

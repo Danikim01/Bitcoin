@@ -232,7 +232,7 @@ impl Node {
         Ok(())
     }
 
-    pub fn inverse_handshake(stream: &mut TcpStream) -> io::Result<()>{
+    pub fn inverse_handshake(stream: &mut TcpStream) -> io::Result<()> {
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
 
@@ -265,7 +265,6 @@ impl Node {
 
         VerAck::from_stream(stream)?; // receive verack
 
-        
         Ok(())
     }
 
