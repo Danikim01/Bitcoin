@@ -137,7 +137,6 @@ impl From<Services> for [u8; 8] {
 
 type Inventories = Vec<Inventory>;
 
-#[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
     _GetData(GetData),

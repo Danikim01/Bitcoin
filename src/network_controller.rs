@@ -10,18 +10,17 @@ use crate::messages::{
     MessageHeader, Serialize,
 };
 
-use crate::messages::invblock_message::{InventoryBlock, InventoryVector};
+use crate::messages::invblock_message::InventoryVector;
 use crate::node_controller::NodeController;
 use crate::raw_transaction::{RawTransaction, TransactionOrigin};
 use crate::utility::{double_hash, to_io_err};
 use crate::utxo::UtxoSet;
 use crate::wallet::Wallet;
-use bitcoin_hashes::Hash;
 use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener};
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, RwLock, RwLockReadGuard,
@@ -35,8 +34,7 @@ use crate::interface::{
     components::{overview_panel::TransactionDisplayInfo, send_panel::TransactionInfo},
     update_ui_progress_bar,
 };
-use crate::messages::constants::config::{LOCALHOST, LOCALSERVER, PORT};
-use crate::messages::InvType::MSGBlock;
+use crate::messages::constants::config::{LOCALSERVER, PORT};
 use crate::node::Node;
 
 pub type BlockSet = HashMap<HashId, Block>;
@@ -372,7 +370,8 @@ impl NetworkController {
             //self.set_next_block_hash_for_blockheaders();
             new_headers.push(header);
             if header.height > self.tallest_header.height {
-                self.tallest_header = header
+                self.tallest_header = header;
+                self.update_best_header_chain();
             }
         }
 
@@ -492,21 +491,28 @@ impl NetworkController {
         }
     }
 
-    fn set_next_block_hash_for_blockheaders(&mut self) {
-        let mut next_block_hashes: HashMap<HashId, HashId> = HashMap::new();
-
-        // Compute the next_block_hash for each header and store it in next_block_hashes
-        for header in self.headers.values() {
-            if let Some(next_header) = self.headers.get(&header.prev_block_hash) {
-                next_block_hashes.insert(next_header.hash(), header.hash());
+    fn update_best_header_chain(&mut self) {
+        let mut current_header_hash = self.tallest_header.hash;
+        let mut prev_header_hash = self.tallest_header.prev_block_hash;
+        loop {
+            let previous_header = match self.headers.get_mut(&prev_header_hash) {
+                Some(previous_header) => previous_header,
+                None => return // this will only happen when the current header is the genesis
+            };
+    
+            // update previous in loop, until the previous' next is the current
+            match previous_header.next_block_hash {
+                Some(next_hash) if next_hash == current_header_hash => break,
+                _ => previous_header.next_block_hash = Some(current_header_hash)
             }
-        }
 
-        // Update the headers with the computed next_block_hashes
-        for header in self.headers.values_mut() {
-            if let Some(next_hash) = next_block_hashes.get(&header.hash()) {
-                header.next_block_hash = Some(*next_hash);
-            }
+            // set values for next iteration
+            current_header_hash = prev_header_hash;
+            let current_header = match self.headers.get(&prev_header_hash) {
+                Some(header) => header,
+                None => return // will never happen
+            };
+            prev_header_hash = current_header.prev_block_hash;
         }
     }
 
@@ -538,46 +544,10 @@ impl NetworkController {
                 missing_blocks.push(header);
             }
         }
-        self.set_next_block_hash_for_blockheaders();
         self.request_blocks(Headers::new(missing_blocks.len(), missing_blocks), config)?;
         self.request_headers(self.tallest_header.hash(), config)?;
         Ok(())
     }
-
-    // DELETE ME
-    // pub fn listen_for_nodes(
-    //     &self,
-    //     writer_channel: std::sync::mpsc::SyncSender<(SocketAddr, Message)>,
-    //     config: Config,
-    // ) -> io::Result<()> {
-    //     let listener = TcpListener::bind(LOCALSERVER)?;
-    //     let ui_sender = self.ui_sender.clone();
-    //     thread::spawn(move || -> io::Result<()> {
-    //         println!("Listening on port {}", PORT);
-    //         println!("Listener: {:?}", listener);
-    //         for stream in listener.incoming() {
-    //             println!("Incoming connection");
-    //             println!("Stream: {:?}", stream);
-    //             match stream {
-    //                 Ok(mut stream) => {
-    //                     let ui_sender = ui_sender.clone();
-    //                     println!("New connectionn: {}", stream.peer_addr()?);
-    //                     Node::inverse_handshake(&mut stream).unwrap();
-
-    //                     let node =
-    //                         Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
-    //                     // Network Controller should add the new node
-    //                 }
-    //                 Err(e) => {
-    //                     println!("Error: {}", e);
-    //                 }
-    //             }
-    //         }
-
-    //         Ok(())
-    //     });
-    //     Ok(())
-    // }
 }
 
 /// NetworkController is a wrapper around the inner NetworkController in order to allow for safe multithreading
@@ -683,36 +653,25 @@ impl OuterNetworkController {
         if inner_read.valid_blocks.contains_key(&block.hash())
             || inner_read.blocks_on_hold.contains_key(&block.hash())
         {
-            // println!("This block has already been received before");
             return Ok(());
         }
         if block.validate().is_err() {
-            // println!("invalid block, discarting");
             return Ok(());
         }
         block.save_to_file(config.get_blocks_file())?;
-
         drop(inner_read);
+
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(previous_block) = inner_write.valid_blocks.get(&block.header.prev_block_hash) {
             block.header.height = previous_block.header.height + 1;
-            //update the next_block_hash field of the BlockHeader
             if let Vacant(entry) = inner_write.headers.entry(block.hash()) {
                 entry.insert(block.header);
-                //agregue estooo
-                //inner_write.headers.insert(block.header.hash, block.header);
+                if block.header.height > inner_write.tallest_header.height {
+                    inner_write.tallest_header = block.header;
+                    inner_write.update_best_header_chain();
+                }
             }
-            let hash = block.hash();
-            let block_header = block.header;
-            inner_write.blocks_on_hold.insert(hash, block);
-
-            if block_header.prev_block_hash == inner_write.tallest_header.hash() {
-                inner_write.headers.insert(hash, block_header);
-                inner_write.set_next_block_hash_for_blockheaders();
-                inner_write.tallest_header = block_header;
-            }
-
-            inner_write.add_to_valid_blocks(hash);
+            inner_write.add_to_valid_blocks(block.header.hash);
         } else {
             inner_write.put_block_on_hold(block);
         }
@@ -778,21 +737,21 @@ impl OuterNetworkController {
             drop(inner_read);
             let mut inner_write = t_inner.write().map_err(to_io_err)?;
             inner_write.headers.insert(hash, header);
-            inner_write.set_next_block_hash_for_blockheaders();
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
             if header.height > inner_write.tallest_header.height {
                 inner_write.tallest_header = header
             }
-
             drop(inner_write);
             inner_read = t_inner.read().map_err(to_io_err)?;
         }
         if prev_header_count == inner_read.headers.len() {
             return Ok(());
         }
-
         Self::handle_headers_message_info(config, inner_read, ui_sender)?;
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        inner_write.update_best_header_chain();
+        drop(inner_write);
 
         // request blocks mined after given date
         Self::try_request_trimmed_blocks(t_inner, new_headers, config)
@@ -900,8 +859,8 @@ impl OuterNetworkController {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories, &config)
                     }
                     (_, Message::Transaction(tx)) => Self::handle_node_tx_message(t_inner, tx),
-                    (peer_address, Message::_GetData(GetData)) => {
-                        Self::handle_get_data_message(t_inner, GetData, peer_address, &config)
+                    (peer_address, Message::_GetData(get_data)) => {
+                        Self::handle_get_data_message(t_inner, get_data, peer_address, &config)
                     }
                     _ => Ok(()), // unexpected messages were already filtered by node listeners
                 } {
@@ -986,13 +945,12 @@ mod tests {
     use super::*;
     use crate::messages::constants::config::LOCALSERVER;
     use crate::messages::version_message::Version;
-    use crate::messages::{block_header, VerAck};
+    use crate::messages::VerAck;
     use gtk::glib;
-    use std::io::{Read, Write};
+    use std::io::Write;
     use std::net::TcpStream;
     use std::path::PathBuf;
     use std::sync::mpsc::SyncSender;
-    use std::time::Duration;
 
     // La función que vamos a probar, que envía un getheaders al servidor
     fn run_client_getheaders(config: &Config) -> io::Result<Message> {
@@ -1008,10 +966,10 @@ mod tests {
         //Leo el header del version message
         let version_header = MessageHeader::from_stream(&mut socket).unwrap();
         //Leo el payload del version message
-        let payload_data = version_header.read_payload(&mut socket).unwrap();
+        let _payload_data = version_header.read_payload(&mut socket).unwrap();
 
         //Recibo un verack message
-        let verack = VerAck::from_stream(&mut socket).unwrap();
+        let _verack = VerAck::from_stream(&mut socket).unwrap();
         //Envio un verack message
         let payload = VerAck::new().serialize().unwrap();
         socket.write_all(&payload).unwrap();
@@ -1038,7 +996,7 @@ mod tests {
     #[test]
     fn test_handle_getheaders_message_client_server_communication() {
         let (ui_sender, _) = glib::MainContext::sync_channel(glib::PRIORITY_HIGH, 100);
-        let (writer_end, node_receiver) = mpsc::sync_channel(100);
+        let (writer_end, _node_receiver) = mpsc::sync_channel(100);
 
         let config_file = "node.conf";
         let config_path: PathBuf = config_file.into(); // Convert &str to PathBuf
@@ -1052,7 +1010,7 @@ mod tests {
         // outer_controller.sync(config.clone()).unwrap();
         let mut network_controller =
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.start_sync(&config);
+        network_controller.start_sync(&config).unwrap();
 
         // Iniciar el servidor en un hilo separado
         let server_handle = thread::spawn(move || -> io::Result<()> {
@@ -1085,10 +1043,10 @@ mod tests {
         let response = run_client_getheaders(&config_clone).unwrap();
 
         // Esperar a que termine la prueba
-        server_handle.join().unwrap();
+        server_handle.join().unwrap().unwrap();
 
         //read the content of response enum
-        let headers = match response {
+        let _headers = match response {
             Message::Headers(headers) => {
                 assert_eq!(headers.count, 2000);
             }
@@ -1121,7 +1079,7 @@ mod tests {
         //Leo el header del version message
         let version_header = MessageHeader::from_stream(&mut socket).unwrap();
         //Leo el payload del version message
-        let payload_data = version_header.read_payload(&mut socket).unwrap();
+        let _payload_data = version_header.read_payload(&mut socket).unwrap();
 
         //Recibo un verack message
         let verack = VerAck::from_stream(&mut socket).unwrap();
@@ -1145,7 +1103,7 @@ mod tests {
         let config = Config::from_file(config_path).unwrap();
         let mut network_controller =
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.start_sync(&config);
+        network_controller.start_sync(&config).unwrap();
 
         let block_header_hashes = vec![config.get_genesis()];
         let getheaders_message = GetHeader {
@@ -1177,7 +1135,7 @@ mod tests {
         let config = Config::from_file(config_path).unwrap();
         let mut network_controller =
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.start_sync(&config);
+        network_controller.start_sync(&config).unwrap();
 
         let start_hash_id = HashId {
             hash: [
@@ -1220,7 +1178,7 @@ mod tests {
         let config = Config::from_file(config_path).unwrap();
         let mut network_controller =
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.start_sync(&config);
+        network_controller.start_sync(&config).unwrap();
 
         let unknown_hash = HashId { hash: [1; 32] };
 
@@ -1252,17 +1210,17 @@ mod tests {
         let config = Config::from_file(config_path).unwrap();
         let mut network_controller =
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.start_sync(&config);
+        network_controller.start_sync(&config).unwrap();
 
         let block_header_hashes = vec![config.get_genesis()];
-        let mut getheaders_message = GetHeader {
+        let getheaders_message = GetHeader {
             version: 70015,
             hash_count: 1,
             block_header_hashes,
             stop_hash: network_controller.tallest_header.hash,
         };
 
-        let mut headers = network_controller
+        let _headers = network_controller
             .handle_getheaders_message(getheaders_message)
             .unwrap();
         //assert_eq!(last_header_obtained, network_controller.tallest_header.hash);
@@ -1280,7 +1238,7 @@ mod tests {
         let config = Config::from_file(config_path).unwrap();
         let mut network_controller =
             NetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
-        network_controller.start_sync(&config);
+        network_controller.start_sync(&config).unwrap();
 
         let block_header_hashes = vec![config.get_genesis()];
         let mut getheaders_message = GetHeader {

@@ -8,13 +8,11 @@ use crate::utility::to_io_err;
 use std::io::{self, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc;
-use std::thread::{self, JoinHandle, sleep};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 // gtk imports
 use crate::interface::GtkMessage;
 use gtk::glib::SyncSender;
-// Define the TEST_DONE flag
-use std::sync::atomic::{AtomicBool, Ordering};
 
 /// The Listener struct is responsible for listening to incoming messages from a peer and sending them to the writer thread.
 pub struct Listener {
