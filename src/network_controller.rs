@@ -478,8 +478,10 @@ impl NetworkController {
             self.update_ui_progress(Some("Reading headers from backup file..."), 0.0);
             downloadable_headers = self.read_backup_headers(headers, config);
             update_ui_progress_bar(&self.ui_sender, Some("Read headers from backup file."), 1.0)?;
+        }else{
+            println!("fallo la lectura del archivo");
         }
-
+        
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
             self.update_ui_progress(Some("Found blocks backup file, reading blocks..."), 0.0);
@@ -680,6 +682,9 @@ impl OuterNetworkController {
         // save new headers to hashmap and backup file
         let mut new_headers: Vec<BlockHeader> = vec![];
         for mut header in headers.block_headers {
+            if inner_read.headers.contains_key(&header.hash()) {
+                continue;
+            }
             match inner_read.headers.get(&header.prev_block_hash) {
                 Some(parent_header) => {
                     header.height = parent_header.height + 1;

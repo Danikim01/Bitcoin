@@ -168,8 +168,8 @@ impl BlockHeader {
 
     /// Create a block header from a byte array (little endian).
     pub fn deserialize(cursor: &mut Cursor<&[u8]>) -> io::Result<BlockHeader> {
-        let header = BlockHeader::from_bytes(cursor)?;
-        let _empty_tx = u8::from_le_stream(cursor)?;
+        let header = BlockHeader::from_bytes(cursor).unwrap();
+        let _empty_tx = u8::from_le_stream(cursor).unwrap();
         Ok(header)
     }
 }
@@ -190,6 +190,10 @@ impl HeaderSet {
         headers.insert(hash, header);
 
         Self { headers }
+    }
+
+    pub fn contains_key(&self, hash: &HashId) -> bool {
+        self.headers.contains_key(hash)
     }
 
     pub fn insert(&mut self, hash: HashId, header: BlockHeader) {
