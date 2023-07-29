@@ -785,7 +785,7 @@ impl OuterNetworkController {
             match TcpListener::bind(SocketAddrV4::new(LOCALHOST, config.get_listening_port())) {
                 Ok(listener) => listener,
                 Err(e) => {
-                    println!("Ignoring Error: {:?}", e);
+                    eprintln!("Ignoring Error: {:?}", e);
                     return Ok(());
                 }
             };
