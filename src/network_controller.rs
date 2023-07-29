@@ -187,7 +187,6 @@ impl NetworkController {
     }
 
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
-        // change this for wallets
         let _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
@@ -195,20 +194,16 @@ impl NetworkController {
             Some(&self.active_wallet),
         );
 
-        let _ = self.update_ui_balance();
+        _ = self.update_ui_balance();
 
         // get real height of the block
         block.header.height = match self.valid_blocks.get(&block.header.prev_block_hash) {
             Some(prev_block) => prev_block.header.height + 1,
-            _ => self.tallest_header.height + 1,
+            _ => 1, // block after genesis, first valid block
         };
 
         // update progress bar
-        let mut progress =
-            ((block.header.height as f64 / self.tallest_header.height as f64) * 100.0) % 1.0;
-        if progress == 0.0 {
-            progress = 1.0;
-        }
+        let progress = block.header.height as f64 / self.tallest_header.height as f64;
         let msg = format!("Received block {}", block.header.height);
         _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
@@ -696,7 +691,10 @@ impl OuterNetworkController {
                     inner_write.update_best_header_chain();
                 }
             }
-            inner_write.add_to_valid_blocks(block.header.hash);
+            let block_hash = block.hash();
+            // add to on-hold and then validate as many on-hold blocks as possible
+            inner_write.blocks_on_hold.insert(block_hash, block);
+            inner_write.add_to_valid_blocks(block_hash);
         } else {
             inner_write.put_block_on_hold(block);
         }
@@ -720,12 +718,10 @@ impl OuterNetworkController {
             "Read headers. New header count: {:?}",
             inner_read.headers.len()
         );
-        let most_recent_timestamp = inner_read.tallest_header.timestamp;
+        let most_recent_timestamp = inner_read.tallest_header.timestamp as i64;
 
-        // the closer the timestamp is to the current time, the more progress we have made
-        let diff = (Utc::now().timestamp() - most_recent_timestamp as i64) as f64 / 1000000000.0;
-        let progress = 1.0 - diff;
-
+        let genesis_block_timestamp = 1231006500; 
+        let progress = (most_recent_timestamp - genesis_block_timestamp) as f64 / (Utc::now().timestamp() - genesis_block_timestamp) as f64;
         _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
         Ok(())
     }
