@@ -39,6 +39,7 @@ pub type BlockSet = HashMap<HashId, Block>;
 pub struct NetworkController {
     headers: HeaderSet,
     tallest_header: BlockHeader,
+    tallest_block: BlockHeader,
     valid_blocks: BlockSet,   // valid blocks downloaded so far
     blocks_on_hold: BlockSet, // downloaded blocks for which we don't have the previous block
     pending_blocks: HashMap<HashId, Vec<HashId>>, // blocks which haven't arrived, and the blocks which come immediately after them
@@ -62,6 +63,7 @@ impl NetworkController {
         Ok(Self {
             headers: HeaderSet::with(genesis_header.hash, genesis_header),
             tallest_header: genesis_header,
+            tallest_block: genesis_header,
             valid_blocks: BlockSet::new(),
             blocks_on_hold: BlockSet::new(),
             pending_blocks: HashMap::new(),
@@ -163,13 +165,20 @@ impl NetworkController {
         best_headers
     }
 
-    fn get_best_blocks(&self, headers: Vec<&BlockHeader>) -> Vec<&Block> {
+    fn get_best_blocks(&self, amount: usize) -> Vec<&Block> {
         let mut best_blocks = vec![];
-        for header in headers {
-            if let Some(block) = self.valid_blocks.get(&header.hash()) {
-                best_blocks.push(block);
+        let mut current_block = match self.valid_blocks.get(&self.tallest_block.hash) {
+            Some(block) => block,
+            None => panic!()
+        };
+        for _ in 0..amount {
+            best_blocks.push(current_block);
+            current_block = match self.valid_blocks.get(&current_block.header.prev_block_hash) {
+                Some(header) => header,
+                None => break,
             }
         }
+        best_blocks.reverse();
         best_blocks
     }
 
@@ -187,7 +196,7 @@ impl NetworkController {
     }
 
     fn _add_to_valid_blocks(&mut self, mut block: Block) {
-        let _ = block.expand_utxo(
+        _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
             &mut self.wallets,
@@ -199,7 +208,7 @@ impl NetworkController {
         // get real height of the block
         block.header.height = match self.valid_blocks.get(&block.header.prev_block_hash) {
             Some(prev_block) => prev_block.header.height + 1,
-            _ => 1, // block after genesis, first valid block
+            _ => 0, // this will never happen
         };
 
         // update progress bar
@@ -207,6 +216,9 @@ impl NetworkController {
         let msg = format!("Received block {}", block.header.height);
         _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
+        if block.header.height > self.tallest_block.height {
+            self.tallest_block = block.header;
+        }
         self.valid_blocks.insert(block.hash(), block);
     }
 
@@ -310,12 +322,11 @@ impl NetworkController {
         config: &Config,
     ) -> io::Result<()> {
         headers.trim_timestamp(config.get_start_timestamp());
-
-        // since every block needs to come after a valid block, create a "pseudo genesis" validated block
         if headers.block_headers.is_empty() {
             return Ok(());
         }
 
+        // since every block needs to come after a valid block, create a "pseudo genesis" validated block
         let first_downloadable_header = headers.block_headers[0];
         if let Some(previous_header) = self.headers.get(&first_downloadable_header.prev_block_hash)
         {
@@ -525,8 +536,9 @@ impl OuterNetworkController {
         inner: &RwLockReadGuard<'_, NetworkController>,
         ui_sender: &SyncSender<GtkMessage>,
         tallest_header_hash: &mut HashId,
-        headers: Vec<&BlockHeader>,
+        amount: usize,
     ) {
+        let headers: Vec<&BlockHeader> = inner.get_best_headers(amount);
         if inner.tallest_header.hash() != *tallest_header_hash {
             *tallest_header_hash = inner.tallest_header.hash();
             let data = table_data_from_headers(headers.clone());
@@ -539,18 +551,15 @@ impl OuterNetworkController {
     fn update_ui_blocks_periodically(
         inner: &RwLockReadGuard<'_, NetworkController>,
         ui_sender: &SyncSender<GtkMessage>,
-        block_count: &mut usize,
-        headers: Vec<&BlockHeader>,
+        tallest_block_hash: &mut HashId,
+        amount: usize,
     ) {
-        let curr_block_count = inner.valid_blocks.len();
-        if curr_block_count > *block_count {
-            let blocks = inner.get_best_blocks(headers);
+        if inner.tallest_block.hash != *tallest_block_hash {
+            *tallest_block_hash = inner.tallest_block.hash;
+            let blocks = inner.get_best_blocks(amount);
             let data = table_data_from_blocks(blocks);
             _ = ui_sender
-                .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)))
-                .map_err(to_io_err);
-
-            *block_count = curr_block_count;
+                .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)));
         }
     }
 
@@ -575,21 +584,20 @@ impl OuterNetworkController {
         let ui_sender: SyncSender<GtkMessage> = self.ui_sender.clone();
         thread::spawn(move || -> io::Result<()> {
             let mut tallest_header_hash = HashId::default();
-            let mut block_count = 0;
+            let mut tallest_block_hash = HashId::default();
             let mut txs_on_overview: Vec<TransactionDisplayInfo> = Vec::new();
             loop {
                 thread::sleep(std::time::Duration::from_secs(10));
                 let inner: RwLockReadGuard<'_, NetworkController> =
                     inner.read().map_err(to_io_err)?;
-                let headers: Vec<&BlockHeader> = inner.get_best_headers(100);
 
                 Self::update_ui_headers_periodically(
                     &inner,
                     &ui_sender,
                     &mut tallest_header_hash,
-                    headers.clone(),
+                    100
                 );
-                Self::update_ui_blocks_periodically(&inner, &ui_sender, &mut block_count, headers);
+                Self::update_ui_blocks_periodically(&inner, &ui_sender, &mut tallest_block_hash, 100);
                 Self::update_ui_overview_tx_periodically(&inner, &ui_sender, &mut txs_on_overview)
             }
         });
@@ -720,7 +728,7 @@ impl OuterNetworkController {
         );
         let most_recent_timestamp = inner_read.tallest_header.timestamp as i64;
 
-        let genesis_block_timestamp = 1231006500; 
+        let genesis_block_timestamp = 1231006500; // 2009-01-03T18:15Z
         let progress = (most_recent_timestamp - genesis_block_timestamp) as f64 / (Utc::now().timestamp() - genesis_block_timestamp) as f64;
         _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
         Ok(())
