@@ -19,7 +19,7 @@ use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
-use std::net::{SocketAddr, SocketAddrV4, TcpListener, Ipv4Addr};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, RwLock, RwLockReadGuard,
@@ -181,20 +181,20 @@ impl NetworkController {
         best_blocks
     }
 
-    fn read_backup_block(&mut self, block: Block) {
+    fn read_backup_block(&mut self, block: Block, config: &Config) {
         if self
             .valid_blocks
             .contains_key(&block.header.prev_block_hash)
         {
             let hash = block.hash();
             self.blocks_on_hold.insert(hash, block);
-            self.add_to_valid_blocks(hash);
+            self.add_to_valid_blocks(hash, config);
         } else {
             self.put_block_on_hold(block);
         }
     }
 
-    fn _add_to_valid_blocks(&mut self, mut block: Block) {
+    fn _add_to_valid_blocks(&mut self, mut block: Block, config: &Config) {
         _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
@@ -211,7 +211,9 @@ impl NetworkController {
         };
 
         // update progress bar
-        let progress = block.header.height as f64 / self.tallest_header.height as f64;
+        let pseudo_genesis_timestamp = config.get_start_timestamp();
+        let progress = (block.header.timestamp - pseudo_genesis_timestamp) as f64
+            / (Utc::now().timestamp() - pseudo_genesis_timestamp as i64) as f64;
         let msg = format!("Received block {}", block.header.height);
         _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
@@ -221,12 +223,12 @@ impl NetworkController {
         self.valid_blocks.insert(block.hash(), block);
     }
 
-    fn add_to_valid_blocks(&mut self, block_id: HashId) {
+    fn add_to_valid_blocks(&mut self, block_id: HashId, config: &Config) {
         // if there where blocks on hold waiting for this one, validate them
         let mut blocks_not_on_hold: Vec<HashId> = vec![block_id];
         while let Some(block_id) = blocks_not_on_hold.pop() {
             if let Some(block) = self.blocks_on_hold.remove(&block_id) {
-                self._add_to_valid_blocks(block);
+                self._add_to_valid_blocks(block, config);
                 if let Some(mut unblocked_blocks) = self.pending_blocks.remove(&block_id) {
                     blocks_not_on_hold.append(&mut unblocked_blocks);
                 }
@@ -480,16 +482,24 @@ impl NetworkController {
         if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
             self.update_ui_progress(Some("Reading headers from backup file..."), 0.0);
             downloadable_headers = self.read_backup_headers(headers, config);
-            update_ui_progress_bar(&self.ui_sender, Some("Finished reading headers from backup file."), 1.0)?;
+            update_ui_progress_bar(
+                &self.ui_sender,
+                Some("Finished reading headers from backup file."),
+                1.0,
+            )?;
         }
 
         // attempt to read blocks from backup file
         if let Ok(blocks) = Block::all_from_file(config.get_blocks_file()) {
             self.update_ui_progress(Some("Found blocks backup file, reading blocks..."), 0.0);
             for (_, block) in blocks.into_iter() {
-                self.read_backup_block(block);
+                self.read_backup_block(block, config);
             }
-            update_ui_progress_bar(&self.ui_sender, Some("Finished reading blocks from backup file."), 1.0)?;
+            update_ui_progress_bar(
+                &self.ui_sender,
+                Some("Finished reading blocks from backup file."),
+                1.0,
+            )?;
         }
         // Finally, catch up to blockchain doing IBD
         let mut missing_blocks: Vec<BlockHeader> = vec![];
@@ -705,7 +715,7 @@ impl OuterNetworkController {
             let block_hash = block.hash();
             // add to on-hold and then validate as many on-hold blocks as possible
             inner_write.blocks_on_hold.insert(block_hash, block);
-            inner_write.add_to_valid_blocks(block_hash);
+            inner_write.add_to_valid_blocks(block_hash, config);
         } else {
             inner_write.put_block_on_hold(block);
         }
@@ -906,14 +916,16 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener =
-            match TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.get_listening_port())) {
-                Ok(listener) => listener,
-                Err(e) => {
-                    eprintln!("Ignoring Error: {:?}", e);
-                    return Ok(());
-                }
-            };
+        let listener = match TcpListener::bind(SocketAddrV4::new(
+            Ipv4Addr::LOCALHOST,
+            config.get_listening_port(),
+        )) {
+            Ok(listener) => listener,
+            Err(e) => {
+                eprintln!("Ignoring Error: {:?}", e);
+                return Ok(());
+            }
+        };
 
         let ui_sender = self.ui_sender.clone();
         let writer_channel = self.writer_chanel.clone();

@@ -59,9 +59,7 @@ impl Block {
         let root_hash = merkle_tree.get_root();
 
         match self.header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
-            true => {
-                Ok(())
-            }
+            true => Ok(()),
             false => {
                 eprintln!("\x1b[93mMerkle root is invalid!\x1b[0m");
                 Err(io::Error::new(
