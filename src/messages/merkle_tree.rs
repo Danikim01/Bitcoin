@@ -71,7 +71,7 @@ impl MerkleTree {
         // yet it is not needed as the generated proof will fail later on
     }
 
-    fn _ensure_even(hashes: Vec<sha256::Hash>) -> Vec<sha256::Hash> {
+    fn ensure_even(hashes: Vec<sha256::Hash>) -> Vec<sha256::Hash> {
         if hashes.len() % 2 != 0 {
             let mut new_hashes = hashes.clone();
             let last_hash = hashes[hashes.len() - 1];
@@ -102,7 +102,7 @@ impl MerkleTree {
             return Ok(hashes[0]);
         }
 
-        let hashes = Self::_ensure_even(hashes);
+        let hashes = Self::ensure_even(hashes);
         let mut combined_hashes: Vec<sha256::Hash> = Vec::new();
         for i in (0..hashes.len()).step_by(2) {
             let left_hash = hashes[i];
@@ -128,7 +128,7 @@ impl MerkleTree {
                 return;
             }
 
-            let hashes = MerkleTree::_ensure_even(hashes);
+            let hashes = MerkleTree::ensure_even(hashes);
             let mut combined_hashes: Vec<sha256::Hash> = Vec::new();
             for i in (0..hashes.len()).step_by(2) {
                 let left_hash = hashes[i];

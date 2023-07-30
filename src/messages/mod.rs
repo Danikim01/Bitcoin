@@ -2,35 +2,39 @@ use crate::raw_transaction::RawTransaction;
 use bitcoin_hashes::sha256;
 use bitcoin_hashes::Hash;
 use std::io;
-mod block_header;
+pub(crate) mod block_header;
 mod block_message;
 pub(crate) mod constants;
 mod getdata_message;
 mod getheader_message;
 mod headers;
 mod headers_message;
+pub(crate) mod inventory;
 pub mod merkle_tree;
 mod ping_message;
 pub mod utility;
+mod sendheaders;
 mod verack_message;
-mod version_message;
+pub(crate) mod version_message;
 
 pub use block_header::BlockHeader;
 pub use block_message::Block;
 pub use block_message::BlockSet;
-pub use getdata_message::{GetData, InvType, Inventory};
+pub use getdata_message::GetData;
+pub use inventory::{InventoryVector, Inventory, InvType};
 pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use merkle_tree::MerkleTree;
 pub use ping_message::Ping;
+pub use sendheaders::SendHeaders;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 
 /// A struct that represents a hash with 32 bytes to display in hexadecimal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HashId {
-    hash: [u8; 32],
+    pub hash: [u8; 32],
 }
 
 impl HashId {
@@ -165,17 +169,14 @@ impl From<Services> for [u8; 8] {
     }
 }
 
-type Inventories = Vec<Inventory>;
-
-#[derive(Debug, Clone)]
 pub enum Message {
     Block(Block),
-    _GetData(GetData),
-    _GetHeader(GetHeader),
+    GetData(GetData),
+    GetHeader(GetHeader),
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),
-    Inv(Inventories),
+    Inv(InventoryVector),
     Transaction(RawTransaction),
     Ping(Ping),
     Ignore,

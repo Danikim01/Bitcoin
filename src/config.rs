@@ -1,8 +1,9 @@
 use crate::logger::{Log, Logger};
 use crate::messages::constants::config::{
-    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, QUIET, START_TIMESTAMP, TCP_TIMEOUT, VERBOSE,
+    BLOCKS_FILE, HEADERS_FILE, LOG_FILE, PORT, QUIET, START_TIMESTAMP, TCP_TIMEOUT, VERBOSE,
 };
 use crate::messages::HashId;
+use crate::utility::get_parent_path;
 use crate::wallet::Wallet;
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -12,6 +13,7 @@ use std::path::PathBuf;
 #[derive(Clone)]
 pub struct Config {
     seed: String,
+    port: u16,
     start_timestamp: u32,
     headers_file: String,
     blocks_file: String,
@@ -55,6 +57,10 @@ impl Config {
         self.genesis_hash
     }
 
+    pub fn get_listening_port(&self) -> u16 {
+        self.port
+    }
+
     pub fn get_wallets_dir(&self) -> &str {
         &self.wallets_dir
     }
@@ -80,6 +86,9 @@ impl Config {
     fn from_hashmap(mut values: HashMap<String, String>) -> io::Result<Config> {
         Ok(Config {
             seed: Config::remove_or(&mut values, "seed", ""),
+            port: Config::remove_or(&mut values, "listening_port", "")
+                .parse()
+                .unwrap_or(PORT),
             start_timestamp: Config::remove_or(&mut values, "start_timestamp", "")
                 .parse()
                 .unwrap_or(START_TIMESTAMP),
@@ -111,7 +120,13 @@ impl Config {
                 values.insert(key.to_owned(), value.to_owned());
             }
         }
-        Config::from_hashmap(values)
+
+        let log_path = PathBuf::from(&values["log_file"]);
+        fs::create_dir_all(get_parent_path(log_path))?;
+        let config = Config::from_hashmap(values)?;
+        let wallet_path = PathBuf::from(config.get_wallets_dir());
+        fs::create_dir_all(get_parent_path(wallet_path))?;
+        Ok(config)
     }
 
     fn hash_from_string(string: &str) -> io::Result<HashId> {

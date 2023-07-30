@@ -1,5 +1,5 @@
 use crate::messages::constants::{commands::VERSION, version_constants::LATEST_VERSION};
-use crate::messages::utility::{read_from_varint, StreamRead};
+use crate::messages::utility::{read_from_varint, to_varint, StreamRead};
 use crate::messages::{Message, Serialize, Services};
 use crate::utility::actual_timestamp_or_default;
 use std::io::{self, Cursor, Read};
@@ -23,7 +23,7 @@ pub struct Version {
     nonce: u64,
     _user_agent: String,
     _start_height: i32,
-    _relay: bool,
+    relay: bool,
 }
 
 impl Default for Version {
@@ -40,7 +40,7 @@ impl Default for Version {
         let nonce = 0;
         let _user_agent = "".to_string();
         let _start_height = 0;
-        let _relay = false;
+        let relay = true;
         Version::new(
             // message_header,
             version,
@@ -55,7 +55,7 @@ impl Default for Version {
             nonce,
             _user_agent,
             _start_height,
-            _relay,
+            relay,
         )
     }
 }
@@ -75,7 +75,7 @@ impl Version {
         nonce: u64,
         _user_agent: String,
         _start_height: i32,
-        _relay: bool,
+        relay: bool,
     ) -> Self {
         Self {
             version,
@@ -90,7 +90,7 @@ impl Version {
             nonce,
             _user_agent,
             _start_height,
-            _relay,
+            relay,
         }
     }
 
@@ -106,7 +106,7 @@ impl Version {
         }
     }
 
-    fn build_payload(&self) -> io::Result<Vec<u8>> {
+    pub fn build_payload(&self) -> io::Result<Vec<u8>> {
         let mut payload = Vec::new();
         payload.extend(&self.version.to_le_bytes());
         payload.extend::<[u8; 8]>(self.services.into());
@@ -118,7 +118,12 @@ impl Version {
         payload.extend(&self.addr_recv_services.to_le_bytes());
         payload.extend(&self.addr_trans_ip.octets());
         payload.extend(&self.addr_trans_port.to_be_bytes());
+        payload.extend(to_varint(self.nonce.to_le_bytes().len() as u64));
         payload.extend(&self.nonce.to_le_bytes());
+        payload.extend(self._user_agent.as_bytes());
+        payload.extend(&self._start_height.to_le_bytes());
+        payload.extend(&(self.relay as u8).to_le_bytes());
+
         Ok(payload)
     }
 
@@ -212,7 +217,7 @@ mod tests {
             assert_eq!(data.nonce, 7085675175729411284);
             assert_eq!(data._user_agent, "/Satoshi:0.16.3/".to_string());
             assert_eq!(data._start_height, 2434713);
-            assert_eq!(data._relay, true);
+            assert_eq!(data.relay, true);
         }
     }
 }

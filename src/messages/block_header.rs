@@ -1,6 +1,7 @@
 use crate::io::Cursor;
 use crate::messages::{utility::*, HashId, Hashable};
 use crate::utility::{double_hash, to_io_err};
+use std::collections::HashMap;
 use std::io::{self, ErrorKind::InvalidData, Write};
 
 /// Block header struct as defined in the Bitcoin documentation.
@@ -9,11 +10,12 @@ use std::io::{self, ErrorKind::InvalidData, Write};
 pub struct BlockHeader {
     version: i32,
     pub prev_block_hash: HashId,
+    pub next_block_hash: Option<HashId>,
     pub merkle_root_hash: HashId,
     pub timestamp: u32,
     nbits: u32,
     nonce: u32,
-    hash: HashId,
+    pub hash: HashId,
     pub height: usize,
 }
 
@@ -21,11 +23,11 @@ impl BlockHeader {
     pub fn new(
         version: i32,
         prev_block_hash: HashId,
+        next_block_hash: Option<HashId>,
         merkle_root_hash: HashId,
         timestamp: u32,
         nbits: u32,
         nonce: u32,
-        height: usize,
     ) -> Self {
         // calculate blockHeader hash
         let mut bytes = vec![];
@@ -43,11 +45,12 @@ impl BlockHeader {
             version,
             prev_block_hash,
             merkle_root_hash,
+            next_block_hash,
             timestamp,
             nbits,
             nonce,
             hash: HashId::new(hash_bytes),
-            height,
+            height: 0, // block starts with height 0, changed later if prev_block_hash is found
         }
     }
 
@@ -56,6 +59,7 @@ impl BlockHeader {
         Self {
             version: 0_i32,
             prev_block_hash: HashId::default(),
+            next_block_hash: None,
             merkle_root_hash: HashId::default(),
             timestamp: 0_u32,
             nbits: 0_u32,
@@ -77,11 +81,11 @@ impl BlockHeader {
         let actual_header = BlockHeader::new(
             version,
             prev_block_hash,
+            None,
             merkle_root_hash,
             timestamp,
             nbits,
             nonce,
-            0, // block starts with height 0, changed later if prev_block_hash is found
         );
 
         Ok(actual_header)
@@ -162,8 +166,8 @@ impl BlockHeader {
 
     /// Create a block header from a byte array (little endian).
     pub fn deserialize(cursor: &mut Cursor<&[u8]>) -> io::Result<BlockHeader> {
-        let header = BlockHeader::from_bytes(cursor)?;
-        let _empty_tx = u8::from_le_stream(cursor)?;
+        let header = BlockHeader::from_bytes(cursor).unwrap();
+        let _empty_tx = u8::from_le_stream(cursor).unwrap();
         Ok(header)
     }
 }
@@ -171,6 +175,55 @@ impl BlockHeader {
 impl Hashable for BlockHeader {
     fn hash(&self) -> HashId {
         self.hash
+    }
+}
+#[derive(Debug, Clone)]
+pub struct HeaderSet {
+    headers: HashMap<HashId, BlockHeader>,
+}
+
+impl HeaderSet {
+    pub fn with(hash: HashId, header: BlockHeader) -> Self {
+        let mut headers = HashMap::new();
+        headers.insert(hash, header);
+
+        Self { headers }
+    }
+
+    pub fn contains_key(&self, hash: &HashId) -> bool {
+        self.headers.contains_key(hash)
+    }
+
+    pub fn insert(&mut self, hash: HashId, header: BlockHeader) {
+        self.headers.insert(hash, header);
+    }
+
+    pub fn entry(
+        &mut self,
+        hash: HashId,
+    ) -> std::collections::hash_map::Entry<'_, HashId, BlockHeader> {
+        self.headers.entry(hash)
+    }
+
+    pub fn get(&self, hash: &HashId) -> Option<&BlockHeader> {
+        self.headers.get(hash)
+    }
+
+    pub fn get_mut(&mut self, hash: &HashId) -> Option<&mut BlockHeader> {
+        self.headers.get_mut(hash)
+    }
+
+    pub fn get_next_header(&self, hash: &HashId) -> Option<&BlockHeader> {
+        if let Some(header) = self.headers.get(hash) {
+            if let Some(next_hash) = header.next_block_hash {
+                return self.headers.get(&next_hash);
+            }
+        }
+        None
+    }
+
+    pub fn len(&self) -> usize {
+        self.headers.len()
     }
 }
 
@@ -236,5 +289,37 @@ mod tests {
         assert_eq!(block_header.timestamp, 1681095679);
         assert_eq!(block_header.nbits, 422120062);
         assert_eq!(block_header.nonce, 1823431201);
+    }
+
+    #[test]
+    fn test_push_headers_to_headerset() {
+        let child_header = BlockHeader::genesis(HashId::default());
+        let mut headerset = HeaderSet::with(child_header.hash, child_header);
+
+        let parent_header = BlockHeader {
+            version: 0_i32,
+            prev_block_hash: HashId::default(),
+            next_block_hash: Some(child_header.hash),
+            merkle_root_hash: HashId::default(),
+            timestamp: 0_u32,
+            nbits: 0_u32,
+            nonce: 0_u32,
+            hash: HashId::new([
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 1,
+                2, 3, 4, 5,
+            ]),
+            height: 0,
+        };
+
+        headerset.insert(child_header.hash, child_header);
+        headerset.insert(parent_header.hash, parent_header);
+        assert_eq!(
+            headerset
+                .headers
+                .get(&parent_header.hash)
+                .unwrap()
+                .next_block_hash,
+            Some(child_header.hash)
+        );
     }
 }

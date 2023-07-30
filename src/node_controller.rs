@@ -11,6 +11,7 @@ use crate::interface::GtkMessage;
 use gtk::glib::SyncSender;
 
 /// The NodeController struct is responsible for managing all the nodes and sending messages to them.
+
 pub struct NodeController {
     nodes: HashMap<SocketAddr, Node>,
 }
@@ -44,6 +45,10 @@ impl NodeController {
             }
         }
         Ok(Self { nodes })
+    }
+
+    pub fn add_node(&mut self, node: Node) {
+        self.nodes.insert(node.address, node);
     }
 
     /// Kills a node and removes it from the list of nodes given its peer address.

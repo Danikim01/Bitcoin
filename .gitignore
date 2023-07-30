@@ -1,7 +1,7 @@
 /target
 /tmp
+/tmp2
 /wallets
-src/log.txt
 /.vscode
 src/interface/res/ui.glade~
 *private_key.raw

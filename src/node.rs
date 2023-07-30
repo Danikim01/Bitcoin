@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::messages::{
     constants::{commands, config::VERBOSE},
-    Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, Serialize, VerAck, Version,
+    Block, GetData, GetHeader, Headers, InventoryVector, Message, MessageHeader, Ping, SendHeaders, Serialize, VerAck, Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
@@ -76,7 +76,7 @@ impl Listener {
                 Ok(m) => m,
                 Err(..) => Message::Ignore,
             },
-            commands::INV => match GetData::deserialize(&payload) {
+            commands::INV => match InventoryVector::deserialize(&payload) {
                 Ok(m) => m,
                 Err(..) => Message::Ignore,
             },
@@ -90,6 +90,14 @@ impl Listener {
                 }
                 Message::Ignore
             }
+            commands::GETHEADERS => match GetHeader::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::GETDATA => match GetData::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
             _ => Message::Ignore,
         };
         Ok(dyn_message)
@@ -150,7 +158,7 @@ impl Node {
         })
     }
 
-    fn spawn(
+    pub fn spawn(
         stream: TcpStream,
         writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
         ui_sender: SyncSender<GtkMessage>,
@@ -189,11 +197,12 @@ impl Node {
         let tcp_timeout = config.get_tcp_timeout();
         let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(tcp_timeout, 0))?;
         Node::handshake(&mut stream)?;
-        let node = Node::spawn(stream, writer_channel, ui_sender, config)?;
+        let mut node = Node::spawn(stream, writer_channel, ui_sender, config)?;
+        node.send(&SendHeaders::new().serialize()?)?;
         Ok((node.address, node))
     }
 
-    fn handshake(stream: &mut TcpStream) -> io::Result<()> {
+    pub fn handshake(stream: &mut TcpStream) -> io::Result<()> {
         // send message
         let msg_version = Version::default_for_trans_addr(stream.peer_addr()?);
         let payload = msg_version.serialize()?;
@@ -221,6 +230,42 @@ impl Node {
         let payload = VerAck::new().serialize()?;
         stream.write_all(&payload)?; // send verack
         stream.flush()?;
+        Ok(())
+    }
+
+    pub fn inverse_handshake(stream: &mut TcpStream) -> io::Result<()> {
+        let message_header = MessageHeader::from_stream(stream)?;
+        let payload_data = message_header.read_payload(stream)?;
+
+        let version_message = match Version::deserialize(&payload_data).unwrap() {
+            Message::Version(version_message) => version_message,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Expected Version message",
+                ));
+            }
+        };
+
+        // send message
+        let msg_version = Version::default_for_trans_addr(stream.peer_addr()?);
+        let payload = msg_version.serialize()?;
+        stream.write_all(&payload)?;
+        stream.flush()?;
+
+        if !msg_version.accepts(version_message) {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "Version not supported",
+            ));
+        }
+
+        let payload = VerAck::new().serialize()?;
+        stream.write_all(&payload)?; // send verack
+        stream.flush()?;
+
+        VerAck::from_stream(stream)?; // receive verack
+
         Ok(())
     }
 
