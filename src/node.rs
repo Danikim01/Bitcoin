@@ -1,7 +1,8 @@
 use crate::config::Config;
 use crate::messages::{
     constants::{commands, config::VERBOSE},
-    Block, GetData, GetHeader, Headers, InventoryVector, Message, MessageHeader, Ping, SendHeaders, Serialize, VerAck, Version,
+    Block, GetData, GetHeader, Headers, InventoryVector, Message, MessageHeader, Ping, SendHeaders,
+    Serialize, VerAck, Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;

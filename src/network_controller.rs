@@ -5,8 +5,8 @@ use crate::messages::block_header::HeaderSet;
 use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    MerkleTree, Message, Serialize, InventoryVector, Inventory
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
+    InventoryVector, MerkleTree, Message, Serialize,
 };
 
 use crate::node_controller::NodeController;
