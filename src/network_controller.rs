@@ -20,10 +20,7 @@ use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
-use std::sync::{
-    mpsc::{self, Receiver},
-    Arc, RwLock, RwLockReadGuard,
-};
+use std::sync::{mpsc::{self, Receiver}, Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::{self, JoinHandle};
 
 use crate::interface::components::table::{
@@ -851,6 +848,24 @@ impl OuterNetworkController {
         Ok(())
     }
 
+    fn send_blocks_requested(
+        inner_write: &mut RwLockWriteGuard<'_, NetworkController>,
+        peer_addr: SocketAddr,
+        blocks: Vec<Block>,
+        config: &Config,
+    ) -> io::Result<()>{
+        for block in blocks {
+            let serialized_block = block.serialize_message()?;
+            inner_write
+                .nodes
+                .send_to_specific(&peer_addr, &serialized_block, config)?;
+        }
+
+        Ok(())
+    }
+
+
+
     pub fn handle_node_getdata_message(
         t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
@@ -859,6 +874,7 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         let mut blocks: Vec<Block> = Vec::new();
+        let mut txs_requested: Vec<HashId> = Vec::new();
         for inventory in getdata.inventory.items {
             if inventory.inv_type == InvType::MSGBlock {
                 let block = match inner_write.valid_blocks.get(&inventory.hash) {
@@ -866,6 +882,8 @@ impl OuterNetworkController {
                     None => continue,
                 };
                 blocks.push(block);
+            } else if inventory.inv_type == InvType::MSGTx {
+                txs_requested.push(inventory.hash);
             }
         }
 
@@ -873,14 +891,10 @@ impl OuterNetworkController {
             return Ok(());
         }
 
-        for block in blocks {
-            let serialized_block = block.serialize_message()?;
-            inner_write
-                .nodes
-                .send_to_specific(&peer_addr, &serialized_block, config)?;
-        }
+        Self::send_blocks_requested(&mut inner_write, peer_addr, blocks, config)?;
         Ok(())
     }
+
 
     fn recv_node_messages(
         &self,
