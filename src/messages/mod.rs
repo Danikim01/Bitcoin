@@ -13,6 +13,7 @@ pub(crate) mod invblock_message;
 pub mod merkle_tree;
 mod ping_message;
 pub mod utility;
+mod sendheaders;
 mod verack_message;
 pub(crate) mod version_message;
 
@@ -25,6 +26,7 @@ pub use headers::MessageHeader;
 pub use headers_message::Headers;
 pub use merkle_tree::MerkleTree;
 pub use ping_message::Ping;
+pub use sendheaders::SendHeaders;
 pub use verack_message::VerAck;
 pub use version_message::Version;
 

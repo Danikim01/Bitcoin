@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::messages::{
     constants::{commands, config::VERBOSE},
-    Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, Serialize, VerAck, Version,
+    Block, GetData, GetHeader, Headers, Message, MessageHeader, Ping, SendHeaders, Serialize, VerAck, Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
@@ -197,7 +197,8 @@ impl Node {
         let tcp_timeout = config.get_tcp_timeout();
         let mut stream = TcpStream::connect_timeout(&node_addr, Duration::new(tcp_timeout, 0))?;
         Node::handshake(&mut stream)?;
-        let node = Node::spawn(stream, writer_channel, ui_sender, config)?;
+        let mut node = Node::spawn(stream, writer_channel, ui_sender, config)?;
+        node.send(&SendHeaders::new().serialize()?)?;
         Ok((node.address, node))
     }
 
