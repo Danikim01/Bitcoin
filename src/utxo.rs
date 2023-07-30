@@ -70,6 +70,10 @@ impl WalletUtxo {
                 if !spent.contains(index) {
                     balance += utxo.value;
                 }
+            } else if let Some(pending_spent) = self.pending.spent.get(utxo_id) {
+                if !pending_spent.contains(index) {
+                    balance += utxo.value;
+                }
             } else {
                 balance += utxo.value;
             }
@@ -343,6 +347,73 @@ mod tests {
         assert_eq!(
             utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
             1705366 + 1973704
+        );
+    }
+
+    #[test]
+    fn test_correct_balance_after_sending_while_pending() {
+        let mut utxo_set: UtxoSet = UtxoSet::new();
+
+        // Initial tx to have balance on the wallet
+        let transaction_1_bytes = decode_hex(
+            "020000000001011216d10ae3afe6119529c0a01abe7833641e0e9d37eb880ae5547cfb7c6c7bca0000000000fdffffff0246b31b00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac731f2001020000001976a914d617966c3f29cfe50f7d9278dd3e460e3f084b7b88ac02473044022059570681a773748425ddd56156f6af3a0a781a33ae3c42c74fafd6cc2bd0acbc02200c4512c250f88653fae4d73e0cab419fa2ead01d6ba1c54edee69e15c1618638012103e7d8e9b09533ae390d0db3ad53cc050a54f89a987094bffac260f25912885b834b2c2500"
+        ).unwrap();
+        let transaction_1 =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_1_bytes)).unwrap();
+        transaction_1
+            .generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
+            .unwrap();
+
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1815366
+        );
+
+        let transaction_2_bytes = decode_hex(
+            "02000000000101536d525880fd48a734fddd39d46d8f800ebf255102768d8d890603683a7af0b90000000000fdffffff0249def687010000001976a914799b0bc4ad97fff4c2e030443e4594ad374fa12788acb7051e00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac02473044022053e5d615cad3ad5efe972e891d401a19b8659687f00cac8df2b140ec1e4b5ad802200fe1e8c05a32b3f5e26fd5b956948817d07f9e753002162f97c76ccee7c7eb36012103084f5b365524916f2974248f0430bf26d223dd3a5422bc6ce04d0c8b4af71563a3302500"
+        ).unwrap();
+        let transaction_2 =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_2_bytes)).unwrap();
+        transaction_2
+            .generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
+            .unwrap();
+
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            3782909
+        );
+
+        let transaction_3_bytes = decode_hex(
+            "0100000001881468a1a95473ed788c8a13bcdb7e524eac4f1088b1e2606ffb95492e239b10000000006a473044022021dc538aab629f2be56304937e796884356d1e79499150f5df03e8b8a545d17702205b76bda9c238035c907cbf6a39fa723d65f800ebb8082bdbb62d016d7937d990012102a953c8d6e15c569ea2192933593518566ca7f49b59b91561c01e30d55b0e1922ffffffff0210270000000000001976a9144a82aaa02eba3c31cd86ee83345c4f91986743fe88ac96051a00000000001976a914c9bc003bf72ebdc53a9572f7ea792ef49a2858d788ac00000000"
+        ).unwrap();
+        let transaction_3 =
+            RawTransaction::from_bytes(&mut Cursor::new(&transaction_3_bytes)).unwrap();
+        transaction_3
+            .generate_utxo(&mut utxo_set, TransactionOrigin::Pending, None, None)
+            .unwrap();
+
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1967543
+        );
+
+        assert_eq!(
+            utxo_set.get_pending_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1705366
+        );
+
+        transaction_3
+            .generate_utxo(&mut utxo_set, TransactionOrigin::Block, None, None)
+            .unwrap();
+
+        assert_eq!(
+            utxo_set.get_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            1967543 + 1705366
+        );
+
+        assert_eq!(
+            utxo_set.get_pending_wallet_balance("myudL9LPYaJUDXWXGz5WC6RCdcTKCAWMUX"),
+            0
         );
     }
 }
