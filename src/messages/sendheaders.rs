@@ -1,7 +1,5 @@
 use crate::messages::constants::commands::SENDHEADERS;
 use crate::messages::{MessageHeader, Serialize};
-use std::io;
-use std::net::TcpStream;
 
 /// Struct that represents the SendHeaders message
 #[derive(Debug, Clone)]
@@ -15,14 +13,6 @@ impl SendHeaders {
         Self {
             _message_header: MessageHeader::default(),
         }
-    }
-
-    /// Reads the data from the stream and returns a `SendHeaders` message.
-    pub fn _from_stream(stream: &mut TcpStream) -> Result<Self, io::Error> {
-        let message_header = MessageHeader::from_stream(stream)?;
-        Ok(SendHeaders {
-            _message_header: message_header,
-        })
     }
 }
 

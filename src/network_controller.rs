@@ -5,8 +5,8 @@ use crate::messages::block_header::HeaderSet;
 use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
-    MerkleTree, Message, Serialize,
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType,
+    MerkleTree, Message, Serialize, InventoryVector, Inventory
 };
 
 use crate::node_controller::NodeController;
@@ -250,7 +250,7 @@ impl NetworkController {
     fn request_blocks_evenly(&mut self, headers: &mut Headers, config: &Config) -> io::Result<()> {
         let chunks = headers.block_headers.chunks(20); // request 20 blocks at a time
         for chunk in chunks {
-            let get_data = GetData::from_inv(chunk.len(), chunk.to_vec());
+            let get_data = GetData::from_inv(chunk.to_vec());
             self.nodes.send_to_all(&get_data.serialize()?, config)?;
         }
         config.log("Requesting blocks, sent GetData message.", VERBOSE);
@@ -806,31 +806,24 @@ impl OuterNetworkController {
     fn handle_node_inv_message(
         t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
-        inventories: Vec<Inventory>,
+        inventories: InventoryVector,
         config: &Config,
     ) -> io::Result<()> {
-        let mut inner_write = t_inner.write().map_err(to_io_err)?;
-        let mut blocks: Vec<Block> = Vec::new();
-        for inventory in inventories {
-            if inventory.inv_type == InvType::MSGBlock {
-                let block = match inner_write.valid_blocks.get(&inventory.hash) {
-                    Some(block) => block.clone(),
-                    None => continue,
-                };
-                blocks.push(block);
+        let mut filtered_inv: Vec<Inventory> = Vec::new();
+        for inventory in inventories.items {
+            if inventory.inv_type == InvType::MSGTx || inventory.inv_type == InvType::MSGBlock {
+                filtered_inv.push(inventory);
             }
         }
-
-        if blocks.is_empty() {
+        if filtered_inv.is_empty() {
             return Ok(());
         }
 
-        for block in blocks {
-            let serialized_block = block.serialize_message()?;
-            inner_write
-                .nodes
-                .send_to_specific(&peer_addr, &serialized_block, config)?;
-        }
+        let getdata_message = GetData::new(InventoryVector::new(filtered_inv));
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        _ = inner_write
+            .nodes
+            .send_to_specific(&peer_addr, &getdata_message.serialize()?, config);
         Ok(())
     }
 
@@ -864,12 +857,29 @@ impl OuterNetworkController {
         getdata: GetData,
         config: &Config,
     ) -> io::Result<()> {
-        OuterNetworkController::handle_node_inv_message(
-            t_inner,
-            peer_addr,
-            getdata.inventory,
-            config,
-        )
+        let mut inner_write = t_inner.write().map_err(to_io_err)?;
+        let mut blocks: Vec<Block> = Vec::new();
+        for inventory in getdata.inventory.items {
+            if inventory.inv_type == InvType::MSGBlock {
+                let block = match inner_write.valid_blocks.get(&inventory.hash) {
+                    Some(block) => block.clone(),
+                    None => continue,
+                };
+                blocks.push(block);
+            }
+        }
+
+        if blocks.is_empty() {
+            return Ok(());
+        }
+
+        for block in blocks {
+            let serialized_block = block.serialize_message()?;
+            inner_write
+                .nodes
+                .send_to_specific(&peer_addr, &serialized_block, config)?;
+        }
+        Ok(())
     }
 
     fn recv_node_messages(
@@ -897,7 +907,7 @@ impl OuterNetworkController {
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
                     }
-                    (peer_addr, Message::_GetData(get_data)) => {
+                    (peer_addr, Message::GetData(get_data)) => {
                         Self::handle_node_getdata_message(t_inner, peer_addr, get_data, &config)
                     }
                     (peer_addr, Message::Inv(inventories)) => {

@@ -9,7 +9,7 @@ mod getdata_message;
 mod getheader_message;
 mod headers;
 mod headers_message;
-pub(crate) mod invblock_message;
+pub(crate) mod inventory;
 pub mod merkle_tree;
 mod ping_message;
 pub mod utility;
@@ -20,7 +20,8 @@ pub(crate) mod version_message;
 pub use block_header::BlockHeader;
 pub use block_message::Block;
 pub use block_message::BlockSet;
-pub use getdata_message::{GetData, InvType, Inventory};
+pub use getdata_message::GetData;
+pub use inventory::{InventoryVector, Inventory, InvType};
 pub use getheader_message::GetHeader;
 pub use headers::MessageHeader;
 pub use headers_message::Headers;
@@ -168,16 +169,14 @@ impl From<Services> for [u8; 8] {
     }
 }
 
-type Inventories = Vec<Inventory>;
-
 pub enum Message {
     Block(Block),
-    _GetData(GetData),
+    GetData(GetData),
     GetHeader(GetHeader),
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),
-    Inv(Inventories),
+    Inv(InventoryVector),
     Transaction(RawTransaction),
     Ping(Ping),
     Ignore,
