@@ -831,10 +831,10 @@ impl OuterNetworkController {
         t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
-    pub fn handle_get_headers_message(
+    pub fn handle_node_getheaders_message(
         t_inner: Arc<RwLock<NetworkController>>,
-        getheaders: GetHeader,
         peer_addr: SocketAddr,
+        getheaders: GetHeader,
         config: &Config,
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
@@ -846,6 +846,20 @@ impl OuterNetworkController {
             );
         }
         Ok(())
+    }
+
+    pub fn handle_node_getdata_message(
+        t_inner: Arc<RwLock<NetworkController>>,
+        peer_addr: SocketAddr,
+        getdata: GetData,
+        config: &Config,
+    ) -> io::Result<()> {
+        OuterNetworkController::handle_node_inv_message(
+            t_inner,
+            peer_addr,
+            getdata.inventory,
+            config,
+        )
     }
 
     fn recv_node_messages(
@@ -862,11 +876,19 @@ impl OuterNetworkController {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
-                    (peer_addr, Message::_GetHeader(get_headers)) => {
-                        Self::handle_get_headers_message(t_inner, get_headers, peer_addr, &config)
+                    (peer_addr, Message::GetHeader(get_headers)) => {
+                        Self::handle_node_getheaders_message(
+                            t_inner,
+                            peer_addr,
+                            get_headers,
+                            &config,
+                        )
                     }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
+                    }
+                    (peer_addr, Message::_GetData(get_data)) => {
+                        Self::handle_node_getdata_message(t_inner, peer_addr, get_data, &config)
                     }
                     (peer_addr, Message::Inv(inventories)) => {
                         Self::handle_node_inv_message(t_inner, peer_addr, inventories, &config)

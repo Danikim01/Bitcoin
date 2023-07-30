@@ -171,7 +171,7 @@ type Inventories = Vec<Inventory>;
 pub enum Message {
     Block(Block),
     _GetData(GetData),
-    _GetHeader(GetHeader),
+    GetHeader(GetHeader),
     Headers(Headers),
     _VerAck(VerAck),
     Version(Version),

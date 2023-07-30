@@ -84,7 +84,7 @@ impl Inventory {
 #[derive(Debug, Clone)]
 pub struct GetData {
     count: usize,
-    inventory: Vec<Inventory>, // inv as it was received from an inv message
+    pub inventory: Vec<Inventory>, // inv as it was received from an inv message
 }
 
 fn to_varint(value: u64) -> Vec<u8> {

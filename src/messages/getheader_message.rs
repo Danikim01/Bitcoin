@@ -57,7 +57,7 @@ impl GetHeader {
             stop_hash,
         };
 
-        Ok(Message::_GetHeader(get_header))
+        Ok(Message::GetHeader(get_header))
     }
 }
 
@@ -85,7 +85,7 @@ mod tests {
         let bytes = decode_hex("7111010002d39f608a7775b537729884d4e6633bb2105e55a16a14d31b00000000000000005c3e6403d40837110a2e8afb602b1c01714bda7ce23bea0a00000000000000000000000000000000000000000000000000000000000000000000000000000000");
         let getheaders_message = GetHeader::deserialize(&bytes.unwrap()).unwrap();
 
-        if let Message::_GetHeader(getheaders) = getheaders_message {
+        if let Message::GetHeader(getheaders) = getheaders_message {
             // Acceder a Headers dentro de Message::Headers
             // Utilizar el valor `headers` aquí
             assert_eq!(getheaders.version, 70001);
