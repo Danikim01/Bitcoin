@@ -477,10 +477,11 @@ impl NetworkController {
     pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
         let mut downloadable_headers = Headers::default();
         // attempt to read headers from backup file
+        self.update_ui_progress(Some("Reading backup files..."), 0.0);
         if let Ok(headers) = Headers::from_file(config.get_headers_file()) {
             self.update_ui_progress(Some("Reading headers from backup file..."), 0.0);
             downloadable_headers = self.read_backup_headers(headers, config);
-            update_ui_progress_bar(&self.ui_sender, Some("Read headers from backup file."), 1.0)?;
+            update_ui_progress_bar(&self.ui_sender, Some("Finished reading headers from backup file."), 1.0)?;
         }
 
         // attempt to read blocks from backup file
@@ -489,7 +490,7 @@ impl NetworkController {
             for (_, block) in blocks.into_iter() {
                 self.read_backup_block(block);
             }
-            update_ui_progress_bar(&self.ui_sender, Some("Read blocks from backup file."), 1.0)?;
+            update_ui_progress_bar(&self.ui_sender, Some("Finished reading blocks from backup file."), 1.0)?;
         }
         // Finally, catch up to blockchain doing IBD
         let mut missing_blocks: Vec<BlockHeader> = vec![];
