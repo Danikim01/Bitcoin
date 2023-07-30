@@ -19,7 +19,7 @@ use chrono::Utc;
 use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
-use std::net::{SocketAddr, SocketAddrV4, TcpListener};
+use std::net::{SocketAddr, SocketAddrV4, TcpListener, Ipv4Addr};
 use std::sync::{
     mpsc::{self, Receiver},
     Arc, RwLock, RwLockReadGuard,
@@ -30,7 +30,6 @@ use crate::interface::components::table::{
     table_data_from_blocks, table_data_from_headers, table_data_from_tx, GtkTable, GtkTableData,
 };
 use crate::interface::{components::send_panel::TransactionInfo, update_ui_progress_bar};
-use crate::messages::constants::config::LOCALHOST;
 use crate::node::Node;
 
 pub type BlockSet = HashMap<HashId, Block>;
@@ -908,7 +907,7 @@ impl OuterNetworkController {
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
         let listener =
-            match TcpListener::bind(SocketAddrV4::new(LOCALHOST, config.get_listening_port())) {
+            match TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.get_listening_port())) {
                 Ok(listener) => listener,
                 Err(e) => {
                     eprintln!("Ignoring Error: {:?}", e);
@@ -993,7 +992,7 @@ mod tests {
             OuterNetworkController::new(ui_sender, writer_end, config.clone()).unwrap();
         outer_controller.listen_for_nodes(config).unwrap();
 
-        let mut socket = TcpStream::connect(SocketAddrV4::new(LOCALHOST, PORT)).unwrap();
+        let mut socket = TcpStream::connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, PORT)).unwrap();
 
         //Envio un version
         let msg_version = Version::default_for_trans_addr(socket.peer_addr().unwrap());

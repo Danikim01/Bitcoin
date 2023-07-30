@@ -23,7 +23,7 @@ pub struct Version {
     nonce: u64,
     _user_agent: String,
     _start_height: i32,
-    _relay: bool,
+    relay: bool,
 }
 
 impl Default for Version {
@@ -40,7 +40,7 @@ impl Default for Version {
         let nonce = 0;
         let _user_agent = "".to_string();
         let _start_height = 0;
-        let _relay = false;
+        let relay = true;
         Version::new(
             // message_header,
             version,
@@ -55,7 +55,7 @@ impl Default for Version {
             nonce,
             _user_agent,
             _start_height,
-            _relay,
+            relay,
         )
     }
 }
@@ -75,7 +75,7 @@ impl Version {
         nonce: u64,
         _user_agent: String,
         _start_height: i32,
-        _relay: bool,
+        relay: bool,
     ) -> Self {
         Self {
             version,
@@ -90,7 +90,7 @@ impl Version {
             nonce,
             _user_agent,
             _start_height,
-            _relay,
+            relay,
         }
     }
 
@@ -122,7 +122,7 @@ impl Version {
         payload.extend(&self.nonce.to_le_bytes());
         payload.extend(self._user_agent.as_bytes());
         payload.extend(&self._start_height.to_le_bytes());
-        payload.extend(&(self._relay as u8).to_le_bytes());
+        payload.extend(&(self.relay as u8).to_le_bytes());
 
         Ok(payload)
     }
@@ -144,19 +144,19 @@ impl Serialize for Version {
         let mut cursor = Cursor::new(bytes);
 
         let version = Version::new(
-            i32::from_le_stream(&mut cursor).unwrap(),
-            Services::new(u64::from_le_stream(&mut cursor).unwrap()),
-            i64::from_le_stream(&mut cursor).unwrap(),
-            u64::from_le_stream(&mut cursor).unwrap(),
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor).unwrap()),
-            u16::from_be_stream(&mut cursor).unwrap(),
-            u64::from_le_stream(&mut cursor).unwrap(), // not used
-            Ipv6Addr::from(u128::from_be_stream(&mut cursor).unwrap()),
-            u16::from_be_stream(&mut cursor).unwrap(),
-            u64::from_le_stream(&mut cursor).unwrap(),
-            deser_user_agent(&mut cursor).unwrap(),
-            i32::from_le_stream(&mut cursor).unwrap(),
-            u8::from_le_stream(&mut cursor).unwrap() != 0, // pending: this field should be optional
+            i32::from_le_stream(&mut cursor)?,
+            Services::new(u64::from_le_stream(&mut cursor)?),
+            i64::from_le_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?, // not used
+            Ipv6Addr::from(u128::from_be_stream(&mut cursor)?),
+            u16::from_be_stream(&mut cursor)?,
+            u64::from_le_stream(&mut cursor)?,
+            deser_user_agent(&mut cursor)?,
+            i32::from_le_stream(&mut cursor)?,
+            u8::from_le_stream(&mut cursor)? != 0, // pending: this field should be optional
         );
         Ok(Message::Version(version))
     }
@@ -217,7 +217,7 @@ mod tests {
             assert_eq!(data.nonce, 7085675175729411284);
             assert_eq!(data._user_agent, "/Satoshi:0.16.3/".to_string());
             assert_eq!(data._start_height, 2434713);
-            assert_eq!(data._relay, true);
+            assert_eq!(data.relay, true);
         }
     }
 }

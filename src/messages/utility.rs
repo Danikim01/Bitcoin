@@ -96,7 +96,7 @@ pub fn read_from_varint(cursor: &mut Cursor<&[u8]>) -> io::Result<u64> {
 // https://developer.bitcoin.org/reference/transactions.html#compact_size-unsigned-integers
 pub fn to_compact_size_bytes(compact_size: u64) -> Vec<u8> {
     let mut bytes: Vec<u8> = vec![];
-    if compact_size <= 252 {
+    if compact_size <= 0xfc {
         bytes.extend(compact_size.to_le_bytes()[..1].iter());
     } else if compact_size <= 0xffff {
         bytes.push(0xfd);

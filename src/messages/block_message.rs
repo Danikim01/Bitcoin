@@ -60,11 +60,10 @@ impl Block {
 
         match self.header.merkle_root_hash == HashId::new(root_hash.to_byte_array()) {
             true => {
-                // println!("Merkle root is valid!");
                 Ok(())
             }
             false => {
-                println!("\x1b[93mMerkle root is invalid!\x1b[0m");
+                eprintln!("\x1b[93mMerkle root is invalid!\x1b[0m");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Merkle root hash mismatch",
@@ -176,15 +175,15 @@ impl Serialize for Block {
     fn deserialize(bytes: &[u8]) -> Result<Message, io::Error> {
         let mut cursor = Cursor::new(bytes);
         let header = BlockHeader::from_bytes(&mut cursor)?;
-        let txn_count = read_from_varint(&mut cursor)?;
+        let txn_count = read_from_varint(&mut cursor)? as usize;
         let mut txns = vec![];
         let coinbase_transaction = RawTransaction::coinbase_from_bytes(&mut cursor)?;
         txns.push(coinbase_transaction);
-        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count as usize)?;
+        let other_txns = RawTransaction::vec_from_bytes(&mut cursor, txn_count)?;
         txns.extend(other_txns);
         let block = Block {
             header,
-            txn_count: txn_count as usize,
+            txn_count,
             txns,
         };
         Ok(Message::Block(block))
