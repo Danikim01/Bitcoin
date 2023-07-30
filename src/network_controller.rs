@@ -769,6 +769,7 @@ impl OuterNetworkController {
             drop(inner_read);
             let mut inner_write = t_inner.write().map_err(to_io_err)?;
             inner_write.headers.insert(hash, header);
+            inner_write.update_best_header_chain();
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
             if header.height > inner_write.tallest_header.height {
