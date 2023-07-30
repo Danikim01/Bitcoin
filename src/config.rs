@@ -86,7 +86,8 @@ impl Config {
     fn from_hashmap(mut values: HashMap<String, String>) -> io::Result<Config> {
         Ok(Config {
             seed: Config::remove_or(&mut values, "seed", ""),
-            port: u16::from_str_radix(&Config::remove_or(&mut values, "listening_port", ""), 10)
+            port: Config::remove_or(&mut values, "listening_port", "")
+                .parse()
                 .unwrap_or(PORT),
             start_timestamp: Config::remove_or(&mut values, "start_timestamp", "")
                 .parse()

@@ -54,7 +54,7 @@ impl GetHeader {
             version,
             hash_count: hash_count as u8,
             block_header_hashes: block_headers_hashes,
-            stop_hash: stop_hash,
+            stop_hash,
         };
 
         Ok(Message::_GetHeader(get_header))

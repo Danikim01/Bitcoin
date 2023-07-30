@@ -90,19 +90,19 @@ impl NetworkController {
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
         let last_known_hash = match getheaders_message.block_header_hashes.first() {
-            Some(hash) => hash.clone(),
+            Some(hash) => *hash,
             None => return None,
         };
 
         let max_blocks = 2000;
         let mut next_block_header = match self.headers.get_next_header(&last_known_hash) {
-            Some(header) => header.clone(),
+            Some(header) => *header,
             None => return None,
         };
         let mut headers: Vec<BlockHeader> = vec![next_block_header];
         for _ in 1..max_blocks {
             next_block_header = match self.headers.get_next_header(&next_block_header.hash) {
-                Some(header) => header.clone(),
+                Some(header) => *header,
                 None => break,
             };
             headers.push(next_block_header);
@@ -169,7 +169,7 @@ impl NetworkController {
         let mut best_blocks = vec![];
         let mut current_block = match self.valid_blocks.get(&self.tallest_block.hash) {
             Some(block) => block,
-            None => panic!()
+            None => return best_blocks, // there's no downloaded blocks so far
         };
         for _ in 0..amount {
             best_blocks.push(current_block);
@@ -558,8 +558,7 @@ impl OuterNetworkController {
             *tallest_block_hash = inner.tallest_block.hash;
             let blocks = inner.get_best_blocks(amount);
             let data = table_data_from_blocks(blocks);
-            _ = ui_sender
-                .send(GtkMessage::UpdateTable((GtkTable::Blocks, data)));
+            _ = ui_sender.send(GtkMessage::UpdateTable((GtkTable::Blocks, data)));
         }
     }
 
@@ -590,14 +589,18 @@ impl OuterNetworkController {
                 thread::sleep(std::time::Duration::from_secs(10));
                 let inner: RwLockReadGuard<'_, NetworkController> =
                     inner.read().map_err(to_io_err)?;
-
                 Self::update_ui_headers_periodically(
                     &inner,
                     &ui_sender,
                     &mut tallest_header_hash,
-                    100
+                    100,
                 );
-                Self::update_ui_blocks_periodically(&inner, &ui_sender, &mut tallest_block_hash, 100);
+                Self::update_ui_blocks_periodically(
+                    &inner,
+                    &ui_sender,
+                    &mut tallest_block_hash,
+                    100,
+                );
                 Self::update_ui_overview_tx_periodically(&inner, &ui_sender, &mut txs_on_overview)
             }
         });
@@ -729,7 +732,8 @@ impl OuterNetworkController {
         let most_recent_timestamp = inner_read.tallest_header.timestamp as i64;
 
         let genesis_block_timestamp = 1231006500; // 2009-01-03T18:15Z
-        let progress = (most_recent_timestamp - genesis_block_timestamp) as f64 / (Utc::now().timestamp() - genesis_block_timestamp) as f64;
+        let progress = (most_recent_timestamp - genesis_block_timestamp) as f64
+            / (Utc::now().timestamp() - genesis_block_timestamp) as f64;
         _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
         Ok(())
     }
@@ -769,7 +773,6 @@ impl OuterNetworkController {
             drop(inner_read);
             let mut inner_write = t_inner.write().map_err(to_io_err)?;
             inner_write.headers.insert(hash, header);
-            inner_write.update_best_header_chain();
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
             if header.height > inner_write.tallest_header.height {
@@ -781,7 +784,7 @@ impl OuterNetworkController {
         if prev_header_count == inner_read.headers.len() {
             return Ok(());
         }
-        Self::handle_headers_message_info(config, inner_read, ui_sender)?;
+        _ = Self::handle_headers_message_info(config, inner_read, ui_sender);
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         inner_write.update_best_header_chain();
         drop(inner_write);
@@ -988,6 +991,4 @@ mod tests {
         socket.write_all(&payload).unwrap();
         socket.flush().unwrap();
     }
-
-   
 }
