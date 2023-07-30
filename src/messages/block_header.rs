@@ -229,8 +229,10 @@ impl HeaderSet {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::messages::Block;
 
+    use super::*;
+    use std::fs;
     fn nbits_to_target(nbits: u32) -> [u8; 32] {
         let exponent = (nbits >> 24) as usize;
         let significand = nbits & 0x00FFFFFF;
@@ -258,6 +260,53 @@ mod tests {
                 0, 0, 0, 0, 0, 0
             ]
         );
+    }
+
+    #[test]
+    fn test_save_block_header_and_read(){
+        let file_name = "test_save_block_header.dat";
+        let block_header_bytes: [u8; 80] = [
+            0, 0, 160, 32, 51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136,
+            175, 122, 209, 45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0, 219, 236, 86, 82,
+            205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7, 42, 179, 16, 189, 22,
+            176, 239, 148, 154, 195, 174, 188, 14, 245, 255, 123, 51, 100, 126, 10, 41, 25, 33, 90,
+            175, 108,
+        ];
+        let slice: &[u8] = block_header_bytes.as_ref();
+        let mut cursor = Cursor::new(slice);
+        let block_header = BlockHeader::from_bytes(&mut cursor).unwrap();
+
+        block_header.save_to_file(file_name).unwrap();
+
+        //now read from file
+        let bytes = fs::read(file_name).unwrap();
+        let file_size = bytes.len() as u64;
+        let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
+        let mut block_headers:Vec<BlockHeader> = Vec::new(); 
+        while cursor.position() < file_size {
+            // deserialize block_header
+            let block_header = BlockHeader::deserialize(&mut cursor).unwrap();
+            block_headers.push(block_header);
+        }
+        let block_header_from_file = block_headers[0];
+        assert_eq!(
+            block_header_from_file.prev_block_hash,
+            HashId::new([
+                51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136, 175, 122, 209,
+                45, 188, 74, 201, 99, 234, 23, 0, 0, 0, 0, 0, 0, 0
+            ])
+        );
+        assert_eq!(
+            block_header_from_file.merkle_root_hash,
+            HashId::new([
+                219, 236, 86, 82, 205, 174, 207, 171, 185, 174, 211, 50, 34, 116, 178, 242, 43, 7,
+                42, 179, 16, 189, 22, 176, 239, 148, 154, 195, 174, 188, 14, 245
+            ])
+        );
+        assert_eq!(block_header_from_file.timestamp, 1681095679);
+        assert_eq!(block_header_from_file.nbits, 422120062);
+        assert_eq!(block_header_from_file.nonce, 1823431201);
+        fs::remove_file(file_name).unwrap();
     }
 
     #[test]
