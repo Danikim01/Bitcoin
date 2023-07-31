@@ -229,7 +229,6 @@ impl HeaderSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::messages::Block;
 
     use super::*;
     use std::fs;
@@ -263,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn test_save_block_header_and_read(){
+    fn test_save_block_header_and_read() {
         let file_name = "test_save_block_header.dat";
         let block_header_bytes: [u8; 80] = [
             0, 0, 160, 32, 51, 180, 220, 237, 64, 63, 94, 99, 227, 55, 166, 166, 187, 194, 136,
@@ -282,7 +281,7 @@ mod tests {
         let bytes = fs::read(file_name).unwrap();
         let file_size = bytes.len() as u64;
         let mut cursor: Cursor<&[u8]> = Cursor::new(&bytes);
-        let mut block_headers:Vec<BlockHeader> = Vec::new(); 
+        let mut block_headers: Vec<BlockHeader> = Vec::new();
         while cursor.position() < file_size {
             // deserialize block_header
             let block_header = BlockHeader::deserialize(&mut cursor).unwrap();

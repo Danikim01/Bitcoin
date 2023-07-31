@@ -5,8 +5,8 @@ use crate::messages::block_header::HeaderSet;
 use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    MerkleTree, Message, Serialize, InventoryVector, Inventory
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
+    InventoryVector, MerkleTree, Message, Serialize,
 };
 
 use crate::node_controller::NodeController;
@@ -22,7 +22,7 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
 use std::sync::{
     mpsc::{self, Receiver},
-    Arc, RwLock, RwLockReadGuard,
+    Arc, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
 use std::thread::{self, JoinHandle};
 
@@ -84,7 +84,7 @@ impl NetworkController {
             &reverse_hex_str(&root_from_proof_str)[..root_from_proof_str.len() - 2]
         );
 
-        _ = self.ui_sender.send(GtkMessage::UpdatePoiResult(result_str));
+        let _ = self.ui_sender.send(GtkMessage::UpdatePoiResult(result_str));
     }
 
     fn handle_getheaders_message(&self, getheaders_message: GetHeader) -> Option<Headers> {
@@ -113,7 +113,7 @@ impl NetworkController {
     }
 
     fn update_ui_progress(&self, msg: Option<&str>, progress: f64) {
-        _ = update_ui_progress_bar(&self.ui_sender, msg, progress);
+        let _ = update_ui_progress_bar(&self.ui_sender, msg, progress);
     }
 
     fn update_ui_table(&self, table: GtkTable, data: GtkTableData) -> io::Result<()> {
@@ -195,14 +195,14 @@ impl NetworkController {
     }
 
     fn _add_to_valid_blocks(&mut self, mut block: Block, config: &Config) {
-        _ = block.expand_utxo(
+        let _ = block.expand_utxo(
             &mut self.utxo_set,
             Some(&self.ui_sender),
             &mut self.wallets,
             Some(&self.active_wallet),
         );
 
-        _ = self.update_ui_balance();
+        let _ = self.update_ui_balance();
 
         // get real height of the block
         block.header.height = match self.valid_blocks.get(&block.header.prev_block_hash) {
@@ -215,7 +215,7 @@ impl NetworkController {
         let progress = (block.header.timestamp - pseudo_genesis_timestamp) as f64
             / (Utc::now().timestamp() - pseudo_genesis_timestamp as i64) as f64;
         let msg = format!("Received block {}", block.header.height);
-        _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
+        let _ = update_ui_progress_bar(&self.ui_sender, Some(&msg), progress);
 
         if block.header.height > self.tallest_block.height {
             self.tallest_block = block.header;
@@ -282,6 +282,12 @@ impl NetworkController {
                 .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
         }
         headers
+    }
+
+    pub fn update_tallest_header(&mut self, header: BlockHeader) {
+        if header.height > self.tallest_header.height {
+            self.tallest_header = header;
+        }
     }
 
     fn read_backup_headers(&mut self, mut headers: Headers, config: &Config) -> Headers {
@@ -473,9 +479,7 @@ impl NetworkController {
         }
     }
 
-    /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
-    /// If a backup file is found, it will read the blocks and headers from the backup file
-    pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
+    fn load_from_backups(&mut self, config: &Config) -> io::Result<Headers> {
         let mut downloadable_headers = Headers::default();
         // attempt to read headers from backup file
         self.update_ui_progress(Some("Reading backup files..."), 0.0);
@@ -501,6 +505,13 @@ impl NetworkController {
                 1.0,
             )?;
         }
+        Ok(downloadable_headers)
+    }
+
+    /// Starts the sync process by requesting headers from all peers from the last known header (or genesis block) to the current time
+    /// If a backup file is found, it will read the blocks and headers from the backup file
+    pub fn start_sync(&mut self, config: &Config) -> io::Result<()> {
+        let downloadable_headers = self.load_from_backups(config)?;
         // Finally, catch up to blockchain doing IBD
         let mut missing_blocks: Vec<BlockHeader> = vec![];
         for header in downloadable_headers.block_headers {
@@ -552,7 +563,7 @@ impl OuterNetworkController {
         if inner.tallest_header.hash() != *tallest_header_hash {
             *tallest_header_hash = inner.tallest_header.hash();
             let data = table_data_from_headers(headers.clone());
-            _ = ui_sender
+            let _ = ui_sender
                 .send(GtkMessage::UpdateTable((GtkTable::Headers, data)))
                 .map_err(to_io_err);
         }
@@ -568,7 +579,7 @@ impl OuterNetworkController {
             *tallest_block_hash = inner.tallest_block.hash;
             let blocks = inner.get_best_blocks(amount);
             let data = table_data_from_blocks(blocks);
-            _ = ui_sender.send(GtkMessage::UpdateTable((GtkTable::Blocks, data)));
+            let _ = ui_sender.send(GtkMessage::UpdateTable((GtkTable::Blocks, data)));
         }
     }
 
@@ -578,12 +589,12 @@ impl OuterNetworkController {
         txs_on_overview: &mut Vec<TransactionDisplayInfo>,
     ) {
         let curr_active_wallet = inner.active_wallet.clone();
-        _ = inner.update_ui_balance();
+        let _ = inner.update_ui_balance();
         if let Some(wallet) = inner.wallets.get(&curr_active_wallet) {
             let transactions = wallet.get_last_n_transactions(20);
             if transactions != *txs_on_overview {
                 *txs_on_overview = transactions.clone();
-                _ = ui_sender.send(GtkMessage::UpdateOverviewTransactions(transactions));
+                let _ = ui_sender.send(GtkMessage::UpdateOverviewTransactions(transactions));
             }
         }
     }
@@ -629,7 +640,7 @@ impl OuterNetworkController {
 
         if let Some(wallet) = inner_lock.wallets.get(&curr_active_wallet) {
             let transactions = wallet.get_last_n_transactions(20);
-            _ = inner_lock
+            let _ = inner_lock
                 .ui_sender
                 .send(GtkMessage::UpdateOverviewTransactions(transactions));
         }
@@ -676,7 +687,7 @@ impl OuterNetworkController {
                         Self::handle_ui_change_active_wallet(t_inner, wallet)
                     }
                     ModelRequest::GetPoi(block_hash, tx_hash) => {
-                        _ = Self::handle_ui_get_poi(t_inner, block_hash, tx_hash);
+                        let _ = Self::handle_ui_get_poi(t_inner, block_hash, tx_hash);
                         Ok(())
                     }
                 }?;
@@ -744,7 +755,7 @@ impl OuterNetworkController {
         let genesis_block_timestamp = 1231006500; // 2009-01-03T18:15Z
         let progress = (most_recent_timestamp - genesis_block_timestamp) as f64
             / (Utc::now().timestamp() - genesis_block_timestamp) as f64;
-        _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
+        let _ = update_ui_progress_bar(ui_sender, Some(&msg), progress);
         Ok(())
     }
 
@@ -774,9 +785,7 @@ impl OuterNetworkController {
                 continue;
             }
             match inner_read.headers.get(&header.prev_block_hash) {
-                Some(parent_header) => {
-                    header.height = parent_header.height + 1;
-                }
+                Some(parent_header) => header.height = parent_header.height + 1,
                 None => continue, // ignore header if prev_header is unknown
             }
             let hash = header.hash();
@@ -785,20 +794,17 @@ impl OuterNetworkController {
             inner_write.headers.insert(hash, header);
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
-            if header.height > inner_write.tallest_header.height {
-                inner_write.tallest_header = header
-            }
+            inner_write.update_tallest_header(header);
             drop(inner_write);
             inner_read = t_inner.read().map_err(to_io_err)?;
         }
         if prev_header_count == inner_read.headers.len() {
             return Ok(());
         }
-        _ = Self::handle_headers_message_info(config, inner_read, ui_sender);
+        let _ = Self::handle_headers_message_info(config, inner_read, ui_sender);
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         inner_write.update_best_header_chain();
         drop(inner_write);
-
         // request blocks mined after given date
         Self::try_request_trimmed_blocks(t_inner, new_headers, config)
     }
@@ -821,7 +827,7 @@ impl OuterNetworkController {
 
         let getdata_message = GetData::new(InventoryVector::new(filtered_inv));
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
-        _ = inner_write
+        let _ = inner_write
             .nodes
             .send_to_specific(&peer_addr, &getdata_message.serialize()?, config);
         Ok(())
@@ -834,7 +840,7 @@ impl OuterNetworkController {
         t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
-    pub fn handle_node_getheaders_message(
+    pub fn handle_getheaders_message(
         t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
         getheaders: GetHeader,
@@ -842,7 +848,7 @@ impl OuterNetworkController {
     ) -> io::Result<()> {
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
-            _ = inner_write.nodes.send_to_specific(
+            let _ = inner_write.nodes.send_to_specific(
                 &peer_addr,
                 &getheaders_message.serialize()?,
                 config,
@@ -856,7 +862,7 @@ impl OuterNetworkController {
         peer_addr: SocketAddr,
         blocks: Vec<Block>,
         config: &Config,
-    ) -> io::Result<()>{
+    ) -> io::Result<()> {
         for block in blocks {
             let serialized_block = block.serialize_message()?;
             inner_write
@@ -866,7 +872,6 @@ impl OuterNetworkController {
 
         Ok(())
     }
-
 
     fn get_txs_requested(
         txs_requested: Vec<HashId>,
@@ -902,8 +907,6 @@ impl OuterNetworkController {
         Ok(())
     }
 
-
-
     pub fn handle_node_getdata_message(
         t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
@@ -934,7 +937,6 @@ impl OuterNetworkController {
         Ok(())
     }
 
-
     fn recv_node_messages(
         &self,
         node_receiver: mpsc::Receiver<(SocketAddr, Message)>,
@@ -949,13 +951,8 @@ impl OuterNetworkController {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
-                    (peer_addr, Message::GetHeader(get_headers)) => {
-                        Self::handle_node_getheaders_message(
-                            t_inner,
-                            peer_addr,
-                            get_headers,
-                            &config,
-                        )
+                    (p_addr, Message::GetHeader(headers)) => {
+                        Self::handle_getheaders_message(t_inner, p_addr, headers, &config)
                     }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
@@ -979,10 +976,8 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener = match TcpListener::bind(SocketAddrV4::new(
-            Ipv4Addr::LOCALHOST,
-            config.get_listening_port(),
-        )) {
+        let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.get_listening_port());
+        let listener = match TcpListener::bind(addr) {
             Ok(listener) => listener,
             Err(e) => {
                 eprintln!("Ignoring Error: {:?}", e);
@@ -992,7 +987,6 @@ impl OuterNetworkController {
 
         let ui_sender = self.ui_sender.clone();
         let writer_channel = self.writer_chanel.clone();
-
         thread::spawn(move || -> io::Result<()> {
             for stream in listener.incoming() {
                 match stream {
@@ -1009,7 +1003,6 @@ impl OuterNetworkController {
                     }
                 }
             }
-
             Ok(())
         });
         Ok(())
