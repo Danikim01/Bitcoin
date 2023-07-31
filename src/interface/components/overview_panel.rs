@@ -26,25 +26,6 @@ pub struct TransactionDisplayInfo {
     pub hash: HashId,
 }
 
-fn try_remove_pending_transaction(overview_transaction_container: &gtk::Box, tx_hash: &str) {
-    overview_transaction_container.foreach(|transaction| {
-        if let Some(overview_tx) = transaction.downcast_ref::<gtk::Box>() {
-            overview_tx.foreach(|widget: &gtk::Widget| {
-                if let Some(inner_box) = widget.downcast_ref::<gtk::Box>() {
-                    inner_box.foreach(|widget: &gtk::Widget| {
-                        if let Some(hash_label) = widget.downcast_ref::<gtk::Label>() {
-                            if hash_label.text() == tx_hash {
-                                // println!("removing pending transaction from overview");
-                                overview_transaction_container.remove(overview_tx);
-                            }
-                        }
-                    });
-                }
-            });
-        }
-    });
-}
-
 fn get_transaction_widget(transaction: TransactionDisplayInfo) -> Result<gtk::Widget, String> {
     let glade_src = include_str!("../res/ui.glade");
     let inner_builder = gtk::Builder::from_string(glade_src);
@@ -96,10 +77,6 @@ pub fn update_overview_transactions(
 
     let mut tx_widgets = Vec::new();
     for tx in transactions {
-        if tx.origin == TransactionOrigin::Block {
-            try_remove_pending_transaction(&overview_transaction_container, &tx.hash.to_string());
-        }
-
         let tx_widget = get_transaction_widget(tx)?;
         tx_widgets.push(tx_widget);
     }
