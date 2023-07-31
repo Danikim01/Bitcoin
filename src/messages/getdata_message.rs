@@ -1,6 +1,4 @@
-use super::{
-    constants, BlockHeader, Hashable, InvType, Inventory, InventoryVector, Message, Serialize,
-};
+use super::{BlockHeader, Hashable, Serialize, InvType, Inventory, InventoryVector, Message, constants};
 use std::io;
 
 /// Struct that represents the getdata fields (https://en.bitcoin.it/wiki/Protocol_documentation#getdata)
@@ -36,10 +34,7 @@ impl Serialize for GetData {
     fn deserialize(bytes: &[u8]) -> io::Result<Message> {
         match InventoryVector::deserialize(bytes)? {
             Message::Inv(inventory) => Ok(Message::GetData(Self::new(inventory))),
-            _ => Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Expected message of type Inv",
-            )),
+            _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "Expected message of type Inv"))
         }
     }
 }

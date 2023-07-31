@@ -1,8 +1,7 @@
 use crate::config::Config;
 use crate::messages::{
     constants::{commands, config::VERBOSE},
-    Block, GetData, GetHeader, Headers, InventoryVector, Message, MessageHeader, Ping, SendHeaders,
-    Serialize, VerAck, Version,
+    Block, GetData, GetHeader, Headers, InventoryVector, Message, MessageHeader, Ping, SendHeaders, Serialize, VerAck, Version,
 };
 use crate::raw_transaction::RawTransaction;
 use crate::utility::to_io_err;
@@ -58,32 +57,6 @@ impl Listener {
         Ok(())
     }
 
-    fn process_other_messages_payload(&mut self, command_name: &str, payload: Vec<u8>) -> Message {
-        match command_name {
-            commands::BLOCK => match Block::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::INV => match InventoryVector::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::TX => match RawTransaction::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::GETHEADERS => match GetHeader::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::GETDATA => match GetData::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            _ => Message::Ignore,
-        }
-    }
-
     fn process_message_payload(
         &mut self,
         command_name: &str,
@@ -99,13 +72,33 @@ impl Listener {
                 Ok(m) => m,
                 Err(..) => Message::Ignore,
             },
+            commands::BLOCK => match Block::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::INV => match InventoryVector::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::TX => match RawTransaction::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
             commands::PING => {
                 if let Ok(reply) = &Ping::pong(&payload) {
                     self.send(reply)?;
                 }
                 Message::Ignore
             }
-            _ => self.process_other_messages_payload(command_name, payload),
+            commands::GETHEADERS => match GetHeader::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::GETDATA => match GetData::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            _ => Message::Ignore,
         };
         Ok(dyn_message)
     }
