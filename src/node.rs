@@ -23,12 +23,15 @@ pub struct Listener {
 }
 
 impl Listener {
-    fn new(stream: TcpStream, writer_channel: mpsc::SyncSender<(SocketAddr, Message)>) -> Self {
-        Self {
-            socket_addr: stream.peer_addr().unwrap(), // handle this error
+    fn new(
+        stream: TcpStream,
+        writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
+    ) -> std::io::Result<Self> {
+        Ok(Self {
+            socket_addr: stream.peer_addr()?, // handle this error
             stream,
             writer_channel,
-        }
+        })
     }
 
     fn send(&mut self, payload: &[u8]) -> io::Result<()> {
@@ -58,6 +61,34 @@ impl Listener {
         Ok(())
     }
 
+    fn process_other_message_payload(&mut self, command_name: &str, payload: Vec<u8>) -> Message {
+        let dyn_message: Message = match command_name {
+            commands::BLOCK => match Block::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::INV => match InventoryVector::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::TX => match RawTransaction::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::GETHEADERS => match GetHeader::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            commands::GETDATA => match GetData::deserialize(&payload) {
+                Ok(m) => m,
+                Err(..) => Message::Ignore,
+            },
+            _ => Message::Ignore,
+        };
+
+        dyn_message
+    }
+
     fn process_message_payload(
         &mut self,
         command_name: &str,
@@ -73,33 +104,13 @@ impl Listener {
                 Ok(m) => m,
                 Err(..) => Message::Ignore,
             },
-            commands::BLOCK => match Block::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::INV => match InventoryVector::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::TX => match RawTransaction::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
             commands::PING => {
                 if let Ok(reply) = &Ping::pong(&payload) {
                     self.send(reply)?;
                 }
                 Message::Ignore
             }
-            commands::GETHEADERS => match GetHeader::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            commands::GETDATA => match GetData::deserialize(&payload) {
-                Ok(m) => m,
-                Err(..) => Message::Ignore,
-            },
-            _ => Message::Ignore,
+            _ => self.process_other_message_payload(command_name, payload),
         };
         Ok(dyn_message)
     }
@@ -165,7 +176,7 @@ impl Node {
         ui_sender: SyncSender<GtkMessage>,
         config: Config,
     ) -> io::Result<Self> {
-        let listener = Listener::new(stream.try_clone()?, writer_channel);
+        let listener = Listener::new(stream.try_clone()?, writer_channel)?;
         let config_clone = config.clone();
         let handle = thread::spawn(move || listener.log_listen(&config));
         Self::new(stream, handle, ui_sender, &config_clone)
@@ -238,7 +249,7 @@ impl Node {
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
 
-        let version_message = match Version::deserialize(&payload_data).unwrap() {
+        let version_message = match Version::deserialize(&payload_data)? {
             Message::Version(version_message) => version_message,
             _ => {
                 return Err(io::Error::new(
