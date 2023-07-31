@@ -51,7 +51,7 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
 pub fn _encode_hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
-        write!(&mut s, "{:02x}", b).unwrap();
+        write!(&mut s, "{:02x}", b).unwrap_or(());
     }
     s
 }

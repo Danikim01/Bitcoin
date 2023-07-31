@@ -832,6 +832,7 @@ impl OuterNetworkController {
         getheaders: GetHeader,
         config: &Config,
     ) -> io::Result<()> {
+        config.log(&format!("GetHeader request from peer {:?}",peer_addr), VERBOSE);
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
             _ = inner_write.nodes.send_to_specific(
@@ -849,6 +850,7 @@ impl OuterNetworkController {
         getdata: GetData,
         config: &Config,
     ) -> io::Result<()> {
+        config.log(&format!("GetHeader request: {:?} from peer {:?}",getdata,peer_addr), VERBOSE);
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         let mut blocks: Vec<Block> = Vec::new();
         for inventory in getdata.inventory.items {
@@ -929,8 +931,13 @@ impl OuterNetworkController {
             for stream in listener.incoming() {
                 match stream {
                     Ok(mut stream) => {
+                        config.log(&format!("Connected to peer {:?}",stream.peer_addr()), VERBOSE);
                         let ui_sender = ui_sender.clone();
-                        Node::inverse_handshake(&mut stream).unwrap();
+                        match Node::inverse_handshake(&mut stream){
+                            Ok(_) => {},
+                            Err(_e) =>continue,
+            
+                        }
                         let node =
                             Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
                         // Network Controller should add the new node

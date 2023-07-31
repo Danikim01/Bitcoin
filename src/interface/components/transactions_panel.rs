@@ -13,11 +13,8 @@ fn widget_from_data(data: GtkTableData) -> io::Result<gtk::Widget> {
             "wrong GtkTableData",
         ))?,
     };
-
     let glade_src = include_str!("../res/ui.glade");
     let builder = gtk::Builder::from_string(glade_src);
-
-    //let row: gtk::Box = builder.object("transactions_table_row_template").unwrap();
     if let Some(row) = builder.object::<gtk::Box>("transactions_table_row_template") {
         let elemets = row.children();
         if let Some(date_label) = elemets[0].downcast_ref::<gtk::Label>() {

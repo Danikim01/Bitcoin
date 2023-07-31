@@ -23,12 +23,12 @@ pub struct Listener {
 }
 
 impl Listener {
-    fn new(stream: TcpStream, writer_channel: mpsc::SyncSender<(SocketAddr, Message)>) -> Self {
-        Self {
-            socket_addr: stream.peer_addr().unwrap(), // handle this error
+    fn new(stream: TcpStream, writer_channel: mpsc::SyncSender<(SocketAddr, Message)>) -> std::io::Result<Self>{
+        Ok(Self {
+            socket_addr: stream.peer_addr()?, // handle this error
             stream,
             writer_channel,
-        }
+        })
     }
 
     fn send(&mut self, payload: &[u8]) -> io::Result<()> {
@@ -173,7 +173,7 @@ impl Node {
         ui_sender: SyncSender<GtkMessage>,
         config: Config,
     ) -> io::Result<Self> {
-        let listener = Listener::new(stream.try_clone()?, writer_channel);
+        let listener = Listener::new(stream.try_clone()?, writer_channel)?;
         let config_clone = config.clone();
         let handle = thread::spawn(move || listener.log_listen(&config));
         Self::new(stream, handle, ui_sender, &config_clone)
@@ -246,7 +246,7 @@ impl Node {
         let message_header = MessageHeader::from_stream(stream)?;
         let payload_data = message_header.read_payload(stream)?;
 
-        let version_message = match Version::deserialize(&payload_data).unwrap() {
+        let version_message = match Version::deserialize(&payload_data)? {
             Message::Version(version_message) => version_message,
             _ => {
                 return Err(io::Error::new(
