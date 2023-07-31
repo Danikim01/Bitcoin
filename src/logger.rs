@@ -38,4 +38,3 @@ impl Logger {
         Logger { log_sender: sender }
     }
 }
-

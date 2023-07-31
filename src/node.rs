@@ -23,7 +23,10 @@ pub struct Listener {
 }
 
 impl Listener {
-    fn new(stream: TcpStream, writer_channel: mpsc::SyncSender<(SocketAddr, Message)>) -> std::io::Result<Self>{
+    fn new(
+        stream: TcpStream,
+        writer_channel: mpsc::SyncSender<(SocketAddr, Message)>,
+    ) -> std::io::Result<Self> {
         Ok(Self {
             socket_addr: stream.peer_addr()?, // handle this error
             stream,

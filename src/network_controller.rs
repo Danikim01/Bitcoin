@@ -832,7 +832,10 @@ impl OuterNetworkController {
         getheaders: GetHeader,
         config: &Config,
     ) -> io::Result<()> {
-        config.log(&format!("GetHeader request from peer {:?}",peer_addr), VERBOSE);
+        config.log(
+            &format!("GetHeader request from peer {:?}", peer_addr),
+            VERBOSE,
+        );
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         if let Some(getheaders_message) = inner_write.handle_getheaders_message(getheaders) {
             _ = inner_write.nodes.send_to_specific(
@@ -850,7 +853,10 @@ impl OuterNetworkController {
         getdata: GetData,
         config: &Config,
     ) -> io::Result<()> {
-        config.log(&format!("GetHeader request: {:?} from peer {:?}",getdata,peer_addr), VERBOSE);
+        config.log(
+            &format!("GetHeader request: {:?} from peer {:?}", getdata, peer_addr),
+            VERBOSE,
+        );
         let mut inner_write = t_inner.write().map_err(to_io_err)?;
         let mut blocks: Vec<Block> = Vec::new();
         for inventory in getdata.inventory.items {
@@ -916,42 +922,30 @@ impl OuterNetworkController {
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
         let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.get_listening_port());
-        let listener = match TcpListener::bind(addr) {
-            Ok(listener) => listener,
-            Err(e) => {
-                eprintln!("Ignoring Error: {:?}", e);
-                return Ok(());
-            }
-        };
-
+        let listener = TcpListener::bind(addr).unwrap_or_else(|e| {
+            eprintln!("Ignoring Error: {:?}", e);
+            std::process::exit(1);
+        });
         let ui_sender = self.ui_sender.clone();
         let writer_channel = self.writer_chanel.clone();
-
         thread::spawn(move || -> io::Result<()> {
             for stream in listener.incoming() {
                 match stream {
                     Ok(mut stream) => {
-                        config.log(&format!("Connected to peer {:?}",stream.peer_addr()), VERBOSE);
                         let ui_sender = ui_sender.clone();
-                        match Node::inverse_handshake(&mut stream){
-                            Ok(_) => {},
-                            Err(_e) =>continue,
-            
+                        if Node::inverse_handshake(&mut stream).is_err() {
+                            continue;
                         }
-                        let node =
-                            Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
-                        // Network Controller should add the new node
+                        let node = Node::spawn(stream, writer_channel.clone(), ui_sender, config.clone())?;
                         inner.write().map_err(to_io_err)?.nodes.add_node(node);
                     }
-                    Err(e) => {
-                        println!("Error: {}", e);
-                    }
+                    Err(e) => println!("Error: {}", e),
                 }
             }
-
             Ok(())
         });
         Ok(())
+
     }
 
     fn sync(&self, config: Config) -> io::Result<()> {
