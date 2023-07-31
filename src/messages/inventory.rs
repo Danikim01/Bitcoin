@@ -1,5 +1,5 @@
-use super::utility::{read_from_varint, read_hash, to_compact_size_bytes, StreamRead};
-use super::{constants, HashId, Message, Serialize};
+use super::{constants, HashId, Serialize, Message};
+use super::utility::{to_compact_size_bytes, read_from_varint, read_hash, StreamRead};
 use std::io::{self, Cursor};
 
 //https://en.bitcoin.it/wiki/Protocol_documentation#Inventory_Vectors
@@ -10,7 +10,9 @@ pub struct InventoryVector {
 
 impl InventoryVector {
     pub fn new(items: Vec<Inventory>) -> Self {
-        Self { items }
+        Self {
+            items
+        }
     }
 
     pub fn build_payload(&self) -> std::io::Result<Vec<u8>> {
