@@ -495,11 +495,7 @@ impl NetworkController {
             for (_, block) in blocks.into_iter() {
                 self.read_backup_block(block, config);
             }
-            update_ui_progress_bar(
-                &self.ui_sender,
-                Some("Finished reading blocks from backup file."),
-                1.0,
-            )?;
+            update_ui_progress_bar(&self.ui_sender, Some("Read blocks backup finished."), 1.0)?;
         }
         // Finally, catch up to blockchain doing IBD
         let mut missing_blocks: Vec<BlockHeader> = vec![];
@@ -764,8 +760,7 @@ impl OuterNetworkController {
         config: &Config,
         ui_sender: &SyncSender<GtkMessage>,
     ) -> io::Result<()> {
-        let mut inner_read: RwLockReadGuard<'_, NetworkController> =
-            t_inner.read().map_err(to_io_err)?;
+        let mut inner_read = t_inner.read().map_err(to_io_err)?;
         let prev_header_count = inner_read.headers.len();
         // save new headers to hashmap and backup file
         let mut new_headers: Vec<BlockHeader> = vec![];
@@ -774,15 +769,12 @@ impl OuterNetworkController {
                 continue;
             }
             match inner_read.headers.get(&header.prev_block_hash) {
-                Some(parent_header) => {
-                    header.height = parent_header.height + 1;
-                }
+                Some(parent_header) => header.height = parent_header.height + 1,
                 None => continue, // ignore header if prev_header is unknown
             }
-            let hash = header.hash();
             drop(inner_read);
             let mut inner_write = t_inner.write().map_err(to_io_err)?;
-            inner_write.headers.insert(hash, header);
+            inner_write.headers.insert(header.hash(), header);
             header.save_to_file(config.get_headers_file())?;
             new_headers.push(header);
             if header.height > inner_write.tallest_header.height {
@@ -834,7 +826,7 @@ impl OuterNetworkController {
         t_inner.write().map_err(to_io_err)?.read_pending_tx(tx)
     }
 
-    pub fn handle_node_getheaders_message(
+    pub fn handle_getheaders_message(
         t_inner: Arc<RwLock<NetworkController>>,
         peer_addr: SocketAddr,
         getheaders: GetHeader,
@@ -896,13 +888,8 @@ impl OuterNetworkController {
                     (_, Message::Headers(headers)) => {
                         Self::handle_node_headers_message(t_inner, headers, &config, &ui_sender)
                     }
-                    (peer_addr, Message::GetHeader(get_headers)) => {
-                        Self::handle_node_getheaders_message(
-                            t_inner,
-                            peer_addr,
-                            get_headers,
-                            &config,
-                        )
+                    (p_addr, Message::GetHeader(get_headers)) => {
+                        Self::handle_getheaders_message(t_inner, p_addr, get_headers, &config)
                     }
                     (_, Message::Block(block)) => {
                         Self::handle_node_block_message(t_inner, block, &config)
@@ -926,10 +913,8 @@ impl OuterNetworkController {
 
     fn listen_for_nodes(&self, config: Config) -> io::Result<()> {
         let inner = self.inner.clone();
-        let listener = match TcpListener::bind(SocketAddrV4::new(
-            Ipv4Addr::LOCALHOST,
-            config.get_listening_port(),
-        )) {
+        let addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.get_listening_port());
+        let listener = match TcpListener::bind(addr) {
             Ok(listener) => listener,
             Err(e) => {
                 eprintln!("Ignoring Error: {:?}", e);

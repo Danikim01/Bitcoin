@@ -1,7 +1,5 @@
 use crate::messages::HashId;
 use gtk::prelude::BuilderExtManual;
-use gtk::prelude::Cast;
-use gtk::prelude::ContainerExt;
 use gtk::prelude::ImageExt;
 use gtk::prelude::LabelExt;
 use std::io;
