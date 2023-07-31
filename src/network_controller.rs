@@ -5,8 +5,8 @@ use crate::messages::block_header::HeaderSet;
 use crate::messages::constants::config::{QUIET, VERBOSE};
 use crate::messages::merkle_tree::MerkleProof;
 use crate::messages::{
-    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType,
-    MerkleTree, Message, Serialize, InventoryVector, Inventory
+    Block, BlockHeader, GetData, GetHeader, HashId, Hashable, Headers, InvType, Inventory,
+    InventoryVector, MerkleTree, Message, Serialize,
 };
 
 use crate::node_controller::NodeController;
@@ -331,10 +331,10 @@ impl NetworkController {
         let first_downloadable_header = headers.block_headers[0];
         if let Some(previous_header) = self.headers.get(&first_downloadable_header.prev_block_hash)
         {
-            // this never fails
-            let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
-            self.valid_blocks
-                .insert(pseudo_genesis_block.hash(), pseudo_genesis_block);
+            if let Vacant(entry) = self.valid_blocks.entry(previous_header.hash()) {
+                let pseudo_genesis_block = Block::new(*previous_header, 0, vec![]);
+                entry.insert(pseudo_genesis_block);
+            }
         }
         self.request_blocks(headers, config)
     }
