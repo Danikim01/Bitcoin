@@ -20,7 +20,10 @@ use gtk::glib::SyncSender;
 use std::collections::{hash_map::Entry::Occupied, hash_map::Entry::Vacant, HashMap};
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener};
-use std::sync::{mpsc::{self, Receiver}, Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{
+    mpsc::{self, Receiver},
+    Arc, RwLock, RwLockReadGuard,
+};
 use std::thread::{self, JoinHandle};
 
 use crate::interface::components::table::{
@@ -865,6 +868,41 @@ impl OuterNetworkController {
     }
 
 
+    fn get_txs_requested(
+        txs_requested: Vec<HashId>,
+        inner_write: &mut RwLockWriteGuard<'_, NetworkController>,
+    ) -> Vec<RawTransaction> {
+        let mut txs: Vec<RawTransaction> = Vec::new();
+
+        for block in inner_write.valid_blocks.values() {
+            for tx in block.txns.iter() {
+                if txs_requested.contains(&tx.get_hash()) {
+                    txs.push(tx.clone());
+                }
+            }
+        }
+
+        txs
+    }
+
+    fn send_txs_requested(
+        inner_write: &mut RwLockWriteGuard<'_, NetworkController>,
+        peer_addr: SocketAddr,
+        txs_requested: Vec<HashId>,
+        config: &Config,
+    ) -> io::Result<()> {
+        let txs = Self::get_txs_requested(txs_requested, inner_write);
+        for tx in txs {
+            let serialized_tx = tx.serialize();
+            inner_write
+                .nodes
+                .send_to_specific(&peer_addr, &serialized_tx, config)?;
+        }
+
+        Ok(())
+    }
+
+
 
     pub fn handle_node_getdata_message(
         t_inner: Arc<RwLock<NetworkController>>,
@@ -892,6 +930,7 @@ impl OuterNetworkController {
         }
 
         Self::send_blocks_requested(&mut inner_write, peer_addr, blocks, config)?;
+        Self::send_txs_requested(&mut inner_write, peer_addr, txs_requested, config)?;
         Ok(())
     }
 
